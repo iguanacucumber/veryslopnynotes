@@ -172,6 +172,8 @@ export interface ResourceResult {
   payload: string | null;
   fetchedAt: number;
   stale: boolean;
+  /** Au moins une section du payload a été écartée (lecture partielle). */
+  partial: boolean;
   error: string | null;
 }
 

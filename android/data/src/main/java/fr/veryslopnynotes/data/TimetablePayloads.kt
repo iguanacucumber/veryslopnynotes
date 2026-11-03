@@ -36,7 +36,8 @@ internal fun timetablePayload(client: Client, query: Map<String, String>, clock:
     val toMs = to.atZone(SCHOOL_ZONE).toInstant().toEpochMilli()
     val arr = JSONArray()
     var seq = 0
-    for (l in client.lessons(from, to)) {
+    val read = client.lessonsPartial(from, to)
+    for (l in read.value) {
         val startMs = l.start.atZone(SCHOOL_ZONE).toInstant().toEpochMilli()
         if (startMs < fromMs || startMs > toMs) continue
         val subject = boundedCp(l.subject?.name, 100)
@@ -51,6 +52,6 @@ internal fun timetablePayload(client: Client, query: Map<String, String>, clock:
             putIf("teacher", boundedCp(l.teacherName, 100).ifEmpty { null })
         })
     }
-    return JSONObject().put("entries", arr).toString()
+    return JSONObject().put("entries", arr).apply { putFlag("partial", read.partial) }.toString()
 }
 

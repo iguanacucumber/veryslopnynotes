@@ -6,8 +6,8 @@ import org.json.JSONObject
 
 internal fun newsPayload(client: Client): String {
     val arr = JSONArray()
-    val raws = client.informationAndSurveys()
-    raws.take(100).forEachIndexed { i, info ->
+    val read = client.informationAndSurveysPartial()
+    read.value.take(100).forEachIndexed { i, info ->
         // La LISTE ne télécharge pas le corps (1 POST, pas 21) : il est demandé
         // au dépliage (`news.item` -> `Client.informationContent(id)`).
         val title = boundedCp(info.title, 200)
@@ -21,6 +21,6 @@ internal fun newsPayload(client: Client): String {
             put("read", info.read)
         })
     }
-    return JSONObject().put("news", arr).toString()
+    return JSONObject().put("news", arr).apply { putFlag("partial", read.partial) }.toString()
 }
 

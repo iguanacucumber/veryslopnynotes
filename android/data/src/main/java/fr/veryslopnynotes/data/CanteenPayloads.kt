@@ -19,7 +19,8 @@ internal fun menusPayload(client: Client, clock: Clock = schoolClock()): String 
     val toMs = to.plusDays(1).atZone(SCHOOL_ZONE).toInstant().toEpochMilli() - 1
     val arr = JSONArray()
     var seq = 0
-    for (m in client.menus(from, to)) {
+    val read = client.menusPartial(from, to)
+    for (m in read.value) {
         val dateMs = m.date.atZone(SCHOOL_ZONE).toInstant().toEpochMilli()
         if (dateMs < fromMs || dateMs > toMs) continue
         val dishes = mutableListOf<String>()
@@ -47,6 +48,6 @@ internal fun menusPayload(client: Client, clock: Clock = schoolClock()): String 
             if (allergens.isNotEmpty()) put("allergens", JSONArray(allergens))
         })
     }
-    return JSONObject().put("menus", arr).toString()
+    return JSONObject().put("menus", arr).apply { putFlag("partial", read.partial) }.toString()
 }
 

@@ -199,7 +199,8 @@ internal fun assignmentJson(
 internal fun assignmentsPayload(client: Client, query: Map<String, String>, clock: Clock = schoolClock()): String {
     val win = weekWindow(query)
     val (from, to) = assignmentWindow(query["weekStart"], clock)
-    val raws = client.homework(from, to)
+    val read = client.homeworkPartial(from, to)
+    val raws = read.value
     val wanted = LinkedHashSet<String>()
     val days = LinkedHashSet<LocalDate>()
     for (hw in raws) {
@@ -225,6 +226,6 @@ internal fun assignmentsPayload(client: Client, query: Map<String, String>, cloc
         val key = lessonKeyOf(hw.subject.name, parisDay(hw.date))
         assignmentJson(hw, id, i, key?.let { lessons[it] }.orEmpty())?.let { arr.put(it) }
     }
-    return JSONObject().put("assignments", arr).toString()
+    return JSONObject().put("assignments", arr).apply { putFlag("partial", read.partial) }.toString()
 }
 

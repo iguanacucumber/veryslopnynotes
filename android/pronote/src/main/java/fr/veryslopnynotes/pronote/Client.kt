@@ -594,7 +594,14 @@ open class Client(
 
 
     /** Semaines balayées, filtrés sur la fenêtre, bornes incluses. */
-    fun lessons(dateFrom: LocalDateTime, dateTo: LocalDateTime?): List<Lesson> {
+    fun lessons(dateFrom: LocalDateTime, dateTo: LocalDateTime?): List<Lesson> =
+        lessonsPartial(dateFrom, dateTo).value
+
+    /**
+     * Comme [lessons], mais une section (semaine) ou une ligne illisible est
+     * SAUTÉE : `partial` est posé. Aucune semaine lisible = erreur typée.
+     */
+    fun lessonsPartial(dateFrom: LocalDateTime, dateTo: LocalDateTime?): PartialRead<List<Lesson>> {
         // `Ressource` absente = clés omises (comme `undefined` en TS).
         val user = userResource()
         val base = LinkedHashMap<String, JVal>()
@@ -614,22 +621,33 @@ open class Client(
         } else {
             LocalDateTime.of(dateFrom.year, dateFrom.monthValue, dateFrom.dayOfMonth, 23, 59, 59, 999000000)
         }
-        val out = mutableListOf<Lesson>()
+        val sections = PartialSections<Lesson>()
         for (week in getWeek(from)..getWeek(to)) {
-            val data = LinkedHashMap(base)
-            data["NumeroSemaine"] = JVal.Num(week.toDouble())
-            data["numeroSemaine"] = JVal.Num(week.toDouble())
-            val resp = post("PageEmploiDuTemps", 16.0, data)
-            val courses = ((((resp as? JVal.Obj)?.fields?.get("dataSec") as? JVal.Obj)
-                ?.fields?.get("data") as? JVal.Obj)?.fields?.get("ListeCours") as? JVal.Arr)?.items
-                ?: throw ParsingError("ListeCours manquante", listOf("dataSec", "data", "ListeCours"))
-            for (c in courses) out.add(Lesson(this, c))
+            sections.add {
+                val data = LinkedHashMap(base)
+                data["NumeroSemaine"] = JVal.Num(week.toDouble())
+                data["numeroSemaine"] = JVal.Num(week.toDouble())
+                val resp = post("PageEmploiDuTemps", 16.0, data)
+                val courses = ((((resp as? JVal.Obj)?.fields?.get("dataSec") as? JVal.Obj)
+                    ?.fields?.get("data") as? JVal.Obj)?.fields?.get("ListeCours") as? JVal.Arr)?.items
+                    ?: throw ParsingError("ListeCours manquante", listOf("dataSec", "data", "ListeCours"))
+                partialRows(courses) { Lesson(this, it) }
+            }
         }
-        return out.filter { it.start >= from && it.start <= to }
+        return sections.build().let { r ->
+            PartialRead(r.value.filter { it.start >= from && it.start <= to }, r.partial)
+        }
     }
 
     /** Semaines `premier..dernier`, filtrés sur la fenêtre. */
-    fun homework(dateFrom: LocalDateTime, dateTo: LocalDateTime?): List<Homework> {
+    fun homework(dateFrom: LocalDateTime, dateTo: LocalDateTime?): List<Homework> =
+        homeworkPartial(dateFrom, dateTo).value
+
+    /**
+     * Comme [homework], mais une ligne illisible est SAUTÉE et signale
+     * `partial` ; toutes les lignes illisibles = erreur typée.
+     */
+    fun homeworkPartial(dateFrom: LocalDateTime, dateTo: LocalDateTime?): PartialRead<List<Homework>> {
         // `DerniereDate.V` : l'objet seul n'est pas une date.
         val to = dateTo ?: dateParse((dataGeneral() as? JVal.Obj)?.fields?.get("DerniereDate")?.let { (it as? JVal.Obj)?.fields?.get("V") })
         val resp = post(
@@ -639,12 +657,10 @@ open class Client(
         val items = ((((resp as? JVal.Obj)?.fields?.get("dataSec") as? JVal.Obj)
             ?.fields?.get("data") as? JVal.Obj)?.fields?.get("ListeTravauxAFaire") as? JVal.Obj)
             ?.fields?.get("V") as? JVal.Arr
-        val out = mutableListOf<Homework>()
-        for (h in items?.items ?: throw ParsingError("ListeTravauxAFaire manquante", listOf("dataSec", "data", "ListeTravauxAFaire", "V"))) {
-            val hw = Homework(this, h)
-            if (hw.date >= dateFrom && hw.date <= to) out.add(hw)
+        val parsed = partialRows(items?.items ?: throw ParsingError("ListeTravauxAFaire manquante", listOf("dataSec", "data", "ListeTravauxAFaire", "V"))) {
+            Homework(this, it)
         }
-        return out
+        return PartialRead(parsed.value.filter { it.date >= dateFrom && it.date <= to }, parsed.partial)
     }
 
     private fun dataGeneral(): JVal? =
@@ -658,20 +674,28 @@ open class Client(
             ?.fields?.get("data") as? JVal.Obj)?.fields?.get("ressource"))
 
     /** Enseignants `G:3` puis vie sco `G:34`, dans cet ordre. */
-    fun getRecipients(): List<Recipient> {
-        val out = mutableListOf<Recipient>()
+    fun getRecipients(): List<Recipient> = getRecipientsPartial().value
+
+    /**
+     * Les deux groupes sont des SECTIONS : l'un illisible ne jette pas
+     * l'autre. Aucun des deux = erreur typée.
+     */
+    fun getRecipientsPartial(): PartialRead<List<Recipient>> {
+        val sections = PartialSections<Recipient>()
         for (g in listOf(3.0, 34.0)) {
-            val resp = post(
-                "ListeRessourcesPourCommunication", 131.0,
-                mapOf("onglet" to jobjOf("N" to JVal.Num(0.0), "G" to JVal.Num(g))),
-            )
-            val items = (((((resp as? JVal.Obj)?.fields?.get("dataSec") as? JVal.Obj)
-                ?.fields?.get("data") as? JVal.Obj)?.fields?.get("listeRessourcesPourCommunication") as? JVal.Obj)
-                ?.fields?.get("V") as? JVal.Arr)?.items
-                ?: throw ParsingError("listeRessourcesPourCommunication manquante", listOf("dataSec", "data", "listeRessourcesPourCommunication", "V"))
-            for (r in items) out.add(Recipient(this, r))
+            sections.add {
+                val resp = post(
+                    "ListeRessourcesPourCommunication", 131.0,
+                    mapOf("onglet" to jobjOf("N" to JVal.Num(0.0), "G" to JVal.Num(g))),
+                )
+                val items = (((((resp as? JVal.Obj)?.fields?.get("dataSec") as? JVal.Obj)
+                    ?.fields?.get("data") as? JVal.Obj)?.fields?.get("listeRessourcesPourCommunication") as? JVal.Obj)
+                    ?.fields?.get("V") as? JVal.Arr)?.items
+                    ?: throw ParsingError("listeRessourcesPourCommunication manquante", listOf("dataSec", "data", "listeRessourcesPourCommunication", "V"))
+                partialRows(items) { Recipient(this, it) }
+            }
         }
-        return out
+        return sections.build()
     }
 
     /** Aucun id renvoyé, comme en TS. */
@@ -691,34 +715,68 @@ open class Client(
     }
 
     /** Premier niveau (`estUneDiscussion`, profondeur 0), non-lus filtrables. */
-    fun discussions(onlyUnread: Boolean = false): List<Discussion> {
+    fun discussions(onlyUnread: Boolean = false): List<Discussion> =
+        discussionsPartial(onlyUnread).value
+
+    /**
+     * Comme [discussions], mais une ligne tordue est SAUTÉE et une liste
+     * d'étiquettes absente marque `partial` sans perdre les fils.
+     */
+    fun discussionsPartial(onlyUnread: Boolean = false): PartialRead<List<Discussion>> {
         val resp = post(
             "ListeMessagerie", 131.0,
             mapOf("avecMessage" to JVal.Bool(true), "avecLu" to JVal.Bool(!onlyUnread)),
         )
         val data = ((((resp as? JVal.Obj)?.fields?.get("dataSec") as? JVal.Obj)?.fields?.get("data")) as? JVal.Obj)
             ?: throw ParsingError("ListeMessagerie sans data", listOf("dataSec", "data"))
-        val labelsRaw = ((data.fields["listeEtiquettes"] as? JVal.Obj)?.fields?.get("V") as? JVal.Arr)?.items
-            ?: throw ParsingError("listeEtiquettes manquante", listOf("dataSec", "data", "listeEtiquettes", "V"))
+        var partial = false
         val labels = LinkedHashMap<String, String>()
-        for (l in labelsRaw) {
-            val o = l as? JVal.Obj ?: continue
+        val labelsRaw = ((data.fields["listeEtiquettes"] as? JVal.Obj)?.fields?.get("V") as? JVal.Arr)?.items
+        if (labelsRaw == null) partial = true
+        for (l in labelsRaw.orEmpty()) {
+            val o = l as? JVal.Obj ?: run {
+                partial = true
+                continue
+            }
             val g = o.fields["G"] ?: continue
             labels[jsKeyOf(o.fields["N"])] = jsKeyOf(g)
         }
         val items = ((data.fields["listeMessagerie"] as? JVal.Obj)?.fields?.get("V") as? JVal.Arr)?.items
             ?: throw ParsingError("listeMessagerie manquante", listOf("dataSec", "data", "listeMessagerie", "V"))
-        return items.mapNotNull { d ->
-            val o = d as? JVal.Obj ?: return@mapNotNull null
+        val out = mutableListOf<Discussion>()
+        var candidates = 0
+        var firstFailure: Exception? = null
+        var rowFailure = false
+        for (d in items) {
+            val o = d as? JVal.Obj ?: run {
+                rowFailure = true
+                continue
+            }
             val isDiscussion = jsTruthy(o.fields["estUneDiscussion"])
             val depth = (o.fields["profondeur"] as? JVal.Num)?.value ?: 1.0
-            if (!(isDiscussion && depth == 0.0)) return@mapNotNull null
-            Discussion(this, d, labels)
+            if (!(isDiscussion && depth == 0.0)) continue
+            candidates += 1
+            try {
+                out.add(Discussion(this, d, labels))
+            } catch (e: Exception) {
+                if (!isUnreadableRow(e)) throw e
+                rowFailure = true
+                if (firstFailure == null) firstFailure = e
+            }
         }
+        if (candidates > 0 && out.isEmpty()) throw firstFailure ?: ParsingError("Aucune discussion lisible")
+        return PartialRead(out, partial || rowFailure)
     }
 
     /** Actus + sondages, filtrés sur `startDate` présent. */
-    fun informationAndSurveys(opts: InfoFilter = InfoFilter()): List<Information> {
+    fun informationAndSurveys(opts: InfoFilter = InfoFilter()): List<Information> =
+        informationAndSurveysPartial(opts).value
+
+    /**
+     * Chaque mode d'affichage est une SECTION ; une liste absente ou une ligne
+     * tordue est écartée. Aucun mode lisible = erreur typée.
+     */
+    fun informationAndSurveysPartial(opts: InfoFilter = InfoFilter()): PartialRead<List<Information>> {
         val resp = post(
             "PageActualites", 8.0,
             mapOf("modesAffActus" to jobjOf("_T" to JVal.Num(26.0), "V" to JVal.Str("[0..3]"))),
@@ -726,16 +784,20 @@ open class Client(
         val modes = ((((resp as? JVal.Obj)?.fields?.get("dataSec") as? JVal.Obj)
             ?.fields?.get("data") as? JVal.Obj)?.fields?.get("listeModesAff") as? JVal.Arr)?.items
             ?: throw ParsingError("listeModesAff manquante", listOf("dataSec", "data", "listeModesAff"))
-        var info = mutableListOf<Information>()
+        val sections = PartialSections<Information>()
         for (liste in modes) {
-            val items = (((liste as? JVal.Obj)?.fields?.get("listeActualites") as? JVal.Obj)?.fields?.get("V") as? JVal.Arr)?.items
-                ?: throw ParsingError("listeActualites manquante", listOf("listeActualites", "V"))
-            for (i in items) info.add(Information(this, i))
+            sections.add {
+                val items = (((liste as? JVal.Obj)?.fields?.get("listeActualites") as? JVal.Obj)?.fields?.get("V") as? JVal.Arr)?.items
+                    ?: throw ParsingError("listeActualites manquante", listOf("listeActualites", "V"))
+                partialRows(items) { Information(this, it) }
+            }
         }
-        if (opts.onlyUnread) info = info.filter { !it.read }.toMutableList()
-        if (opts.dateFrom != null) info = info.filter { it.startDate != null && opts.dateFrom <= it.startDate }.toMutableList()
-        if (opts.dateTo != null) info = info.filter { it.startDate != null && it.startDate < opts.dateTo }.toMutableList()
-        return info
+        val built = sections.build()
+        var info = built.value
+        if (opts.onlyUnread) info = info.filter { !it.read }
+        if (opts.dateFrom != null) info = info.filter { it.startDate != null && opts.dateFrom <= it.startDate }
+        if (opts.dateTo != null) info = info.filter { it.startDate != null && it.startDate < opts.dateTo }
+        return PartialRead(info, built.partial)
     }
 
     /**
@@ -746,31 +808,58 @@ open class Client(
         informationBodyText(informationQuestions(this, id))
 
     /** Semaines balayées, `Date` injectée par jour, filtré sur la fenêtre. */
-    fun menus(dateFrom: LocalDateTime, dateTo: LocalDateTime?): List<Menu> {
+    fun menus(dateFrom: LocalDateTime, dateTo: LocalDateTime?): List<Menu> =
+        menusPartial(dateFrom, dateTo).value
+
+    /**
+     * Chaque semaine est une SECTION ; un jour ou un plat illisible est
+     * sauté et marque `partial`. Aucune semaine lisible = erreur typée.
+     */
+    fun menusPartial(dateFrom: LocalDateTime, dateTo: LocalDateTime?): PartialRead<List<Menu>> {
         val to = dateTo ?: dateFrom
-        val out = mutableListOf<Menu>()
+        val sections = PartialSections<Menu>()
         var firstDay = dateFrom.minusDays((dateFrom.dayOfWeek.value - 1).toLong())
         while (firstDay <= to) {
-            val resp = post(
-                "PageMenus", 10.0,
-                mapOf("date" to jobjOf("_T" to JVal.Num(7.0), "V" to JVal.Str("${frDate(firstDay)} 0:0:0"))),
-            )
-            val days = ((((resp as? JVal.Obj)?.fields?.get("dataSec") as? JVal.Obj)
-                ?.fields?.get("data") as? JVal.Obj)?.fields?.get("ListeJours") as? JVal.Obj)
-                ?.fields?.get("V") as? JVal.Arr
-            for (dayJson in days?.items ?: throw ParsingError("ListeJours manquante", listOf("dataSec", "data", "ListeJours", "V"))) {
-                val day = dayJson as? JVal.Obj ?: continue
-                val meals = ((day.fields["ListeRepas"] as? JVal.Obj)?.fields?.get("V") as? JVal.Arr)?.items ?: continue
-                for (menu in meals) {
-                    val o = (menu as? JVal.Obj)?.fields ?: continue
-                    val withDate = LinkedHashMap(o)
-                    withDate["Date"] = day.fields["Date"] ?: JVal.Null
-                    out.add(Menu(this, JVal.Obj(withDate)))
+            sections.add {
+                val resp = post(
+                    "PageMenus", 10.0,
+                    mapOf("date" to jobjOf("_T" to JVal.Num(7.0), "V" to JVal.Str("${frDate(firstDay)} 0:0:0"))),
+                )
+                val days = ((((resp as? JVal.Obj)?.fields?.get("dataSec") as? JVal.Obj)
+                    ?.fields?.get("data") as? JVal.Obj)?.fields?.get("ListeJours") as? JVal.Obj)
+                    ?.fields?.get("V") as? JVal.Arr
+                val rows = mutableListOf<JVal>()
+                var dayFailure = false
+                for (dayJson in days?.items
+                    ?: throw ParsingError("ListeJours manquante", listOf("dataSec", "data", "ListeJours", "V"))) {
+                    val day = dayJson as? JVal.Obj ?: run {
+                        dayFailure = true
+                        continue
+                    }
+                    val meals = ((day.fields["ListeRepas"] as? JVal.Obj)?.fields?.get("V") as? JVal.Arr)?.items
+                    if (meals == null) {
+                        dayFailure = true
+                        continue
+                    }
+                    for (menu in meals) {
+                        val o = (menu as? JVal.Obj)?.fields ?: run {
+                            dayFailure = true
+                            continue
+                        }
+                        val withDate = LinkedHashMap(o)
+                        withDate["Date"] = day.fields["Date"] ?: JVal.Null
+                        rows.add(JVal.Obj(withDate))
+                    }
                 }
+                if (rows.isEmpty() && dayFailure) throw ParsingError("Aucun jour lisible")
+                val parsed = partialRows(rows) { Menu(this, it) }
+                PartialRead(parsed.value, parsed.partial || dayFailure)
             }
             firstDay = firstDay.plusDays(7)
         }
-        return out.filter { it.date >= dateFrom && it.date <= to }
+        return sections.build().let { r ->
+            PartialRead(r.value.filter { it.date >= dateFrom && it.date <= to }, r.partial)
+        }
     }
 
     private fun jobjOf(vararg ps: Pair<String, JVal>): JVal.Obj =

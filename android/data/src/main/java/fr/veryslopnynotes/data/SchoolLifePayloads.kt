@@ -3,6 +3,7 @@ package fr.veryslopnynotes.data
 import fr.veryslopnynotes.core.dedupe
 import fr.veryslopnynotes.core.eventKey
 import fr.veryslopnynotes.pronote.Client
+import fr.veryslopnynotes.pronote.ParsingError
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -30,6 +31,9 @@ internal fun attendancePayload(client: Client): String {
     val absences = JSONArray()
     val counters = LinkedHashMap<String, JSONObject>()
     val names = mutableMapOf<String, String>()
+    var partial = false
+    var readSections = 0
+    var firstFailure: Exception? = null
     // Une absence = UNE ligne publiée : la même absence est renvoyée par
     // CHAQUE période qui la recouvre. L'identité est (kind, id), JAMAIS id seul :
     // absences et retards sont numérotés par DEUX tables Pronote indépendantes,
@@ -39,9 +43,14 @@ internal fun attendancePayload(client: Client): String {
         val pid = p.id.ifBlank { null }
         if (pid != null) names[pid] = p.name
         val ab = try {
-            p.absences()
+            val read = p.absencesPartial()
+            readSections += 1
+            partial = partial || read.partial
+            read.value
         } catch (e: Exception) {
             if (mustPropagateReadFailure(e)) throw e
+            partial = true
+            if (firstFailure == null) firstFailure = e
             emptyList()
         }
         for ((i, a) in ab.withIndex()) {
@@ -61,9 +70,14 @@ internal fun attendancePayload(client: Client): String {
             } to pid)
         }
         val dl = try {
-            p.delays()
+            val read = p.delaysPartial()
+            readSections += 1
+            partial = partial || read.partial
+            read.value
         } catch (e: Exception) {
             if (mustPropagateReadFailure(e)) throw e
+            partial = true
+            if (firstFailure == null) firstFailure = e
             emptyList()
         }
         for ((i, d) in dl.withIndex()) {
@@ -78,6 +92,9 @@ internal fun attendancePayload(client: Client): String {
                 if (d.justified) put("justified", true)
             } to pid)
         }
+    }
+    if (client.periods.isNotEmpty() && readSections == 0) {
+        throw firstFailure ?: ParsingError("Aucune période lisible")
     }
     // Compteurs calculés depuis les lignes DÉDUPLIQUÉES : une absence parue
     // dans deux périodes ne compte qu'une fois.
@@ -98,18 +115,27 @@ internal fun attendancePayload(client: Client): String {
         names[id]?.let { cur.put("name", boundedCp(it, 100)) }
         periods.put(cur)
     }
-    return JSONObject().put("absences", absences).put("periods", periods).toString()
+    return JSONObject().put("absences", absences).put("periods", periods)
+        .apply { putFlag("partial", partial) }.toString()
 }
 
 internal fun punishmentsPayload(client: Client): String {
     val arr = JSONArray()
     var seq = 0
+    var partial = false
+    var readPeriods = 0
+    var firstFailure: Exception? = null
     for (p in client.periods) {
         val pid = p.id.ifBlank { null }
         val rows = try {
-            p.punishments()
+            val read = p.punishmentsPartial()
+            readPeriods += 1
+            partial = partial || read.partial
+            read.value
         } catch (e: Exception) {
             if (mustPropagateReadFailure(e)) throw e
+            partial = true
+            if (firstFailure == null) firstFailure = e
             continue
         }
         for (s in rows) {
@@ -126,6 +152,9 @@ internal fun punishmentsPayload(client: Client): String {
             })
         }
     }
-    return JSONObject().put("punishments", arr).toString()
+    if (client.periods.isNotEmpty() && readPeriods == 0) {
+        throw firstFailure ?: ParsingError("Aucune période lisible")
+    }
+    return JSONObject().put("punishments", arr).apply { putFlag("partial", partial) }.toString()
 }
 

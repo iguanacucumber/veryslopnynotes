@@ -82,7 +82,7 @@ export function Shell() {
   const navigationType = useNavigationType();
   const navigate = useNavigate();
   const go = useViewNavigate();
-  const { refresh, refreshTick, busy, notify, authLost, sessionClosed, scheme } = useApp();
+  const { refresh, refreshTick, busy, notify, authLost, sessionClosed, scheme, partial } = useApp();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -263,6 +263,11 @@ export function Shell() {
       </header>
 
       <main id="main" tabIndex={-1} className={isHome ? "main main--home" : "main"}>
+        {partial ? (
+          <p className="partial-notice" role="status">
+            Certaines informations n’ont pas pu être lues : l’affichage est partiel.
+          </p>
+        ) : null}
         <Outlet />
       </main>
 

@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -54,6 +55,9 @@ interface AppContextValue {
    *  l'appareil (repli mémoire). */
   storageUnavailable: boolean;
   reportStorage: (unavailable: boolean) => void;
+  /** Au moins une ressource affichée est PARTIELLE (une section illisible). */
+  partial: boolean;
+  reportPartial: (id: string, partial: boolean) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -73,6 +77,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [sessionOpen, setSessionOpen] = useState(false);
   const [sessionClosed, setSessionClosed] = useState(false);
   const [storageUnavailable, setStorageUnavailable] = useState(false);
+  const [partialKeys, setPartialKeys] = useState<Set<string>>(() => new Set());
   const noticeTimer = useRef<number | undefined>(undefined);
   const leaveTimer = useRef<number | undefined>(undefined);
   const [notice, setNotice] = useState<{ message: string; kind: NoticeKind; leaving: boolean } | null>(null);
@@ -217,6 +222,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(() => setRefreshTick((n) => n + 1), []);
 
+  const reportPartial = useCallback((id: string, partial: boolean) => {
+    setPartialKeys((prev) => {
+      if (prev.has(id) === partial) return prev;
+      const next = new Set(prev);
+      if (partial) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+
   const value = useMemo<AppContextValue>(
     () => ({
       theme,
@@ -239,6 +254,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       closeSession,
       storageUnavailable,
       reportStorage,
+      partial: partialKeys.size > 0,
+      reportPartial,
     }),
     [
       theme,
@@ -261,6 +278,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       closeSession,
       storageUnavailable,
       reportStorage,
+      partialKeys,
+      reportPartial,
     ],
   );
 
@@ -299,13 +318,15 @@ export interface ResourceState {
  *  spinner ; un échec le garde et expose `error`. Le payload est RATTACHÉ à sa
  *  requête : changer de requête l'invalide, même si le chargement échoue. */
 export function useResource(key: ResourceKey, query = ""): ResourceState {
-  const { refreshTick } = useApp();
+  const { refreshTick, reportPartial } = useApp();
+  const hookId = useId();
   const request = requestId(key, query);
   const [status, setStatus] = useState<ResourceStatus>({
     request,
     payload: null,
     fetchedAt: 0,
     stale: false,
+    partial: false,
     error: null,
     loading: true,
   });
@@ -322,6 +343,14 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
       alive.current = false;
     };
   }, []);
+
+  // L'écran ne doit JAMAIS présenter un payload partiel comme complet : le
+  // drapeau remonte au bandeau global tant que cette lecture est montée.
+  useEffect(() => {
+    reportPartial(hookId, status.partial ?? false);
+  }, [hookId, status.partial, reportPartial]);
+
+  useEffect(() => () => reportPartial(hookId, false), [hookId, reportPartial]);
 
   useEffect(() => {
     let cancelled = false;
@@ -355,6 +384,7 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
               payload: cached.payload,
               fetchedAt: cached.fetchedAt,
               stale: cached.stale,
+              partial: cached.partial ?? false,
               error: null,
               loading: false,
             });
@@ -373,6 +403,7 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
             payload: result.payload,
             fetchedAt: result.fetchedAt,
             stale: result.stale,
+            partial: result.partial ?? false,
             error: result.error,
             loading: false,
           });
