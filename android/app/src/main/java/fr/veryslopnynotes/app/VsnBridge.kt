@@ -91,10 +91,15 @@ class VsnBridge(
         Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
 
     // Mêmes objets que `AppNav` : une seule session chiffrée, un seul cache.
-    private val baseUrlSeed: String = fr.veryslopnynotes.core.ServerConfig.baseUrl(
-        BuildConfig.SERVER_SCHEME,
-        BuildConfig.SERVER_HOST,
-    )
+    // Release : graine vide (aucun hôte par défaut) ; debug seul porte l'émulateur.
+    private val baseUrlSeed: String = if (BuildConfig.SERVER_HOST.isEmpty()) {
+        ""
+    } else {
+        fr.veryslopnynotes.core.ServerConfig.baseUrl(
+            BuildConfig.SERVER_SCHEME,
+            BuildConfig.SERVER_HOST,
+        )
+    }
     internal val serverStore = ServerStore(ctx)
     internal val manuals = ManualStore(ctx)
     // #586 : cahier de cours local, dans `offline/` (donc purgé avec le cache

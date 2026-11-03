@@ -30,7 +30,7 @@ export function ServerCard({ snapshot, loading }: { snapshot: SettingsSnapshot |
     try {
       const response = await bridge.saveServer(result.value);
       if (!response.ok) {
-        setHostError("Adresse refusée : vérifie le domaine et le port.");
+        setHostError(response.message ?? "Adresse refusée : vérifie le domaine et le port.");
         return;
       }
       setHost(result.value);
@@ -72,7 +72,8 @@ export function ServerCard({ snapshot, loading }: { snapshot: SettingsSnapshot |
         }}
       />
       <p id="server-help" className="tiny muted" style={{ margin: "6px 0 0" }}>
-        Domaine seul ou adresse complète. HTTP n'est accepté que pour l'émulateur et la boucle locale.
+        Domaine seul ou adresse complète. HTTPS obligatoire, et la version publiée ne livre aucune adresse par
+        défaut : le HTTP en clair (émulateur ou boucle locale) n&apos;existe que dans les builds de développement.
       </p>
       {hostError ? (
         <p className="tiny" role="alert" style={{ color: "var(--danger-ink)", margin: "6px 0 0" }}>

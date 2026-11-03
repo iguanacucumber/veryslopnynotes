@@ -200,7 +200,7 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     // Le pont natif porte la graine et l'état ; l'écran React ne saisit plus d'adresse.
     const bridge = readBridgeSource();
     const bridgeCode = codeOnly(bridge);
-    expect(bridge).toContain("private val baseUrlSeed: String = fr.veryslopnynotes.core.ServerConfig.baseUrl(");
+    expect(bridge).toContain("private val baseUrlSeed: String = if (BuildConfig.SERVER_HOST.isEmpty())");
     expect(bridge).toContain("internal val serverStore = ServerStore(ctx)");
     expect(bridge).toContain("internal fun currentBaseUrl(): String = serverStore.baseUrl(baseUrlSeed)");
     expect(bridge).toContain("serverStore.save(host)");
@@ -213,30 +213,49 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     expect(bridgeCode).not.toContain("onServerChange");
   });
 
-  test("grain de build : plus de valeur figée côté app, et pas de cleartext ajouté", () => {
+  test("grain de build : release sans défaut, émulateur et clair dans src/debug seuls", () => {
     const bridge = readBridgeSource();
-    expect(bridge).toContain("private val baseUrlSeed: String = fr.veryslopnynotes.core.ServerConfig.baseUrl(");
+    expect(bridge).toContain("private val baseUrlSeed: String = if (BuildConfig.SERVER_HOST.isEmpty())");
     expect(bridge).toContain("BuildConfig.SERVER_SCHEME");
     expect(bridge).toContain("BuildConfig.SERVER_HOST");
     expect(bridge).toContain("currentBaseUrl()");
     // Aucun hôte en dur côté app : la seule adresse connue est la graine.
-    expect(codeOnly(bridge)).not.toMatch(/https?:\/\//);
-    // Le buildConfigField reste, mais il n'est plus qu'un défaut.
+    expect(codeOnly(bridge)).not.toMatch(/https?:\/\/[^"' )`]+/);
+    // Le pont n'infère http qu'en debug ; la release refuse le clair explicite.
+    const bridgeSettings = codeOnly(read(join(ANDROID, "app/src/main/java/fr/veryslopnynotes/app/VsnBridgeSettings.kt")));
+    expect(bridgeSettings).toContain("if (BuildConfig.DEBUG) ServerConfig.schemeFor(host) else \"https\"");
+    expect(bridgeSettings).toContain('!BuildConfig.DEBUG && host.startsWith("http://")');
+
     const gradle = read(join(ANDROID, "app/build.gradle.kts"));
-    expect(gradle).toContain('buildConfigField("String", "SERVER_SCHEME"');
-    expect(gradle).toContain('buildConfigField("String", "SERVER_HOST"');
-    expect(gradle).toContain('?: "10.0.2.2:3000"');
-    // Jamais `usesCleartextTraffic` : une networkSecurityConfig l'interdit par défaut,
-    // sauf boucle locale et alias émulateur.
+    const defaultConfig = gradleBlock(gradle, "defaultConfig");
+    const debug = gradleBlock(gradle, "debug");
+    const release = gradleBlock(gradle, "release");
+    // La release ne porte NI défaut émulateur NI schéma clair.
+    expect(release).toContain('buildConfigField("String", "SERVER_HOST", "\\"${configuredHost.orEmpty()}\\"")');
+    expect(release).toContain('buildConfigField("String", "SERVER_SCHEME", "\\"https\\"")');
+    expect(release).not.toContain("10.0.2.2");
+    expect(release).not.toContain('"http"');
+    expect(defaultConfig).not.toContain("10.0.2.2");
+    expect(defaultConfig).not.toContain("SERVER_HOST");
+    // Le défaut émulateur et son schéma http restent dans le seul bloc debug.
+    expect(debug).toContain('?: "10.0.2.2:3000"');
+    expect(debug).toContain('buildConfigField("String", "SERVER_SCHEME", "\\"$scheme\\"")');
+
+    // Jamais `usesCleartextTraffic` : une networkSecurityConfig l'interdit par défaut.
     const manifest = read(join(ANDROID, "app/src/main/AndroidManifest.xml"));
     expect(manifest).not.toContain("usesCleartextTraffic");
     expect(manifest).toContain('android:networkSecurityConfig="@xml/network_security_config"');
+    // Release : aucun hôte en clair, aucune exception de domaine.
     const nsc = read(join(ANDROID, "app/src/main/res/xml/network_security_config.xml"));
     expect(nsc).toContain('<base-config cleartextTrafficPermitted="false"');
-    // Les seuls hôtes en clair : boucle locale + alias émulateur, sans sous-domaines.
-    const cleartextHosts = [...nsc.matchAll(/<domain includeSubdomains="false">([^<]+)<\/domain>/g)].map((m) => m[1]);
+    expect(nsc).not.toContain('cleartextTrafficPermitted="true"');
+    expect(nsc).not.toContain("<domain");
+    expect(nsc).not.toContain("10.0.2.2");
+    // Debug : les seuls hôtes en clair, boucle locale + alias émulateur, sans sous-domaines.
+    const debugNsc = read(join(ANDROID, "app/src/debug/res/xml/network_security_config.xml"));
+    const cleartextHosts = [...debugNsc.matchAll(/<domain includeSubdomains="false">([^<]+)<\/domain>/g)].map((m) => m[1]);
     expect(cleartextHosts).toEqual(["10.0.2.2", "localhost", "127.0.0.1"]);
-    expect(nsc.match(/cleartextTrafficPermitted="true"/g)).toHaveLength(1);
+    expect(debugNsc.match(/cleartextTrafficPermitted="true"/g)).toHaveLength(1);
     for (const f of androidFiles()) {
       expect({ file: f.split("/").slice(-2).join("/"), cleartext: read(f).includes("usesCleartextTraffic") }).toEqual({
         file: f.split("/").slice(-2).join("/"),
@@ -297,6 +316,21 @@ function accounts_have_logout(): boolean {
     repair.indexOf("PronoteSession.clear()") < purge &&
     purge > -1
   );
+}
+
+/** Corps du bloc Gradle `name { … }`, accolades équilibrées (sous-blocs inclus). */
+function gradleBlock(source: string, name: string): string {
+  const start = source.indexOf(`${name} {`);
+  expect({ block: name, found: start >= 0 }).toEqual({ block: name, found: true });
+  let depth = 0;
+  for (let i = source.indexOf("{", start); i < source.length; i += 1) {
+    if (source[i] === "{") depth += 1;
+    if (source[i] === "}") {
+      depth -= 1;
+      if (depth === 0) return source.slice(start, i + 1);
+    }
+  }
+  throw new Error(`bloc Gradle non fermé : ${name}`);
 }
 
 function androidFiles(): string[] {

@@ -2,8 +2,12 @@ plugins {
     id("com.android.application")
 }
 
-// Graine serveur : HTTPS-only sauf émulateur/localhost, comme
-// core/ServerConfig.validateBaseUrl ; aucun hôte tiers (I1).
+// Graine serveur : HTTPS-only, et AUCUN défaut en release (SEC-01). Le défaut
+// émulateur `10.0.2.2:3000` vit uniquement dans le variant debug, avec son
+// network_security_config dédié.
+val configuredHost = (project.findProperty("server.host") as String?)
+    ?: System.getenv("SERVER_HOST")
+
 android {
     namespace = "fr.veryslopnynotes.app"
     compileSdk = 37
@@ -14,16 +18,6 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "0.1.0"
-
-        val host = (project.findProperty("server.host") as String?)
-            ?: System.getenv("SERVER_HOST")
-            ?: "10.0.2.2:3000"
-        // ponytail: logique dupliquée de core/ServerConfig.schemeFor
-        // (Gradle ne dépend pas du module core). Upgrade: settings partagés.
-        val emulator = host.startsWith("10.0.2.2") || host.startsWith("localhost")
-        val scheme = if (emulator) "http" else "https"
-        buildConfigField("String", "SERVER_SCHEME", "\"$scheme\"")
-        buildConfigField("String", "SERVER_HOST", "\"$host\"")
     }
 
     signingConfigs {
@@ -45,7 +39,21 @@ android {
     }
 
     buildTypes {
+        // Défaut émulateur (http local) réservé au debug ; la release ne part
+        // jamais sur `10.0.2.2` ni en clair, même sans configuration.
+        debug {
+            val host = configuredHost ?: "10.0.2.2:3000"
+            // ponytail: logique dupliquée de core/ServerConfig.schemeFor
+            // (Gradle ne dépend pas du module core). Upgrade: settings partagés.
+            val emulator = host.startsWith("10.0.2.2") || host.startsWith("localhost")
+            val scheme = if (emulator) "http" else "https"
+            buildConfigField("String", "SERVER_SCHEME", "\"$scheme\"")
+            buildConfigField("String", "SERVER_HOST", "\"$host\"")
+        }
         release {
+            // Graine VIDE par défaut : l'utilisateur saisit son serveur.
+            buildConfigField("String", "SERVER_SCHEME", "\"https\"")
+            buildConfigField("String", "SERVER_HOST", "\"${configuredHost.orEmpty()}\"")
             // R8 sur la release (artefact public) : code minifié, ressources rétrécies.
             isMinifyEnabled = true
             isShrinkResources = true
