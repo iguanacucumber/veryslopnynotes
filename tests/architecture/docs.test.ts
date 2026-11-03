@@ -6,6 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { Glob } from "bun";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { DEFAULT_TARGETS } from "../../agents/runtime/check";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
@@ -603,6 +604,46 @@ describe("commandes citées", () => {
       for (const m of text.matchAll(/`make ([a-zA-Z][\w-]*)`/g)) {
         const target = m[1]!;
         expect({ name, target, exists: targets.has(target) }).toEqual({ name, target, exists: true });
+      }
+    }
+  });
+});
+
+describe("check-fast", () => {
+  const recipe =
+    /^check-fast:\n\tCHECK_HARNESS=1 CHECK_TARGETS="([^"]+)"/m.exec(MAKEFILE)?.[1]?.split(" ") ?? [];
+  const skipped = ["android-compile", "audit"];
+
+  test("saute exactement les étapes Kotlin et réseau du gate", () => {
+    // Ajouter une étape à DEFAULT_TARGETS sans l'ajouter ici la ferait
+    // silencieusement disparaître de la boucle rapide.
+    expect([...recipe].sort()).toEqual(
+      DEFAULT_TARGETS.filter((target) => !skipped.includes(target)).sort(),
+    );
+    for (const target of skipped) expect(recipe).not.toContain(target);
+  });
+
+  test("toutes les cibles de la recette existent dans le Makefile", () => {
+    const targets = makeTargets(MAKEFILE);
+    for (const target of recipe) {
+      expect({ target, exists: targets.has(target) }).toEqual({ target, exists: true });
+    }
+  });
+
+  test("la documentation nomme les deux étapes sautées", () => {
+    const docs: [string, string][] = [
+      ["AGENTS.md", AGENTS],
+      ["CONTRIBUTING.md", read("CONTRIBUTING.md")],
+      ["docs/architecture/BUILD.md", read("docs/architecture/BUILD.md")],
+    ];
+    for (const [name, text] of docs) {
+      const section = text.slice(text.indexOf("check-fast"));
+      for (const target of skipped) {
+        expect({ name, target, cité: section.includes(target) }).toEqual({
+          name,
+          target,
+          cité: true,
+        });
       }
     }
   });
