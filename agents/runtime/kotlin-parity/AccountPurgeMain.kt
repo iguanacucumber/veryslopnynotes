@@ -10,16 +10,21 @@ import fr.veryslopnynotes.data.AccountPurgePlan
 import fr.veryslopnynotes.data.AccountPurgeResult
 import fr.veryslopnynotes.data.AccountPurgeStep
 import fr.veryslopnynotes.data.AccountStorePolicy
+import fr.veryslopnynotes.data.clearManualAccountData
 import fr.veryslopnynotes.pronote.JVal
 import fr.veryslopnynotes.pronote.Json
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 import java.io.PrintStream
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 private fun JVal.Obj.str(key: String): String? = (fields[key] as? JVal.Str)?.value
 
 private fun JVal.Obj.arr(key: String): List<JVal>? = (fields[key] as? JVal.Arr)?.items
+
+private fun JVal.Obj.bool(key: String): Boolean = (fields[key] as? JVal.Bool)?.value ?: false
 
 private fun err(name: String, message: String?): JVal.Obj = JVal.Obj(
     linkedMapOf("error" to JVal.Str(name), "message" to JVal.Str(message ?: "inconnu")),
@@ -33,10 +38,69 @@ private fun names(values: List<AccountDataStore>): JVal =
 private fun mode(raw: String?): AccountPurgeMode? =
     AccountPurgeMode.entries.firstOrNull { it.name == raw }
 
+private class ManualBench {
+    private val roots = mutableListOf<File>()
+
+    fun root(): File = Files.createTempDirectory("vsn-manual").toFile().also { roots.add(it) }
+
+    fun cleanup() {
+        roots.forEach { it.deleteRecursively() }
+        roots.clear()
+    }
+}
+
 private class Driver {
     private val calls = ArrayList<String>()
+    private val manualBench = ManualBench()
+
+    private fun manualFile(op: JVal.Obj): File {
+        val file = File(manualBench.root(), "manual.json")
+        if (op.bool("filePresent")) file.writeText("{\"url\":\"https://exemple.test/manuel\"}")
+        return file
+    }
 
     fun run(op: JVal.Obj): JVal.Obj = when (op.str("op")) {
+        // L'effacement RÉEL du manuel, panne de `commit()` des préférences
+        // injectée : le fichier part, mais l'issue dit que les clés survivent.
+        "manualPurge" -> {
+            val file = manualFile(op)
+            var prefsCalls = 0
+            val failPrefs = op.bool("failPrefs")
+            val cleared = clearManualAccountData(file) {
+                prefsCalls++
+                !failPrefs
+            }
+            ok(
+                "cleared" to JVal.Bool(cleared),
+                "fileExists" to JVal.Bool(file.exists()),
+                "prefsCalls" to JVal.Num(prefsCalls.toDouble()),
+            )
+        }
+        // Le MÊME échec travers l'orchestrateur : la purge est INCOMPLÈTE et
+        // nomme `manual`, donc la déconnexion ne peut pas être un succès.
+        "manualPlan" -> {
+            val file = manualFile(op)
+            val failPrefs = op.bool("failPrefs")
+            val steps = AccountDataStore.entries
+                .filter { it.required(AccountPurgeMode.LOGOUT) }
+                .map { store ->
+                    AccountPurgeStep(store) {
+                        if (store == AccountDataStore.MANUAL) {
+                            clearManualAccountData(file) { !failPrefs }
+                        } else {
+                            true
+                        }
+                    }
+                }
+            val result = AccountPurgePlan.of(AccountPurgeMode.LOGOUT, steps).purge()
+            ok(
+                "ok" to JVal.Bool(result.ok),
+                "purged" to names(result.purged),
+                "failed" to names(result.failed),
+                "missing" to names(result.missing),
+                "fileExists" to JVal.Bool(file.exists()),
+            )
+        }
         // L'INVENTAIRE compilé : ce que le test compare aux stores du dépôt.
         "inventory" -> ok(
             "stores" to JVal.Arr(
@@ -102,7 +166,10 @@ private class Driver {
                 "calls" to JVal.Arr(calls.map { JVal.Str(it) }),
             )
         }
-        "cleanup" -> ok("ok" to JVal.Bool(true))
+        "cleanup" -> {
+            manualBench.cleanup()
+            ok("ok" to JVal.Bool(true))
+        }
         else -> throw IllegalArgumentException("pilote: opération inconnue : ${op.str("op")}")
     }
 }

@@ -148,6 +148,9 @@ export const PRODUCTION_SOURCES: string[] = [
   // #861 : l'inventaire des stores de compte et l'orchestrateur de purge.
   // Fichier PUR : le harnais EXÉCUTE l'ordre, les échecs et les stores absents.
   join(DATA, "AccountPurge.kt"),
+  // #886 : l'effacement durable du manuel (fichier + clés héritées du compte).
+  // Fichier PUR : le harnais EXÉCUTE un `commit()` de préférences en échec.
+  join(DATA, "ManualAccountData.kt"),
   // `data/DownloadedFiles.kt` + `data/LocalDataStore.kt` (#540) : les pièces
   // jointes téléchargées (nom, cache borné, purge). Fichiers PURS : le
   // harnais les compile et les REJOUE, donc le test porte sur du code

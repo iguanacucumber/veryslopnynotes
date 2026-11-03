@@ -138,7 +138,10 @@ describe("aucun écrasement silencieux d'une cible illisible (#910)", () => {
   test("le manuel rend son verdict de purge au lieu de l'avaler", () => {
     const manual = source("Manuals.kt");
     expect(manual).toContain("fun clearAccountData(): Boolean");
-    expect(manual).toContain("val fileCleared = file?.let { DurableFile.delete(it) } ?: true");
-    expect(manual).toContain("return fileCleared");
+    expect(manual).toContain("clearManualAccountData(file)");
+    expect(manual).toContain("?.commit() ?: true");
+    // L'effacement du fichier et des clés héritées vit dans le seam PUR, joué
+    // par `kotlin-manual-account-purge.test.ts`.
+    expect(source("ManualAccountData.kt")).toContain("DurableFile.delete(it)");
   });
 });
