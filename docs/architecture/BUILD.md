@@ -65,7 +65,7 @@ compris en échec. Deux échecs identiques = défaut, pas flake : ne pas relance
 ## Autres cibles `make`
 
 - `watch` : `bun test --watch` (unitaires + web, séquentiel).
-- `shot` : capture sur téléphone réel via Gradle (`buildDebugApk` d'abord, puis deep link, vérification de route). JDK/SDK découverts par `agents/runtime/android-env.sh`.
+- `shot` : capture sur téléphone réel via Gradle (`buildDebugApk` d'abord, puis deep link DEBUG, vérification de route). JDK/SDK découverts par `agents/runtime/android-env.sh`.
 - `buildDebugApk` / `buildRelApk` / `updateApkToPhone` : Gradle, JDK/SDK requis, échec bruyant si outillage absent.
 - `runServer` : scraper de manuels HTTPS sur `127.0.0.1:8080` (TLS généré hors dépôt, jamais de repli en clair). `HOST=0.0.0.0` uniquement sur réseau de confiance.
 - `build` : image serveur Docker + scan de secrets.

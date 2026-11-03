@@ -25,6 +25,20 @@ const MAIN_ACTIVITY = `${NAMESPACE}.MainActivity`;
 const FILE_PROVIDER = "androidx.core.content.FileProvider";
 const LOOPBACK = ["10.0.2.2", "localhost", "127.0.0.1"];
 
+// Un hôte de deep link par route WEB : les deux listes doivent rester d'accord.
+const ROUTE_STATE = readFileSync(
+  join(APP, "src/main/java/fr/veryslopnynotes/app/WebRouteState.kt"),
+  "utf8",
+);
+const DEEP_LINK_HOSTS = [
+  ...(/val WEB_ROUTES: Set<String> = setOf\(([\s\S]*?)\)/.exec(ROUTE_STATE)?.[1] ?? "").matchAll(
+    /"([^"]+)"/g,
+  ),
+]
+  .map((match) => match[1]!)
+  .map((route) => (route === "/" ? "index" : route.replace(/^\//, "")))
+  .sort();
+
 // Documentées : CAMERA (scan QR zxing, android/README.md) et
 // ACCESS_LOCAL_NETWORK (serveur local, manifeste principal). Toute autre
 // permission dangereuse est une régression.
@@ -201,15 +215,32 @@ function newestSourceMtime(variant: Variant): number {
 interface Profile {
   variant: Variant;
   origin: string;
+  /** Manifeste brut (fusionné ou sources), commentaires compris. */
+  raw: string;
   manifest: Manifest;
 }
 
 function profile(variant: Variant): Profile {
   const path = mergedPath(variant);
   if (path && statSync(path).mtimeMs >= newestSourceMtime(variant)) {
-    return { variant, origin: "Gradle fusionné", manifest: parseManifest(readFileSync(path, "utf8")) };
+    const raw = readFileSync(path, "utf8");
+    return { variant, origin: "Gradle fusionné", raw, manifest: parseManifest(raw) };
   }
-  return { variant, origin: "repli sources", manifest: mergeSources(variant) };
+  const raw = [MAIN_MANIFEST, join(APP, `src/${variant}/AndroidManifest.xml`)]
+    .filter(existsSync)
+    .map((file) => readFileSync(file, "utf8"))
+    .join("\n");
+  return { variant, origin: "repli sources", raw, manifest: mergeSources(variant) };
+}
+
+/** Filtres d'intent hors commentaires : un commentaire qui nomme BROWSABLE
+ *  ne doit pas faire croire à un deep link. */
+function intentFilters(xml: string): string[] {
+  return [
+    ...withoutComments(xml).matchAll(
+      /<intent-filter\b([^>]*)>([\s\S]*?)<\/intent-filter>/g,
+    ),
+  ].map((match) => `${match[1] ?? ""} ${match[2] ?? ""}`);
 }
 
 const PROFILES = VARIANTS.map(profile);
@@ -284,6 +315,28 @@ describe("manifeste Android fusionné (#900)", () => {
           .filter((component) => !component.attrs.get("android:permission"))
           .map((component) => `${component.kind}:${component.name}`);
         expect(unguarded).toEqual([]);
+      });
+
+      test("deep links : schéma privé en debug, rien en release", () => {
+        const filters = intentFilters(current.raw);
+        const browsable = filters.filter((filter) =>
+          filter.includes("android.intent.category.BROWSABLE"),
+        );
+        if (current.variant === "release") {
+          expect(browsable).toEqual([]);
+          expect(filters.some((filter) => filter.includes("android.intent.action.VIEW"))).toBe(false);
+        } else {
+          expect(browsable).toHaveLength(1);
+          const filter = browsable[0]!;
+          expect(filter).toContain('android:scheme="veryslopnynotes"');
+          expect(filter).not.toContain('android:scheme="https"');
+          const hosts = [...filter.matchAll(/android:host="([^"]+)"/g)].map((m) => m[1]!).sort();
+          // Toute route WEB absente échoue à `am start` ; un hôte de trop
+          // ouvrirait une route inexistante.
+          expect(hosts).toEqual(DEEP_LINK_HOSTS);
+        }
+        // Un App Link se vérifie : sans `autoVerify`, aucun n'est revendiqué.
+        expect(withoutComments(current.raw)).not.toContain('android:autoVerify="true"');
       });
 
       test("le FileProvider n'est pas exporté et sert l'autorité de l'app", () => {

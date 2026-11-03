@@ -57,8 +57,9 @@ violerait ADR-003 et I8.
   l'être dans les types TS et dans l'allowlist Kotlin.
 - Les tests d'architecture vérifient l'absence de réseau et d'HTML injecté
   (`tests/architecture/web.test.ts`), et la CSP.
-- Les captures `make shot` passent par les deep links existants
-  (`veryslopnynotes://<route>`), désormais traduits en `#/<route>`.
+- Les captures `make shot` passent par le deep link DEBUG
+  (`veryslopnynotes://<route>`), traduit en `#/<route>`. La release n'expose
+  aucun filtre `VIEW`/`BROWSABLE` et ne revendique aucun App Link (SEC-10).
 - Compatibilité WebView : Chromium 100+ (seuil natif, refus explicite), cible
   ES2018, pas de `:has()`/`dvh` sans repli, tests sur API 26.
 - Budget : JS initial < 250 Ko gzip, pas de bibliothèque de composants.
