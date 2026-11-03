@@ -12,6 +12,9 @@ Ouvre une issue avant d'écrire du code. Décris le problème, le périmètre et
 qui prouvera que c'est fini. Une issue = une branche = une PR ; un changement
 sans issue peut être refusé, sauf correction triviale (faute, lien mort).
 
+Les métadonnées de la page GitHub et les cinq bonnes premières issues sont
+listées dans [`docs/REPOSITORY.md`](docs/REPOSITORY.md).
+
 ## Prérequis
 
 - **Bun 1.4.4** pour l'interface, les tests et le gate.
