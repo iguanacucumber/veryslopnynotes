@@ -4,6 +4,8 @@
 - Remplace : rien. Complète [ADR-005](005-rules-and-architecture.md).
 - Amende : [ADR-004](004-webview.md) — sa clause « notifications déjà là et
   testées » est annulée.
+- Complété par : [ADR-010](010-notifications-and-account-scope.md) — l'absence
+  de rappel devient une décision de périmètre, pas un report.
 
 ## Contexte
 

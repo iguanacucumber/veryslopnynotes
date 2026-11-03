@@ -103,9 +103,10 @@ Compatibilité : Android 8.0+ (API 26) avec **WebView système Chromium 100+**,
 QR + PIN uniquement, MFA non prise en charge ; seuil, détection et matrice :
 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 Limites assumées : accès Pronote dépendant de l'établissement et du QR ;
-assistant IA inactif sans clé OpenRouter ; scraper sans authentification sur
-la boucle locale, jamais public sans jeton ; pas de compte Pronote réel dans la
-suite par défaut (fixtures synthétiques et états hors-ligne).
+assistant IA inactif sans clé OpenRouter ; pas de rappels, compte élève
+uniquement ; scraper sans authentification sur la boucle locale, jamais public
+sans jeton ; pas de compte Pronote réel dans la suite par défaut (fixtures
+synthétiques et états hors-ligne).
 Accessibilité : [`docs/ACCESSIBILITY.md`](docs/ACCESSIBILITY.md).
 
 ## License
