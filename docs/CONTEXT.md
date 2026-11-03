@@ -30,6 +30,7 @@ Registre : [`INVARIANTS.md`](architecture/INVARIANTS.md).
 | `docs/PRODUCT.md` | écrans et parcours | changer un comportement visible |
 | `DESIGN.md` | système visuel, jetons | changer l'apparence |
 | `docs/COMPATIBILITY.md` | QR, MFA, versions, options | vérifier une limite |
+| [`docs/QA-MATRIX.md`](QA-MATRIX.md) | preuves appareil | preuve |
 | `docs/HUMAN_INPUTS.md` | QR, clé OpenRouter, manuel | config utilisateur |
 | `docs/RELEASE.md` | build, signature, release | livrer un APK |
 | `docs/adr/` | décisions et leurs raisons | contester une règle |

@@ -719,6 +719,60 @@ describe("liens et doublons des docs", () => {
   });
 });
 
+describe("matrice QA (#939)", () => {
+  const FILE = "docs/QA-MATRIX.md";
+  const QA = read(FILE);
+  // Cas exigés par l'issue : l'ID et le libellé exact de la colonne « Cas ».
+  const REQUIRED: [string, string][] = [
+    ["QA-01", "Android 8.0 (API 26)"],
+    ["QA-02", "Android 12 (API 31)"],
+    ["QA-03", "Android 15 (API 35)"],
+    ["QA-04", "Android 16 (API 36)"],
+    ["QA-05", "WebView ancienne"],
+    ["QA-06", "2 Go de RAM"],
+    ["QA-07", "Police 200 %"],
+    ["QA-08", "Premier lancement hors-ligne"],
+    ["QA-09", "Stockage plein"],
+    ["QA-10", "Horloge fausse — contrat de fraîcheur"],
+    ["QA-12", "Portail captif"],
+  ];
+  const STATUTS = ["Réussi", "Échec", "Bloqué"];
+  const rows = QA.split("\n").filter((line) => /^\| QA-\d+ \|/.test(line));
+  const cells = (line: string) => line.split("|").map((cell) => cell.trim());
+  const byId = new Map(rows.map((line) => [cells(line)[1]!, cells(line)]));
+  const exists = (path: string) => {
+    try {
+      statSync(join(ROOT, path));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  test("chaque cas requis par l'issue a sa ligne", () => {
+    for (const [id, cas] of REQUIRED) {
+      expect({ id, cas: byId.get(id)?.[2] ?? null }).toEqual({ id, cas });
+    }
+  });
+
+  test("chaque ligne porte un statut borné et une raison quand elle est bloquée", () => {
+    expect(rows.length).toBeGreaterThanOrEqual(REQUIRED.length);
+    for (const line of rows) {
+      const [, id, , , raw, execution] = cells(line);
+      const statut = (raw ?? "").replaceAll("`", "");
+      expect({ id, statut: STATUTS.includes(statut) }).toEqual({ id, statut: true });
+      // Une ligne bloquée sans raison ne dit rien : elle ne doit pas passer.
+      if (statut === "Bloqué") expect({ id, raison: (execution ?? "").length > 20 }).toEqual({ id, raison: true });
+    }
+  });
+
+  test("ses liens résolvent et l'index des docs pointe dessus", () => {
+    expect(relativeLinks(QA).length).toBeGreaterThan(0);
+    expect({ bad: brokenDocLinks([{ path: FILE, text: QA }], exists) }).toEqual({ bad: [] });
+    expect(relativeLinks(CONTEXT)).toContain("QA-MATRIX.md");
+  });
+});
+
 describe("modèle de menace", () => {
   const FILE = "docs/THREAT-MODEL.md";
   // Les cinq menaces nommées par #904 : un identifiant stable, un titre lisible.
