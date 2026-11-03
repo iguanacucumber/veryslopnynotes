@@ -40,6 +40,31 @@ malveillante, dépendance compromise, scraper local et clé perdue.
 - **Les actions GitHub sont épinglées** à un SHA de commit, pas à un tag
   mutable. Dependabot propose les mises à jour.
 
+## Scan de l'historique et push protection
+
+`make lint` ne voit que les fichiers trackés : un secret retiré par un commit
+ultérieur reste lisible dans l'historique. La CI rejoue donc **tout**
+l'historique avec gitleaks, sur chaque PR et sur `main` :
+[`.github/workflows/secret-scan.yml`](.github/workflows/secret-scan.yml). Le
+binaire `8.30.1` est épinglé et vérifié par SHA-256, aucune action ni aucun
+secret n'est requis ; le job échoue dès une trouvaille. Les exemptions de
+[`.gitleaks.toml`](.gitleaks.toml) ne portent que sur des valeurs de test
+exactes, jamais sur un chemin.
+
+Reproduire localement avec gitleaks 8.30.1 installé :
+
+```bash
+gitleaks git . --log-opts=--all --config .gitleaks.toml --redact
+```
+
+**Push protection** : c'est un réglage du dépôt, pas un fichier. Il doit
+rester activé dans *Settings → Code security → Secret scanning → Push
+protection* (vérifiable avec
+`gh api repos/<owner>/<repo> --jq .security_and_analysis`). Un push contenant
+un secret reconnu est alors refusé avant d'entrer dans l'historique ; une
+valeur de test volontaire s'exempte dans `.gitleaks.toml`, pas par un
+`gitleaks:allow` dispersé.
+
 ## Versions prises en charge
 
 Seule la branche `main` est maintenue : les correctifs de sécurité y arrivent.

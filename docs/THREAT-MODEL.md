@@ -190,6 +190,8 @@ contenu de `.agents/`, build Docker.
   les mêmes skills que le disque, et un plafond rend tout ajout visible (I11).
 - Le scan anti-secrets tourne dans le gate et couvre aussi `.agents/` avec un
   carve-out étroit ; le gate ne peut pas être réduit par l'environnement (I22).
+  Un job CI distinct rejoue en plus **tout l'historique** avec gitleaks
+  épinglé ([`secret-scan.yml`](../.github/workflows/secret-scan.yml)).
 
 **Risque résiduel** : un script d'installation s'exécute avec les droits du
 développeur ou de la CI **avant** que l'audit ne rende son verdict, et un audit
