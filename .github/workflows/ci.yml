@@ -17,6 +17,12 @@
 # attrape ce que les tests de rendu statiques ne voient pas (parcours
 # d'appairage, déconnexion, débordements, erreurs console).
 #
+# Politique anti-flake (#924) : attentes d'ÉVÉNEMENT bornées par des délais
+# explicites, jamais de sleep fixe ; UNE reprise navigateur au maximum, dans
+# `web-smoke` seulement. Le job `check` n'est JAMAIS rejoué : un gate rouge ne
+# devient pas vert parce qu'on le relance. Captures du smoke et logs du gate
+# partent en artefact, y compris en échec.
+#
 # Aucun secret : le dépôt est public, le job ne lit ni `.env`, ni token, ni
 # corpus Pronote (celui-ci est gitignoré : la parité sur données réelles est
 # donc SKIPpée, bruyamment, comme sur le poste).
@@ -320,5 +326,28 @@ jobs:
       - name: Chromium
         run: bunx playwright install --with-deps chromium
 
+      # Politique anti-flake (#924) : le navigateur, lui seul, a droit à UNE
+      # reprise. La commande et le code ne changent pas ; si la seconde tombe
+      # au même endroit, c'est un défaut, pas un flake. Aucun `retry` ailleurs :
+      # le gate `check` garde son verdict du premier essai.
       - name: Smoke
-        run: make web-smoke
+        timeout-minutes: 8
+        env:
+          # Artefact stable, hors du /tmp partagé du runner.
+          WEB_SMOKE_SHOTS: ${{ runner.temp }}/web-smoke-shots
+        run: |
+          set -euo pipefail
+          if make web-smoke; then exit 0; fi
+          echo "::warning::web-smoke a échoué — UNE reprise navigateur (politique anti-flake)."
+          make web-smoke
+
+      # Les captures sont la PREUVE du smoke (états rendus, écritures). Un run
+      # rouge est précisément celui dont on veut les voir : `if: always()`.
+      - name: Captures du smoke
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: web-smoke-shots
+          path: ${{ runner.temp }}/web-smoke-shots
+          retention-days: 7
+          if-no-files-found: ignore
