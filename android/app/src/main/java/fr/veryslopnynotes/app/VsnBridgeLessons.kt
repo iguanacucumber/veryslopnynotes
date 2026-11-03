@@ -13,6 +13,7 @@ import fr.veryslopnynotes.core.transcribeLesson
 import fr.veryslopnynotes.data.LessonNotesWrite
 import fr.veryslopnynotes.data.LlmError
 import fr.veryslopnynotes.data.OpenRouterLlm
+import fr.veryslopnynotes.data.RequestScope
 import fr.veryslopnynotes.data.SessionEpoch
 import fr.veryslopnynotes.data.StaleSessionRead
 import fr.veryslopnynotes.data.SubjectPrefs
@@ -20,7 +21,6 @@ import fr.veryslopnynotes.data.manualMatchesSubject
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import fr.veryslopnynotes.app.BridgeTimeouts.AWAIT_LLM_MS
 import fr.veryslopnynotes.app.BridgeTimeouts.AWAIT_PHOTO_MS
 
@@ -120,9 +120,10 @@ internal fun VsnBridge.lessonsSetManual(p: JSONObject): JSONObject {
  * La photo ne traverse jamais le pont : lue, ré-encodée, envoyée au fournisseur
  * vision, puis supprimée. Le plafond natif évite un fil pendu pour toujours.
  */
-internal fun VsnBridge.lessonsAddPhoto(p: JSONObject): JSONObject {
+internal fun VsnBridge.lessonsAddPhoto(p: JSONObject, epoch: Long = SessionEpoch.current()): JSONObject {
     val subject = bounded(p.string("subject"), LessonNote.MAX_SUBJECT_CHARS)
     if (subject.isEmpty()) return JSONObject().put("ok", false).put("message", "Choisis une matière.")
+    ensureCurrent(epoch)
     val source = bounded(p.string("source"), 16).ifEmpty { "camera" }
     val apiKey = llmKeys.apiKey()?.trim()
         ?: return JSONObject().put("ok", false).put("message", fr.veryslopnynotes.data.HomeworkRepository.NO_KEY_MESSAGE)
@@ -149,8 +150,9 @@ internal fun VsnBridge.lessonsAddPhoto(p: JSONObject): JSONObject {
                 base64 = Base64.encodeToString(bytes, Base64.NO_WRAP),
             )
             try {
+                ensureCurrent(epoch)
                 val draft = transcribeLesson(
-                    provider = OpenRouterLlm(timeoutMs = AWAIT_LLM_MS),
+                    provider = llmForCall(epoch, AWAIT_LLM_MS),
                     image = image,
                     apiKey = apiKey,
                 )
@@ -184,11 +186,19 @@ internal fun VsnBridge.awaitPhotos(source: String, maxPhotos: Int = 1): PhotoCap
         latch.countDown()
     }
     photos.capture(source, maxPhotos, onDone)
-    if (!latch.await(AWAIT_PHOTO_MS, TimeUnit.MILLISECONDS)) {
-        photos.cancel(onDone)
-        return PhotoCapture.Result.Error("Photo annulée : délai dépassé.")
+    // L'abandon suit le jeton de l'appel : un logout ne laisse pas la capture
+    // ouverte ni le fil du pont bloqué jusqu'au plafond.
+    return when (BridgeWait.await(latch, AWAIT_PHOTO_MS, RequestScope.current())) {
+        AwaitOutcome.DONE -> result ?: PhotoCapture.Result.Error("Photo indisponible : réessaie.")
+        AwaitOutcome.CANCELLED -> {
+            photos.cancel(onDone)
+            PhotoCapture.Result.Cancelled
+        }
+        AwaitOutcome.TIMED_OUT -> {
+            photos.cancel(onDone)
+            PhotoCapture.Result.Error("Photo annulée : délai dépassé.")
+        }
     }
-    return result ?: PhotoCapture.Result.Error("Photo indisponible : réessaie.")
 }
 
 internal fun VsnBridge.awaitPhoto(source: String): PhotoCapture.Result = awaitPhotos(source, 1)

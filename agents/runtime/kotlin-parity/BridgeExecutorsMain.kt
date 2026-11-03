@@ -70,6 +70,28 @@ private class ExecState {
         }
     }
 
+    val submitted = AtomicInteger()
+
+    @Volatile
+    var submittedInterrupted = false
+
+    @Volatile
+    var submittedFinished = false
+
+    /** Un travail suivi par `submit`, bloqué jusqu'à l'annulation. */
+    fun submitTracked() {
+        executors.submit("llm.teacherTurn") {
+            submitted.incrementAndGet()
+            try {
+                gate.await(30, TimeUnit.SECONDS)
+            } catch (_: InterruptedException) {
+                submittedInterrupted = true
+            } finally {
+                submittedFinished = true
+            }
+        }
+    }
+
     /** Appel court : il mesure combien de temps il a attendu son fil. */
     fun submitShort(method: String) {
         val sent = System.currentTimeMillis()
@@ -131,6 +153,37 @@ private class Driver {
                 "callsMax" to JVal.Num(s.callsMax.get().toDouble()),
                 "llmMax" to JVal.Num(s.llmMax.get().toDouble()),
                 "threads" to JVal.Arr(s.threads.map { JVal.Str(it) }),
+            )
+        }
+        "execSubmit" -> {
+            state(op).submitTracked()
+            ok("ok" to JVal.Bool(true))
+        }
+        "execWaitSubmitted" -> {
+            val s = state(op)
+            val timeout = (op.num("timeoutMs") ?: 5000.0).toLong()
+            val deadline = System.currentTimeMillis() + timeout
+            while (s.submitted.get() < 1 && System.currentTimeMillis() < deadline) Thread.sleep(5)
+            ok(
+                "started" to JVal.Num(s.submitted.get().toDouble()),
+                "inFlight" to JVal.Num(s.executors.inFlight.toDouble()),
+                "timedOut" to JVal.Bool(s.submitted.get() < 1),
+            )
+        }
+        "execCancelAll" -> {
+            state(op).executors.cancelAll()
+            ok("ok" to JVal.Bool(true))
+        }
+        "execWaitSubmittedFinished" -> {
+            val s = state(op)
+            val timeout = (op.num("timeoutMs") ?: 5000.0).toLong()
+            val deadline = System.currentTimeMillis() + timeout
+            while (!s.submittedFinished && System.currentTimeMillis() < deadline) Thread.sleep(5)
+            ok(
+                "interrupted" to JVal.Bool(s.submittedInterrupted),
+                "finished" to JVal.Bool(s.submittedFinished),
+                "inFlight" to JVal.Num(s.executors.inFlight.toDouble()),
+                "timedOut" to JVal.Bool(!s.submittedFinished),
             )
         }
         "execRelease" -> {

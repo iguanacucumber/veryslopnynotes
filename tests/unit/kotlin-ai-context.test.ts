@@ -318,7 +318,7 @@ describe("contexte IA — câblage unique du pont (#628)", () => {
 
   test("le corpus vide refuse AVANT l'appel payant, sauf geste explicite", () => {
     const refusal = bridge.indexOf("if (context.sources.isEmpty() && !proceedAnyway)");
-    const call = bridge.indexOf("OpenRouterHomework(OpenRouterLlm(timeoutMs = HOMEWORK_LLM_TIMEOUT_MS), llmKeys)");
+    const call = bridge.indexOf("OpenRouterHomework(llmForCall(epoch, HOMEWORK_LLM_TIMEOUT_MS), llmKeys)");
     expect(refusal).toBeGreaterThan(-1);
     expect(call).toBeGreaterThan(refusal);
     expect(bridge).toContain("missingRefusalMessage(missing)");

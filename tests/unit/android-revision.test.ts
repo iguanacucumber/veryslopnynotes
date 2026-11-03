@@ -160,7 +160,7 @@ describe("fiche de revision — le pont ne jette plus l'echec (#367)", () => {
 
   test("le fournisseur porte le délai du pont, pas le défaut 20 s (#594)", () => {
     // Le modèle est tué à 20 s par OkHttp alors que le pont attend 45 s.
-    expect(bridge).toMatch(/requestRevisionSheet\(OpenRouterLlm\(timeoutMs = AWAIT_LLM_MS\)/);
+    expect(bridge).toMatch(/requestRevisionSheet\(llmForCall\(epoch, AWAIT_LLM_MS\)/);
   });
 
   test("la fiche cherche le devoir dans la semaine AFFICHÉE (#369, #596)", () => {

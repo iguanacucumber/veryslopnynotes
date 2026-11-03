@@ -361,6 +361,19 @@ class OpenRouterHomework(
     private val llm: OpenRouterLlm,
     private val keys: LlmKeyStore,
 ) {
+    private val lock = Any()
+    private var worker: Thread? = null
+
+    @Volatile
+    private var cancelled = false
+
+    /** Déconnexion/abandon : coupe le socket ET le fil de génération. */
+    fun cancel() {
+        cancelled = true
+        llm.cancel()
+        synchronized(lock) { worker }?.interrupt()
+    }
+
     fun generate(
         question: String,
         sources: List<HomeworkSource>,
@@ -368,6 +381,10 @@ class OpenRouterHomework(
         allowUnsourced: Boolean = false,
         onPhase: ((String) -> Unit)? = null,
     ) {
+        if (cancelled) {
+            onDone(HomeworkResult(null, CANCELLED_MESSAGE))
+            return
+        }
         // Relecture a chaque appel : la cle change quand l'utilisateur la reecrit.
         val apiKey = keys.apiKey()
         if (apiKey.isNullOrEmpty()) {
@@ -384,7 +401,7 @@ class OpenRouterHomework(
         }
         // Fond : OkHttp reste bloquant, donc hors thread UI. Le provider direct
         // implemente SafePromptProvider : le SafePrompt valide ici est celui envoye.
-        Thread {
+        val thread = Thread {
             // #359 : plus de `catch (_: Exception) { null }` — l'erreur REMONTE,
             // avec sa cause (clé, crédits, modèle, quota, réseau). Avant, tout
             // devenait « Échec de l'assistant. », impossible à diagnostiquer.
@@ -419,9 +436,19 @@ class OpenRouterHomework(
                 HomeworkResult(null, INVALID_ANSWER_MESSAGE)
             } catch (_: Exception) {
                 HomeworkResult(null, GENERIC_ERROR_MESSAGE)
+            } finally {
+                synchronized(lock) {
+                    if (worker === Thread.currentThread()) worker = null
+                }
             }
-            onDone(result)
-        }.start()
+            // Annulé pendant le calcul : le fil meurt sans livrer au pont.
+            if (!cancelled) onDone(result)
+        }
+        synchronized(lock) {
+            if (cancelled) return
+            worker = thread
+        }
+        thread.start()
     }
 
     companion object {

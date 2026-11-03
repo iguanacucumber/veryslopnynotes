@@ -104,4 +104,29 @@ describe("exécuteurs du pont (#393)", () => {
       await ask({ op: "execShutdown", qid });
     }
   });
+
+  test.skipIf(skip)("les Futures soumis sont suivis et annulés par `cancelAll`", async () => {
+    const qid = await newExecutors();
+    try {
+      await ask({ op: "execSubmit", qid });
+      const started = JSON.parse(
+        await ask({ op: "execWaitSubmitted", qid, timeoutMs: 8000 }),
+      ) as { started: number; inFlight: number; timedOut: boolean };
+      expect(started.timedOut).toBe(false);
+      expect(started.started).toBe(1);
+      expect(started.inFlight).toBe(1);
+
+      await ask({ op: "execCancelAll", qid });
+      const done = JSON.parse(
+        await ask({ op: "execWaitSubmittedFinished", qid, timeoutMs: 8000 }),
+      ) as { interrupted: boolean; finished: boolean; inFlight: number; timedOut: boolean };
+      expect(done.timedOut).toBe(false);
+      expect(done.interrupted).toBe(true);
+      expect(done.finished).toBe(true);
+      expect(done.inFlight).toBe(0);
+    } finally {
+      await ask({ op: "execRelease", qid });
+      await ask({ op: "execShutdown", qid });
+    }
+  });
 });
