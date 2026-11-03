@@ -116,6 +116,8 @@ open class ClientBase(
     var userSettings: JVal = JVal.Obj(LinkedHashMap())
     lateinit var info: ClientInfo
     override val infoId: String? get() = info.id
+    /** `info` n'est posé qu'après un login réussi : le lire avant jette. */
+    val infoReady: Boolean get() = ::info.isInitialized
     lateinit var startDay: LocalDateTime
     var week: Int = 0
     var logged_in: Boolean = false

@@ -117,12 +117,15 @@ describe("pont — la purge part avec celle du cache, jamais au redémarrage", (
     // `Restored` / `NoSession` / `Offline` : la session (ou son absence) ne
     // change pas de compte — l'utilisateur doit retrouver son manuel.
     const restore = bodyOf(bridge, "private fun restoreSession()");
+    const firstPurge = restore.indexOf("is RestoreResult.Incomplete");
     const deadAt = restore.indexOf("is RestoreResult.Dead");
+    expect(firstPurge).toBeGreaterThan(-1);
     expect(deadAt).toBeGreaterThan(-1);
-    const ordinary = restore.slice(0, deadAt);
+    const ordinary = restore.slice(0, firstPurge);
     expect(ordinary).not.toContain("purgeManualAccountData()");
     expect(ordinary).not.toContain("purgeManualIfAccountChanged(");
-    // La SEULE purge de ce chemin est la branche `Dead`.
-    expect(restore.split("purgeManualAccountData()").length - 1).toBe(1);
+    // Les SEULES purges de ce chemin sont les deux refus non ordinaires
+    // (« incomplète » et « morte »), jamais un redémarrage ordinaire.
+    expect(restore.split("purgeManualAccountData()").length - 1).toBe(2);
   });
 });

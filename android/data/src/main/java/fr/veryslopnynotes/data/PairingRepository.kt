@@ -40,6 +40,12 @@ sealed interface RestoreResult {
     data object NoSession : RestoreResult
     /** Jeton mort (tourné, révoqué) : le store est vidé ; `sessionCleared` dit si le disque a suivi. */
     data class Dead(val message: String, val sessionCleared: Boolean = true) : RestoreResult
+    /**
+     * Session persistée PARTIELLE ou client à moitié authentifié
+     * (`logged_in`/`info`) : rien n'est publié, store et cache sont purgés.
+     * [missing] nomme les champs manquants, jamais leur valeur.
+     */
+    data class Incomplete(val missing: List<String>, val sessionCleared: Boolean = true) : RestoreResult
     /** Réseau KO : le store est GARDÉ (session vivante), l'app lit ses caches. */
     data object Offline : RestoreResult
 }
@@ -129,6 +135,14 @@ class PairingRepository(
      * (I1 : ce mot ne figure dans aucun identifiant hors `android/pronote/`).
      */
     private fun publish(client: Client, mode: String, schoolUrl: String = ""): PairingResult {
+        // Un login sans `cle` rend un client SANS `info` : `logged_in` faux,
+        // `info` lateinit. Rien ne doit sortir de cette fonction (ni cache, ni
+        // store, ni client publié) avant que les deux soient posés.
+        val authMissing = SessionAuthentication.missing(client.logged_in, client.infoReady)
+        if (authMissing.isNotEmpty()) {
+            PronoteSession.clear()
+            return PairingResult.Err(INCOMPLETE_CODE, INCOMPLETE_MESSAGE)
+        }
         val (endpoint, username, password, clientId, rebuiltUuid) = try {
             client.exportCredentials()
         } catch (_: Exception) {
@@ -141,6 +155,26 @@ class PairingRepository(
             client.infoId?.trim()?.takeIf { it.isNotEmpty() }
         } catch (_: Exception) {
             null
+        }
+        // Même règle que le store : le candidat est COMPLET avant toute purge de
+        // cache. Un champ manquant ferait écrire une session inutilisable APRÈS
+        // avoir effacé les données du compte précédent.
+        val candidate = StoredSession(
+            endpointUrl = endpoint,
+            username = username,
+            password = password,
+            // Démo : pas d'UUID d'appareil ; le store refuse une session
+            // sans UUID, on en met un au hasard.
+            uuid = rebuiltUuid.ifEmpty { newUuid() },
+            clientIdentifier = clientId,
+            schoolUrl = schoolUrl.ifEmpty { endpoint },
+            mode = mode,
+        )
+        val storedMissing = SessionCompleteness.missing(candidate)
+        val identity = AccountIdentity.of(endpoint, username)
+        if (storedMissing.isNotEmpty() || identity == null) {
+            PronoteSession.clear()
+            return PairingResult.Err(INCOMPLETE_CODE, INCOMPLETE_MESSAGE)
         }
         try {
             // L'identité vient de la session PERSISTÉE (toujours présente, pas
@@ -157,7 +191,7 @@ class PairingRepository(
             val switched = CacheScope.switchAccount(
                 cacheStore,
                 previous,
-                AccountIdentity.of(endpoint, username),
+                identity,
             ) {
                 PronoteSession.set(client)
             }
@@ -171,17 +205,7 @@ class PairingRepository(
             // échec d'écriture (compte ou session) annule l'appairage ; la
             // session précédente est restaurée si le compte est refusé.
             val written = AccountSessionCommit(sessions, accountRecorder).switchTo(
-                StoredSession(
-                    endpointUrl = endpoint,
-                    username = username,
-                    password = password,
-                    // Démo : pas d'UUID d'appareil ; le store refuse une session
-                    // sans UUID, on en met un au hasard.
-                    uuid = rebuiltUuid.ifEmpty { newUuid() },
-                    clientIdentifier = clientId,
-                    schoolUrl = schoolUrl.ifEmpty { endpoint },
-                    mode = mode,
-                ),
+                candidate,
                 accountId,
             )
             if (written is WriteResult.EpochRefused) {
@@ -214,12 +238,22 @@ class PairingRepository(
     fun restoreBlocking(): RestoreResult = queuedRestore { SessionGate.serialized { restoreLocked() } }
 
     private fun restoreLocked(): RestoreResult {
-        val stored = try {
-            sessions.load()
+        val stored = when (val loaded = try {
+            sessions.loadOutcome()
         } catch (_: Exception) {
-            null
-        } ?: return RestoreResult.NoSession
-        if (provider() != null) return RestoreResult.Restored
+            return RestoreResult.NoSession
+        }) {
+            SessionLoad.Absent -> return RestoreResult.NoSession
+            is SessionLoad.Complete -> loaded.session
+            is SessionLoad.Incomplete -> return rejectIncomplete(loaded.missing, loaded.cleared)
+        }
+        provider()?.let { existing ->
+            val missing = clientMissing(existing, stored)
+            return if (missing.isEmpty()) RestoreResult.Restored else rejectIncomplete(missing)
+        }
+        // Époque capturée AVANT l'authentification : une déconnexion qui
+        // l'invalide pendant `tokenLogin` ne peut pas publier le client restauré.
+        val epoch = SessionEpoch.current()
         return try {
             val client = if (SessionMode.of(stored.mode) == SessionMode.IDENTIFIANT) {
                 // Démo : couple identifiant / mot de passe public, pas de jeton.
@@ -240,7 +274,12 @@ class PairingRepository(
                     ClientOptions(clientIdentifier = stored.clientIdentifier, memoizeReads = true),
                 )
             }
-            PronoteSession.set(client)
+            val missing = clientMissing(client, stored)
+            if (missing.isNotEmpty()) return rejectIncomplete(missing)
+            // `null` = l'époque a changé : ne PAS publier un client dont la
+            // session vient d'être invalidée (logout concurrent).
+            val published = SessionEpoch.writeIfCurrent(epoch) { PronoteSession.set(client) }
+            if (published == null) return rejectIncomplete(listOf("epoch"))
             RestoreResult.Restored
         } catch (e: Exception) {
             if (e is IOException || !isSessionFailure(e)) {
@@ -262,6 +301,37 @@ class PairingRepository(
                 RestoreResult.Dead(DeviceAuth.REJECTED_MESSAGE, cleared.ok)
             }
         }
+    }
+
+    /** Champs manquants du CLIENT, y compris l'identité persistée. */
+    private fun clientMissing(client: Client, stored: StoredSession): List<String> = buildList {
+        addAll(SessionAuthentication.missing(client.logged_in, client.infoReady))
+        val expected = AccountIdentity.of(stored.endpointUrl, stored.username)
+        val actual = try {
+            val (endpoint, username, _, _, _) = client.exportCredentials()
+            AccountIdentity.of(endpoint, username)
+        } catch (_: Exception) {
+            null
+        }
+        if (expected == null || actual == null || !expected.sameAccount(actual)) add("account")
+    }
+
+    /**
+     * Rien n'est publié : mémoire, store et cache partent. `sessionCleared`
+     * vient du store quand il a déjà purgé (`SessionLoad.Incomplete`).
+     */
+    private fun rejectIncomplete(
+        missing: List<String>,
+        sessionCleared: Boolean? = null,
+    ): RestoreResult.Incomplete {
+        PronoteSession.clear()
+        val cleared = sessionCleared ?: try {
+            sessions.clear().ok
+        } catch (_: Exception) {
+            false
+        }
+        CacheScope.onSessionDead(cacheStore)
+        return RestoreResult.Incomplete(missing, cleared)
     }
 
     /**
@@ -334,6 +404,12 @@ class PairingRepository(
     companion object {
         /** Miroir de SETUP_PIN_MAX_CHARS (shared/contracts/api.ts). */
         const val PIN_MAX_CHARS = 64
+
+        /** Code de refus d'une session à moitié authentifiée : aucun début d'écriture. */
+        const val INCOMPLETE_CODE = "session_incomplete"
+
+        private const val INCOMPLETE_MESSAGE =
+            "Session incomplète : l'établissement n'a pas confirmé l'authentification. Réessaie l'appairage."
 
         /**
          * Attente maximale d'une ouverture de session dans la file. Au-delà,

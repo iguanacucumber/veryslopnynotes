@@ -512,19 +512,34 @@ class VsnBridge(
                     sessionReady = true
                     JSONObject().put("state", "restored")
                 }
-                RestoreResult.NoSession -> JSONObject().put("state", "no_session")
+                RestoreResult.NoSession -> {
+                    sessionReady = false
+                    JSONObject().put("state", "no_session")
+                }
+                is RestoreResult.Incomplete -> {
+                    // Rien n'a été publié : session partielle ou client sans
+                    // `logged_in`/`info`. Même purge que « morte » et même
+                    // renvoi à l'appairage, jamais un état « restauré ».
+                    sessionReady = false
+                    purgeManualAccountData()
+                    JSONObject().put("state", "dead").put("message", DeviceAuth.REJECTED_MESSAGE)
+                        .put("sessionCleared", result.sessionCleared)
+                }
                 is RestoreResult.Dead -> {
                     // I16 : session morte = donnée de compte purgée.
                     // `PairingRepository` a déjà purgé le cache ; le manuel
                     // (adresse, extraits, classe, matières) part ici, sinon il
                     // resservirait au prochain appairage.
+                    sessionReady = false
                     purgeManualAccountData()
                     JSONObject().put("state", "dead").put("message", result.message)
                         .put("sessionCleared", result.sessionCleared)
                 }
-                RestoreResult.Offline ->
+                RestoreResult.Offline -> {
+                    sessionReady = false
                     JSONObject().put("state", "offline")
                         .put("message", "Réseau indisponible : session conservée.")
+                }
             }
         }
         // #401 : l'état du stockage chiffré est PUBLIE avec le statut de la

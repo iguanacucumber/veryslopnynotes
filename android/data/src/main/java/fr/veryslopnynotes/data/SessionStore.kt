@@ -57,6 +57,8 @@ class EncryptedSessionStore(context: Context) : SessionStore {
 
     override fun load(): StoredSession? = records.load()
 
+    override fun loadOutcome(): SessionLoad = records.loadOutcome()
+
     override fun clear(): WriteResult = records.clear()
 
     companion object {
@@ -74,6 +76,8 @@ class InMemorySessionStore : SessionStore {
     override fun save(session: StoredSession): WriteResult = records.save(session)
 
     override fun load(): StoredSession? = records.load()
+
+    override fun loadOutcome(): SessionLoad = records.loadOutcome()
 
     override fun clear(): WriteResult = records.clear()
 }

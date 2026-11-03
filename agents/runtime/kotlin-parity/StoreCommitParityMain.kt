@@ -15,6 +15,8 @@ import fr.veryslopnynotes.data.AccountSessionCommit
 import fr.veryslopnynotes.data.KeyValueStore
 import fr.veryslopnynotes.data.ServerChoice
 import fr.veryslopnynotes.data.SessionEpoch
+import fr.veryslopnynotes.data.SessionAuthentication
+import fr.veryslopnynotes.data.SessionLoad
 import fr.veryslopnynotes.data.SessionMode
 import fr.veryslopnynotes.data.SessionRecordStore
 import fr.veryslopnynotes.data.StoredSession
@@ -134,6 +136,35 @@ private class Driver {
                 )
             }
         }
+        "sessionLoadOutcome" -> when (val loaded = slot(op).sessions.loadOutcome()) {
+            SessionLoad.Absent -> ok("status" to JVal.Str("absent"))
+            is SessionLoad.Complete -> ok(
+                "status" to JVal.Str("complete"),
+                "username" to JVal.Str(loaded.session.username),
+            )
+            is SessionLoad.Incomplete -> ok(
+                "status" to JVal.Str("incomplete"),
+                "missing" to JVal.Arr(loaded.missing.map { JVal.Str(it) }),
+                "cleared" to JVal.Bool(loaded.cleared),
+            )
+        }
+        "sessionRemove" -> {
+            slot(op).sessionStore.values.remove(op.str("key"))
+            ok("ok" to JVal.Bool(true))
+        }
+        "sessionBlank" -> {
+            slot(op).sessionStore.values[op.str("key")] = ""
+            ok("ok" to JVal.Bool(true))
+        }
+        "sessionKeys" -> ok(
+            "keys" to JVal.Arr(slot(op).sessionStore.values.keys.map { JVal.Str(it) }),
+        )
+        "authGaps" -> ok(
+            "missing" to JVal.Arr(
+                SessionAuthentication.missing(op.bool("loggedIn"), op.bool("infoReady"))
+                    .map { JVal.Str(it) },
+            ),
+        )
         // Bascule d'un compte DÉJÀ appairé : la session et le compte courant
         // servent de point de comparaison après une panne injectée.
         "seed" -> {
