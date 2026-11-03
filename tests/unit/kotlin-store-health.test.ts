@@ -88,14 +88,15 @@ describe("stockage chiffré : l'échec du Keystore est signalé (#401)", () => {
   });
 
   test("les deux replis de store MARQUENT l'échec (ils ne l'avalent plus)", () => {
-    // Session : le `catch` construit le repli mémoire et marque l'état.
-    const session = catchBody(source(join(DATA, "SessionStore.kt")));
-    expect(session.length).toBeGreaterThan(0);
-    // Le cœur du correctif : l'échec est transformé en état.
-    expect(session).toContain("SecureStorage.markUnavailable()");
+    // Session : le `catch` rend `null`, et le store effectif (`#862`) publie
+    // l'état dégradé puis bascule sur le repli mémoire.
+    const session = source(join(DATA, "SessionStore.kt"));
+    const fallback = source(join(DATA, "SessionFallback.kt"));
+    expect(session).toContain("ResilientSessionStore(secure)");
+    expect(fallback).toContain("SecureStorage.markUnavailable()");
     // Le repli mémoire reste (jamais un secret en clair) : l'app continue
     // de fonctionner, elle ne perd que la CONSERVATION.
-    expect(session).toContain("InMemory");
+    expect(fallback).toContain("InMemory");
     // Clé LLM (#749) : le repli a DEUX étages — le `catch` de construction
     // laisse `secure = null`, et le repli PUR (`LlmKeyFallback.kt`, exécuté par
     // la parité) pose l'état dès qu'il n'a pas de chiffré. La marque ne peut
