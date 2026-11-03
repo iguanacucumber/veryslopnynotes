@@ -17,6 +17,8 @@ la section `0.1.0` le jour du tag.
   marqué non fiable avant chaque prompt.
 - Scraper de manuels facultatif, HTTPS obligatoire, sans authentification.
 - Taille du texte réglable (100/125/150 %) et suivi du réglage Android jusqu'à 200 %.
+- Smoke CI sur émulateur : APK debug installé, appairage démo, accueil vérifié,
+  captures et logcat en artefact (non bloquant tant que non stable).
 
 ### Modifié
 
