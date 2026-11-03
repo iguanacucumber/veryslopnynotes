@@ -34,6 +34,13 @@ body {
 }
 
 html {
+  /* Le geste d'accueil et le clavier recouvrent le bas du viewport : le
+     navigateur ramène un champ focalisé au bord du SCROLLPORT, pas au-dessus
+     des zones sûres. Sans ce `scroll-padding`, le PIN atterrit sous le geste. */
+  scroll-padding-top: var(--safe-top);
+  scroll-padding-right: var(--safe-right);
+  scroll-padding-bottom: calc(var(--safe-bottom) + var(--keyboard-bottom));
+  scroll-padding-left: var(--safe-left);
   scrollbar-color: var(--rule-strong) transparent;
 }
 

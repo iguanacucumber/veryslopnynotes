@@ -245,12 +245,18 @@ secours (`.main--bare`) ; `env(safe-area-inset-*)` n'est que le repli hors
 WebView. Barres masquées = 0, donc l'immersion reste pleine écran ; une barre
 révélée recouvre brièvement le contenu, comportement Android assumé.
 
+Sans coquille, l'appairage et le repli réservent le geste ET le clavier dans
+leur marge basse ; le `scroll-padding` du document fait atterrir le champ
+focalisé au-dessus des deux. L'action principale et « Connexion démo » restent
+donc hors de la zone de geste, portrait comme paysage, clavier ouvert ou fermé.
+
 Grands écrans, pliables et fenêtres libres : `resizeableActivity="true"`, aucune
 orientation verrouillée hors du scan. Chaque fenêtre reçoit ses insets à chaque
 redimensionnement ; la colonne reste centrée à 700 px (dock 480 px), donc un
 écran large garde des marges au lieu d'étirer les cartes. Vérification appareil :
-paysage sur téléphone à encoche, puis fenêtre libre réduite — titre, dock,
-actions d'appairage et boutons de dialogue restent visibles.
+paysage sur téléphone à encoche, puis fenêtre libre réduite, puis clavier ouvert
+sur le PIN — titre, dock, actions d'appairage et boutons de dialogue restent
+visibles et au-dessus du geste.
 
 L'accueil suit Papillon : en-tête sur papier peint, grille de raccourcis,
 widgets (cours, moyenne, devoirs) dans cet ordre. Les écrans de liste sont des
