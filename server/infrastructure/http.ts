@@ -218,13 +218,13 @@ export function createApp(deps: ScraperDeps = {}): App {
           return await readyResponse(req.method, readiness, draining);
         }
         if (path === MANUALS_SCRAPE_PATH && req.method === "POST") {
-          return await admitPublic(req, admission, admissionKey, () =>
-            handleScrape(req, runScrape, defaultJar, log, state, timeoutMs, deps.resolveHost),
+          return await admitPublic(req, admission, admissionKey, (onSettled) =>
+            handleScrape(req, runScrape, defaultJar, log, state, timeoutMs, deps.resolveHost, onSettled),
           );
         }
         if (path === WEB_SCRAPE_PATH && req.method === "POST") {
-          return await admitPublic(req, admission, admissionKey, () =>
-            handleWebScrape(req, runWebScrape, log, state, timeoutMs, deps.resolveHost),
+          return await admitPublic(req, admission, admissionKey, (onSettled) =>
+            handleWebScrape(req, runWebScrape, log, state, timeoutMs, deps.resolveHost, onSettled),
           );
         }
         if (path === HEALTH_PATH || path === READY_PATH || path === MANUALS_SCRAPE_PATH || path === WEB_SCRAPE_PATH) {
@@ -252,18 +252,27 @@ async function admitPublic(
   req: Request,
   admission: PublicAdmission | null,
   key: string,
-  run: () => Promise<Response>,
+  run: (onSettled: () => void) => Promise<Response>,
 ): Promise<Response> {
-  if (!admission) return await run();
+  if (!admission) return await run(() => {});
   const result = await admission.acquire(key, req.signal);
   if (!result.ok) {
     discardBody(req);
     return rateLimited(result.retryAfterMs);
   }
-  try {
-    return await run();
-  } finally {
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
     result.admission.release();
+  };
+  try {
+    // La réponse peut partir AVANT la fin réelle du scrape (délai dépassé) :
+    // le slot reste tenu jusqu'à `onSettled`, pas jusqu'au retour du handler.
+    return await run(release);
+  } catch (err) {
+    release();
+    throw err;
   }
 }
 
@@ -389,13 +398,26 @@ async function handleScrape(
   state: ScrapeState,
   timeoutMs: number,
   resolveHost?: HostResolver,
+  onSettled: () => void = () => {},
 ): Promise<Response> {
   // Plafond AVANT tout `await` : incrémenter après une lecture de corps
   // laissait une fenêtre où N requêtes passaient toutes le contrôle.
   if (state.inFlight >= MAX_CONCURRENT_SCRAPES) {
+    onSettled(); // aucun scrape lancé : l'admission ne doit pas rester tenue
     return error("busy", 503, "scraper occupe, reessayer plus tard", { "retry-after": "5" });
   }
   state.inFlight += 1;
+  // Le slot n'est rendu qu'à la fin RÉELLE du scrape : au timeout, la réponse
+  // part mais Chromium met encore du temps à mourir ; libérer ici laissait
+  // démarrer un 3e navigateur alors que les deux premiers tournaient encore.
+  let slotReleased = false;
+  const releaseSlot = () => {
+    if (slotReleased) return;
+    slotReleased = true;
+    state.inFlight = Math.max(0, state.inFlight - 1);
+    onSettled();
+  };
+  let scrapeStarted = false;
   // Annulation : le délai dépassé ou le client parti doivent TUER le
   // navigateur, pas seulement rejeter la promesse (Chromium fantôme).
   const controller = new AbortController();
@@ -452,6 +474,10 @@ async function handleScrape(
       // La course peut être perdue (délai, abandon) : la rejection tardive du
       // scrape ne doit pas devenir une rejection non geree.
       scrapeP.catch(() => {});
+      // Le slot suit la promesse RÉELLE, pas la course : au timeout la réponse
+      // part vite, mais le slot reste tenu tant que le navigateur n'a pas fini.
+      scrapeStarted = true;
+      void scrapeP.then(releaseSlot, releaseSlot);
       const timeoutP = new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
           // Rejetter PUIS annuler : la course tranche sur le délai, pas sur
@@ -520,10 +546,12 @@ async function handleScrape(
     if (!Array.isArray(docs) || !docs.every(isManualsScrapeDoc)) return error("internal", 500, "invalid payload");
     return Response.json(payload);
   } finally {
-    state.inFlight = Math.max(0, state.inFlight - 1);
     // Scrape non terminé (erreur, exception) : on annule pour ne pas laisser
     // un Chromium orphelin en arrière-plan.
     if (!done) controller.abort();
+    // Aucun scrape lancé (corps invalide, refus) : le slot est rendu ici.
+    // Sinon il l'est par `releaseSlot` à la fin réelle de la promesse.
+    if (!scrapeStarted) releaseSlot();
   }
 }
 
@@ -539,11 +567,21 @@ async function handleWebScrape(
   state: ScrapeState,
   timeoutMs: number,
   resolveHost?: HostResolver,
+  onSettled: () => void = () => {},
 ): Promise<Response> {
   if (state.inFlight >= MAX_CONCURRENT_SCRAPES) {
+    onSettled();
     return error("busy", 503, "scraper occupe, reessayer plus tard", { "retry-after": "5" });
   }
   state.inFlight += 1;
+  let slotReleased = false;
+  const releaseSlot = () => {
+    if (slotReleased) return;
+    slotReleased = true;
+    state.inFlight = Math.max(0, state.inFlight - 1);
+    onSettled();
+  };
+  let scrapeStarted = false;
   const controller = new AbortController();
   let done = false;
   try {
@@ -570,6 +608,9 @@ async function handleWebScrape(
         signal: controller.signal,
       });
       scrapeP.catch(() => {});
+      // Le slot suit la fin RÉELLE du scrape, pas le retour de la course.
+      scrapeStarted = true;
+      void scrapeP.then(releaseSlot, releaseSlot);
       const timeoutP = new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
           reject(timeoutError(timeoutMs));
@@ -626,8 +667,8 @@ async function handleWebScrape(
     if (!Array.isArray(docs) || !docs.every(isWebScrapeDoc)) return error("internal", 500, "invalid payload");
     return Response.json(payload);
   } finally {
-    state.inFlight = Math.max(0, state.inFlight - 1);
     if (!done) controller.abort();
+    if (!scrapeStarted) releaseSlot();
   }
 }
 
