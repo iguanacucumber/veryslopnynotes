@@ -275,7 +275,7 @@ export function call<T>(
 }
 
 export const bridge = {
-  ready: () => call<{ ok: true }>("app.ready"),
+  ready: () => call<{ ok: true; demo: boolean }>("app.ready"),
   theme: () => call<{ theme: SettingsSnapshot["theme"] }>("app.theme"),
   setTheme: (theme: SettingsSnapshot["theme"]) => call<{ ok: true }>("app.setTheme", { theme }),
   textSize: () => call<TextSizeState>("app.textSize"),

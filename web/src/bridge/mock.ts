@@ -102,7 +102,8 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
   const ok = <V>(value: V): Promise<V> => Promise.resolve(value as V);
   switch (method) {
     case "app.ready":
-      return ok({ ok: true }) as Promise<T>;
+      // Développement seulement : la démo est disponible dans ce pont factice.
+      return ok({ ok: true, demo: true }) as Promise<T>;
     case "app.theme":
       return ok({ theme: settings.theme }) as Promise<T>;
     case "app.setTheme":

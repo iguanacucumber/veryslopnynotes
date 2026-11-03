@@ -9,6 +9,19 @@ android {
     defaultConfig {
         minSdk = 26
     }
+    buildFeatures {
+        buildConfig = true
+    }
+    buildTypes {
+        // DAT-06 : même drapeau que l'app — une session de démo ne se
+        // restaure jamais en release, même si le disque en portait une.
+        debug {
+            buildConfigField("Boolean", "DEMO_MODE", "true")
+        }
+        release {
+            buildConfigField("Boolean", "DEMO_MODE", "false")
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

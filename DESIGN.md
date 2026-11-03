@@ -247,7 +247,8 @@ révélée recouvre brièvement le contenu, comportement Android assumé.
 
 Sans coquille, l'appairage et le repli réservent le geste ET le clavier dans
 leur marge basse ; le `scroll-padding` du document fait atterrir le champ
-focalisé au-dessus des deux. L'action principale et « Connexion démo » restent
+focalisé au-dessus des deux. L'action principale et « Connexion démo » (build
+de développement seulement) restent
 donc hors de la zone de geste, portrait comme paysage, clavier ouvert ou fermé.
 
 Grands écrans, pliables et fenêtres libres : `resizeableActivity="true"`, aucune

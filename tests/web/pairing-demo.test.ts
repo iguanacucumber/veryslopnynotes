@@ -45,10 +45,14 @@ describe("connexion à l'établissement de démonstration", () => {
     expect(message).not.toContain("ce_que_vous_voulez");
   });
 
-  test("l'écran propose le bouton et il passe par le pont", () => {
+  test("l'écran propose le bouton seulement quand le natif annonce la démo", () => {
     const screen = readFileSync(SCREEN, "utf8");
     expect(screen).toContain("Connexion démo");
     expect(screen).toContain("bridge.pairDemo()");
+    // DAT-06 : le bouton vit dans la branche `demoAvailable`, alimentée par
+    // `app.ready` — une release ne le rend jamais.
+    expect(screen).toContain("demoAvailable ? (");
+    expect(screen.indexOf("Connexion démo")).toBeGreaterThan(screen.indexOf("demoAvailable ? ("));
     // Un bouton de plus, PAS un envoi de formulaire : le formulaire de
     // l'appairage reste réservé au QR + PIN.
     expect(screen).toMatch(/type="button"[^>]*[\s\S]{0,400}Connexion démo/);

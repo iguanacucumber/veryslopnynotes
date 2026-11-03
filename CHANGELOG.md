@@ -36,3 +36,6 @@ la section `0.1.0` le jour du tag.
   en clair restent confinés au variant debug (SEC-01).
 - Liens profonds : schéma privé `veryslopnynotes` limité au debug, aucun
   `VIEW`/`BROWSABLE` ni App Link dans la release (SEC-10).
+- Démo de l'éditeur limitée au debug (`DEMO_MODE`) : bouton absent en release,
+  `pairing.pairDemo` refusée par le pont, session de démo non restaurée et pont
+  factice web exclu du bundle de production (DAT-06).
