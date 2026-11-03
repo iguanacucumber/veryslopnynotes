@@ -238,6 +238,9 @@ export const PRODUCTION_SOURCES: string[] = [
   // vérifie que rien n'est enregistré en douce.
   join(DATA, "StoreCommit.kt"),
   join(DATA, "SessionRecord.kt"),
+  // #862 : repli mémoire et store de session EFFECTIF. Fichier PUR : le
+  // harnais EXÉCUTE un logout dégradé puis un lancement sain (rien ne revient).
+  join(DATA, "SessionFallback.kt"),
   join(DATA, "SyncJobOutcome.kt"),
   // #893 : fuseau de l'établissement et horloge injectable, partagés par les
   // fenêtres EDT/devoirs et les payloads. Fichier PUR : le harnais EXÉCUTE le

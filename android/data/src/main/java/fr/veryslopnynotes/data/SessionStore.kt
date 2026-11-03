@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import java.io.File
 
 /**
  * UN point de construction des préférences CHIFFRÉES du process (session,
@@ -49,37 +50,66 @@ internal fun encryptedPrefs(context: Context, name: String): SharedPreferences {
  * ne peut plus réussir sur une écriture encore en vol, perdue au force-stop.
  */
 class EncryptedSessionStore(context: Context) : SessionStore {
-    private val records: SessionRecordStore by lazy {
-        SessionRecordStore(SharedPrefsKeyValue(encryptedPrefs(context, PREFS)))
+    private val context = context.applicationContext
+
+    // Jetable : après un effacement dur, l'instance SharedPreferences garde ses
+    // valeurs en mémoire. La relire rendrait la session qu'on vient d'effacer.
+    @Volatile
+    private var records: SessionRecordStore? = null
+
+    private fun records(): SessionRecordStore =
+        records ?: SessionRecordStore(SharedPrefsKeyValue(encryptedPrefs(context, PREFS)))
+            .also { records = it }
+
+    override fun save(session: StoredSession): WriteResult = records().save(session)
+
+    override fun load(): StoredSession? = records().load()
+
+    override fun loadOutcome(): SessionLoad = records().loadOutcome()
+
+    override fun clear(): WriteResult {
+        val cleared = try {
+            records().clear().ok
+        } catch (_: Exception) {
+            false
+        }
+        // Un `clear()` de prefs laisse le fichier (et ses keysets) : la
+        // suppression est l'effacement DUR, même quand le commit a échoué.
+        val deleted = discardEncryptedSession(context)
+        if (deleted) records = null
+        return if (cleared || deleted) WriteResult.Written
+        else WriteResult.Failed("session non effacée")
     }
-
-    override fun save(session: StoredSession): WriteResult = records.save(session)
-
-    override fun load(): StoredSession? = records.load()
-
-    override fun loadOutcome(): SessionLoad = records.loadOutcome()
-
-    override fun clear(): WriteResult = records.clear()
 
     companion object {
         // Nom du fichier chiffré : la désinstallation l'emporte, `clear()` l'efface.
-        private const val PREFS = "session"
+        internal const val PREFS = "session"
     }
 }
 
-// Secours mémoire (previews Compose, tests JVM, Keystore indisponible) : la
-// session ne survit pas au redémarrage, et c'est le contrat — jamais un secret
-// en clair sur disque.
-class InMemorySessionStore : SessionStore {
-    private val records = SessionRecordStore(MemoryKeyValueStore())
+/**
+ * Efface le fichier chiffré SANS passer par le Keystore : illisible quand
+ * celui-ci est mort, mais toujours présent sur le disque.
+ *
+ * Rend `true` seulement si le fichier a disparu (absent avant ou supprimé) :
+ * un logout dégradé ne dit « déconnecté » que si l'ancienne session ne peut
+ * plus revenir au prochain lancement sain.
+ */
+internal fun discardEncryptedSession(context: Context): Boolean {
+    val app = context.applicationContext
+    return try {
+        app.deleteSharedPreferences(EncryptedSessionStore.PREFS) || erased(app)
+    } catch (_: Exception) {
+        erased(app)
+    }
+}
 
-    override fun save(session: StoredSession): WriteResult = records.save(session)
-
-    override fun load(): StoredSession? = records.load()
-
-    override fun loadOutcome(): SessionLoad = records.loadOutcome()
-
-    override fun clear(): WriteResult = records.clear()
+private fun erased(context: Context): Boolean = try {
+    val dir = File(context.applicationInfo.dataDir, "shared_prefs")
+    !File(dir, "${EncryptedSessionStore.PREFS}.xml").exists() &&
+        !File(dir, "${EncryptedSessionStore.PREFS}.xml.bak").exists()
+} catch (_: Exception) {
+    false
 }
 
 /**
@@ -103,15 +133,18 @@ object SessionStores {
         }
     }
 
-    private fun newStore(context: Context): SessionStore = try {
-        EncryptedSessionStore(context).also { it.hasSession() }
-    } catch (_: Exception) {
-        // Repli mémoire (jamais un secret en clair), mais DIT : l'état dégradé
-        // est publié et l'interface l'affiche.
-        //
-        // AUCUN journal ici : le store tient le jeton, la règle du dépôt est
-        // « jamais de log à côté d'un secret ». Le diagnostic passe par l'ÉTAT.
-        SecureStorage.markUnavailable()
-        InMemorySessionStore()
+    private fun newStore(context: Context): SessionStore {
+        val secure = try {
+            EncryptedSessionStore(context).also { it.hasSession() }
+        } catch (_: Exception) {
+            // Repli mémoire (jamais un secret en clair), mais DIT plus bas par
+            // `ResilientSessionStore` : l'état dégradé est publié et l'interface
+            // l'affiche.
+            //
+            // AUCUN journal ici : le store tient le jeton, la règle du dépôt est
+            // « jamais de log à côté d'un secret ». Le diagnostic passe par l'ÉTAT.
+            null
+        }
+        return ResilientSessionStore(secure) { discardEncryptedSession(context) }
     }
 }
