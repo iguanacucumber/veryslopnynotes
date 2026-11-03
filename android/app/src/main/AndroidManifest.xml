@@ -4,7 +4,8 @@
          pour la boucle locale et l'alias émulateur ; ailleurs HTTPS obligatoire. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Serveur du réseau local : Android 17 en fait une autorisation
-         d'exécution ; sans elle la socket échoue avant même le TLS. -->
+         d'exécution ; sans elle la socket échoue avant même le TLS. Elle est
+         demandée à l'enregistrement d'une adresse LAN, jamais au démarrage. -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <!-- Caméra optionnelle : sinon le merger rend `android.hardware.camera.any`
          requis et l'app devient ininstallable sur un appareil sans caméra. -->

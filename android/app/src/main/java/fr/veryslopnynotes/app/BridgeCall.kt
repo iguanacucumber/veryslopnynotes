@@ -31,7 +31,7 @@ val BRIDGE_METHODS = setOf(
     "assignments.toggle", "assignments.attachment",
     "messages.list", "messages.thread", "messages.enrich", "messages.reply", "messages.create",
     "messages.setRead", "messages.delete", "messages.recipients",
-    "settings.get", "settings.saveServer", "settings.subjectPrefs", "settings.saveSubject",
+    "settings.get", "settings.saveServer", "settings.localNetwork", "settings.subjectPrefs", "settings.saveSubject",
     "settings.saveManualUrl", "settings.dismissManualPrompt",
     "lessons.list", "lessons.load", "lessons.save", "lessons.delete", "lessons.setManual",
     "lessons.addPhoto",

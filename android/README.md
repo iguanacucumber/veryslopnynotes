@@ -142,6 +142,15 @@ caractère de contrôle. Elle ne valide plus que l'adresse du scraper de manuels
 (#209) : l'app ne parle plus métier à personne. Une déconnexion invalide la
 session et purge les caches par le chemin existant `PairingRepository.logoutBlocking()`.
 
+### Autorisation réseau local (Android 17+)
+
+`ACCESS_LOCAL_NETWORK` est demandée seulement à l'enregistrement d'une adresse
+LAN (`ServerConfig.isLocalNetworkUrl`), après une rationale. Un refus ou une
+annulation n'écrit rien et indique Réglages Android > Applications >
+VerySlopyNyNotes > Autorisations. Boucle locale, émulateur et HTTPS public ne
+demandent rien. Test appareil API 37 : Réglages → Appareil, saisir
+`https://192.168.1.10:3000`, refuser puis accepter ; test source
+`tests/web/settings-server-permission`.
 ## Config hôte serveur (jamais commité, jamais en dur)
 
 `local.properties` (non commité, modèle ci-dessous) ou env `SERVER_HOST` :

@@ -13,6 +13,7 @@ import {
   type LessonPhotoResult,
   type LessonsSnapshot,
   type LessonSaveResult,
+  type LocalNetworkStatus,
   type ManualSaveResult,
   type SessionStatus,
   type SettingsSnapshot,
@@ -317,6 +318,8 @@ export const bridge = {
   deleteMessage: (id: string) => call<{ ok: boolean; error?: string }>("messages.delete", { id }),
   recipients: () => call<{ payload: string | null; error?: string }>("messages.recipients"),
   settings: () => call<SettingsSnapshot>("settings.get"),
+  // Android 17 : `needed` précède la rationale, l'écriture n'est pas faite ici.
+  localNetwork: (host: string) => call<LocalNetworkStatus>("settings.localNetwork", { host }),
   saveServer: (host: string) => call<{ ok: boolean; message?: string }>("settings.saveServer", { host }),
   saveManualUrl: (url: string) => call<ManualSaveResult>("settings.saveManualUrl", { url }),
   dismissManualPrompt: () => call<{ ok: boolean }>("settings.dismissManualPrompt"),

@@ -194,6 +194,9 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
       return ok({ payload: JSON.stringify(recipients) }) as Promise<T>;
     case "settings.get":
       return ok(settings) as Promise<T>;
+    case "settings.localNetwork":
+      // Le pont de développement n'a pas de permission Android : rien à demander.
+      return ok({ needed: false }) as Promise<T>;
     case "settings.saveServer":
       settings = { ...settings, serverHost: String(p["host"] ?? "") };
       return ok({ ok: true }) as Promise<T>;

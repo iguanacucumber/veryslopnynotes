@@ -1,17 +1,23 @@
 package fr.veryslopnynotes.app
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import fr.veryslopnynotes.core.RevisionKv
+import fr.veryslopnynotes.core.ServerConfig
 import fr.veryslopnynotes.core.TextScale
 import fr.veryslopnynotes.core.UserProfile
 import fr.veryslopnynotes.data.AccountIdentity
@@ -241,6 +247,17 @@ class VsnBridge(
         }
     }
 
+    private val localNetworkLock = Any()
+
+    /** Enregistrement en attente de l'autorisation Android 17. */
+    private data class PendingServerSave(val requestId: String, val baseUrl: String)
+
+    private var pendingServerSave: PendingServerSave? = null
+
+    private val localNetworkPermission = activity.registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted -> completeLocalNetworkSave(granted) }
+
     /** Appel unique depuis le JS. Retour immédiat : le travail part en fond. */
     @JavascriptInterface
     fun call(requestId: String, method: String, paramsJson: String) {
@@ -376,7 +393,8 @@ class VsnBridge(
             "messages.delete" -> messagesDelete(p)
             "messages.recipients" -> messagesRecipients()
             "settings.get" -> settings()
-            "settings.saveServer" -> saveServer(p)
+            "settings.saveServer" -> saveServer(p, requestId)
+            "settings.localNetwork" -> localNetworkStatus(p)
             "settings.saveManualUrl" -> saveManualUrl(p)
             "settings.dismissManualPrompt" -> dismissManualPrompt()
             "settings.subjectPrefs" -> subjectPrefs()
@@ -604,6 +622,70 @@ class VsnBridge(
         }
     }
 
+    // --- Réseau local (Android 17) ---------------------------------------------
+
+    /**
+     * Android 17 protège les sockets du réseau local par `ACCESS_LOCAL_NETWORK`.
+     * La porte ne vise QUE les hôtes locaux : boucle locale, domaine public et
+     * HTTPS normal gardent leur comportement, et une plateforme antérieure ne
+     * demande rien.
+     */
+    internal fun localNetworkPermissionRequired(baseUrl: String): Boolean =
+        Build.VERSION.SDK_INT >= LOCAL_NETWORK_API &&
+            ServerConfig.isLocalNetworkUrl(baseUrl) &&
+            ContextCompat.checkSelfPermission(
+                ctx,
+                Manifest.permission.ACCESS_LOCAL_NETWORK,
+            ) != PackageManager.PERMISSION_GRANTED
+
+    /**
+     * Demande l'autorisation D'EXÉCUTION et répond plus tard (`null` = réponse
+     * différée) : l'adresse n'est écrite qu'après un accord explicite.
+     */
+    internal fun requestLocalNetworkPermission(requestId: String, baseUrl: String): JSONObject? {
+        synchronized(localNetworkLock) {
+            if (pendingServerSave != null) {
+                return JSONObject().put("ok", false)
+                    .put("message", LOCAL_NETWORK_BUSY)
+            }
+            pendingServerSave = PendingServerSave(requestId, baseUrl)
+        }
+        activity.runOnUiThread {
+            try {
+                localNetworkPermission.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+            } catch (_: Throwable) {
+                failLocalNetworkSave()
+            }
+        }
+        return null
+    }
+
+    private fun completeLocalNetworkSave(granted: Boolean) {
+        val pending = synchronized(localNetworkLock) {
+            val value = pendingServerSave
+            pendingServerSave = null
+            value
+        } ?: return
+        if (!granted) {
+            resolve(pending.requestId, JSONObject().put("ok", false).put("message", LOCAL_NETWORK_DENIED))
+            return
+        }
+        try {
+            resolve(pending.requestId, this.completeServerSave(pending.baseUrl))
+        } catch (_: Throwable) {
+            reject(pending.requestId, "unknown", LOCAL_NETWORK_UNAVAILABLE)
+        }
+    }
+
+    private fun failLocalNetworkSave() {
+        val pending = synchronized(localNetworkLock) {
+            val value = pendingServerSave
+            pendingServerSave = null
+            value
+        } ?: return
+        resolve(pending.requestId, JSONObject().put("ok", false).put("message", LOCAL_NETWORK_UNAVAILABLE))
+    }
+
     private fun pair(p: JSONObject): JSONObject {
         val handle = bounded(p.string("handle"), QrHandle.HANDLE_MAX_CHARS)
         if (handle.isEmpty()) throw BridgeFailure("bad_request", "QR et PIN requis.")
@@ -827,6 +909,18 @@ class VsnBridge(
         private const val APP_PREFS = "settings"
         private const val THEME_KEY = "theme"
         private const val TEXT_SIZE_KEY = "text_size"
+
+        /** Android 17 : première version qui protège les sockets du réseau local. */
+        private const val LOCAL_NETWORK_API = 37
+
+        private const val LOCAL_NETWORK_DENIED =
+            "Accès au réseau local refusé : l’adresse n’a pas été enregistrée. " +
+                "Autorise « Réseau local » dans Réglages Android > Applications > " +
+                "VerySlopyNyNotes > Autorisations, puis réessaie."
+        private const val LOCAL_NETWORK_BUSY =
+            "Enregistrement déjà en cours : réponds à la demande d’autorisation."
+        private const val LOCAL_NETWORK_UNAVAILABLE =
+            "Autorisation du réseau local indisponible : l’adresse n’a pas été enregistrée."
 
         /** Journal du pont (jamais de secret : cf. le `init` de la classe). */
         private const val TAG = "vsn-bridge"

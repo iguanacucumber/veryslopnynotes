@@ -3,8 +3,14 @@ import { bridge } from "../../bridge/client";
 import type { SettingsSnapshot } from "../../bridge/types";
 import { useApp } from "../../ui/AppContext";
 import { Card } from "../../ui/components";
+import { Dialog } from "../../ui/Dialog";
 import { actionMessage } from "./action";
-import { validateServerHost } from "./model";
+import {
+  LOCAL_NETWORK_RATIONALE,
+  LOCAL_NETWORK_TITLE,
+  serverSaveError,
+  validateServerHost,
+} from "./model";
 
 /** L'instantané du conteneur amorce le champ ; l'enregistrement reste local à la carte. */
 export function ServerCard({ snapshot, loading }: { snapshot: SettingsSnapshot | null; loading: boolean }) {
@@ -13,10 +19,23 @@ export function ServerCard({ snapshot, loading }: { snapshot: SettingsSnapshot |
   const [hostError, setHostError] = useState("");
   const [hostSaved, setHostSaved] = useState("");
   const [savingHost, setSavingHost] = useState(false);
+  // Adresse LAN en attente de la rationale ; `null` = aucun dialogue.
+  const [permissionHost, setPermissionHost] = useState<string | null>(null);
 
   useEffect(() => {
     setHost(typeof snapshot?.serverHost === "string" ? snapshot.serverHost : "");
   }, [snapshot]);
+
+  async function persistHost(value: string): Promise<void> {
+    const response = await bridge.saveServer(value);
+    if (!response.ok) {
+      setHostError(serverSaveError(response));
+      return;
+    }
+    setHost(value);
+    setHostSaved("Adresse du serveur enregistrée.");
+    notify("Adresse du serveur enregistrée.");
+  }
 
   async function saveHost(): Promise<void> {
     setHostSaved("");
@@ -28,14 +47,15 @@ export function ServerCard({ snapshot, loading }: { snapshot: SettingsSnapshot |
     setHostError("");
     setSavingHost(true);
     try {
-      const response = await bridge.saveServer(result.value);
-      if (!response.ok) {
-        setHostError(response.message ?? "Adresse refusée : vérifie le domaine et le port.");
+      // Android 17 : la demande système ne part QUE pour un hôte du réseau
+      // local. La rationale est montrée d'abord, et l'adresse n'est écrite
+      // qu'après un accord.
+      const permission = await bridge.localNetwork(result.value);
+      if (permission.needed) {
+        setPermissionHost(result.value);
         return;
       }
-      setHost(result.value);
-      setHostSaved("Adresse du serveur enregistrée.");
-      notify("Adresse du serveur enregistrée.");
+      await persistHost(result.value);
     } catch (error) {
       setHostError(actionMessage(error, "Adresse non enregistrée : réessaie dans un instant."));
     } finally {
@@ -43,58 +63,97 @@ export function ServerCard({ snapshot, loading }: { snapshot: SettingsSnapshot |
     }
   }
 
+  async function allowLocalNetwork(): Promise<void> {
+    const value = permissionHost;
+    if (value === null) return;
+    setPermissionHost(null);
+    setSavingHost(true);
+    try {
+      await persistHost(value);
+    } catch (error) {
+      setHostError(actionMessage(error, "Adresse non enregistrée : réessaie dans un instant."));
+    } finally {
+      setSavingHost(false);
+    }
+  }
+
+  function cancelLocalNetwork(): void {
+    if (savingHost) return;
+    setPermissionHost(null);
+    setHostError("Adresse non enregistrée : tu as annulé l’autorisation du réseau local.");
+  }
+
   return (
-    <Card className="card--flat">
-      <strong style={{ display: "block" }}>Scraper de manuels (facultatif)</strong>
-      <p className="tiny muted" style={{ margin: "2px 0 0" }}>
-        Sert uniquement à récupérer les manuels. L’établissement et l’assistant fonctionnent sans ce serveur.
-      </p>
-      <label className="tiny muted" htmlFor="server-host" style={{ display: "block", marginTop: 12 }}>
-        Adresse du serveur
-      </label>
-      <input
-        id="server-host"
-        className="field"
-        value={host}
-        maxLength={300}
-        inputMode="url"
-        autoCapitalize="none"
-        autoCorrect="off"
-        spellCheck={false}
-        disabled={loading}
-        aria-invalid={hostError !== ""}
-        aria-describedby="server-help"
-        placeholder="https://serveur.exemple"
-        onChange={(event) => {
-          setHost(event.target.value);
-          setHostSaved("");
-          if (hostError) setHostError("");
-        }}
+    <>
+      <Card className="card--flat">
+        <strong style={{ display: "block" }}>Scraper de manuels (facultatif)</strong>
+        <p className="tiny muted" style={{ margin: "2px 0 0" }}>
+          Sert uniquement à récupérer les manuels. L’établissement et l’assistant fonctionnent sans ce serveur.
+        </p>
+        <label className="tiny muted" htmlFor="server-host" style={{ display: "block", marginTop: 12 }}>
+          Adresse du serveur
+        </label>
+        <input
+          id="server-host"
+          className="field"
+          value={host}
+          maxLength={300}
+          inputMode="url"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          disabled={loading}
+          aria-invalid={hostError !== ""}
+          aria-describedby="server-help"
+          placeholder="https://serveur.exemple"
+          onChange={(event) => {
+            setHost(event.target.value);
+            setHostSaved("");
+            if (hostError) setHostError("");
+          }}
+        />
+        <p id="server-help" className="tiny muted" style={{ margin: "6px 0 0" }}>
+          Domaine seul ou adresse complète. HTTPS obligatoire, et la version publiée ne livre aucune adresse par
+          défaut : le HTTP en clair (émulateur ou boucle locale) n&apos;existe que dans les builds de développement.
+        </p>
+        {hostError ? (
+          <p className="tiny" role="alert" style={{ color: "var(--danger-ink)", margin: "6px 0 0" }}>
+            {hostError}
+          </p>
+        ) : null}
+        {hostSaved ? (
+          <p className="tiny" role="status" style={{ color: "var(--brand-deep)", margin: "6px 0 0" }}>
+            {hostSaved}
+          </p>
+        ) : null}
+        <div className="row" style={{ justifyContent: "flex-end", marginTop: 10 }}>
+          <button
+            type="button"
+            className="btn btn--small"
+            disabled={loading || savingHost || host.trim() === ""}
+            onClick={() => void saveHost()}
+          >
+            {savingHost ? "Enregistrement…" : "Enregistrer l'adresse"}
+          </button>
+        </div>
+      </Card>
+      <Dialog
+        open={permissionHost !== null}
+        title={LOCAL_NETWORK_TITLE}
+        description={LOCAL_NETWORK_RATIONALE}
+        busy={savingHost}
+        onClose={cancelLocalNetwork}
+        actions={
+          <>
+            <button type="button" className="btn btn--ghost btn--small" disabled={savingHost} onClick={cancelLocalNetwork}>
+              Annuler
+            </button>
+            <button type="button" className="btn btn--small" disabled={savingHost} onClick={() => void allowLocalNetwork()}>
+              {savingHost ? "Autorisation…" : "Continuer"}
+            </button>
+          </>
+        }
       />
-      <p id="server-help" className="tiny muted" style={{ margin: "6px 0 0" }}>
-        Domaine seul ou adresse complète. HTTPS obligatoire, et la version publiée ne livre aucune adresse par
-        défaut : le HTTP en clair (émulateur ou boucle locale) n&apos;existe que dans les builds de développement.
-      </p>
-      {hostError ? (
-        <p className="tiny" role="alert" style={{ color: "var(--danger-ink)", margin: "6px 0 0" }}>
-          {hostError}
-        </p>
-      ) : null}
-      {hostSaved ? (
-        <p className="tiny" role="status" style={{ color: "var(--brand-deep)", margin: "6px 0 0" }}>
-          {hostSaved}
-        </p>
-      ) : null}
-      <div className="row" style={{ justifyContent: "flex-end", marginTop: 10 }}>
-        <button
-          type="button"
-          className="btn btn--small"
-          disabled={loading || savingHost || host.trim() === ""}
-          onClick={() => void saveHost()}
-        >
-          {savingHost ? "Enregistrement…" : "Enregistrer l'adresse"}
-        </button>
-      </div>
-    </Card>
+    </>
   );
 }

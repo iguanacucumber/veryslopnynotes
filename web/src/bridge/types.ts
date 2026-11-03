@@ -44,6 +44,7 @@ export const BRIDGE_METHODS = [
   "messages.recipients",
   "settings.get",
   "settings.saveServer",
+  "settings.localNetwork",
   "settings.saveManualUrl",
   "settings.dismissManualPrompt",
   "settings.subjectPrefs",
@@ -235,6 +236,11 @@ export interface SettingsSnapshot {
   manualSubjects: string[];
   /** Matières qui ont au moins un cours mémorisé dans le cahier. */
   lessonSubjects: string[];
+}
+
+/** Android 17 : une demande d'autorisation précède un enregistrement LAN. */
+export interface LocalNetworkStatus {
+  needed: boolean;
 }
 
 export interface LessonSummary {
