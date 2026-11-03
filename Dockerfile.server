@@ -25,7 +25,8 @@ RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin vsn \
  && chown -R vsn:vsn /app/playwright
 # HOME explicite : /root est non inscriptible, Chromium doit écrire son profil.
 ENV HOME=/home/vsn
-# HOST non forcé : l'exposition est une décision de l'opérateur.
+# HOST non forcé : l'exposition est une décision de l'opérateur ; la commande
+# documentée publie sur 127.0.0.1 et exige un proxy authentifié au-delà.
 ENV PORT=3000
 EXPOSE 3000
 USER vsn

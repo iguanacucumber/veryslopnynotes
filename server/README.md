@@ -16,22 +16,22 @@ départ dans le corps de requête. Les identifiants de portail (`username` /
 `password`) sont REFUSÉS (400) : le scraper ne s'authentifie pas — la session
 est celle du serveur (son cookie jar), donc un identifiant reçu ne serait
 collecté pour rien (#526). Risque SSRF et d'épuisement du compte : garder sur
-réseau de confiance ou placer un proxy authentifié devant. `make runServer` et
-Docker lancent ce seul service. `make runServer` écoute par défaut sur la
-boucle locale (`HOST=0.0.0.0` pour l'exposer, sur un réseau de confiance), et
-sa préparation TLS est obligatoire : un échec arrête le lancement, jamais de
-repli en clair.
+la boucle locale ; toute autre interface exige un proxy authentifié devant.
+`make runServer` et Docker lancent ce seul service. `make runServer` écoute par
+défaut sur la boucle locale (`HOST=0.0.0.0` seulement derrière ce proxy), et sa
+préparation TLS est obligatoire : un échec arrête le lancement, jamais de repli
+en clair.
 
-L'IMAGE Docker suit la même règle (#533) : sans `TLS_CERT_FILE`/`TLS_KEY_FILE`
-(volume) elle ne démarre pas, elle ne force pas `HOST` et tourne non
-privilégiée. Sa base est épinglée par digest. La commande ci-dessous durcit le
-conteneur (racine en lecture seule, capabilities retirées, escalade
-interdite) : `/tmp` et le HOME sont des tmpfs, le jar un volume nommé. Le
-couple TLS vient de la préparation locale (`~/.cache/veryslopnynotes/tls`,
-hors dépôt) :
+L'IMAGE Docker suit la même règle (#533, #921) : la commande documentée publie
+sur la boucle locale par défaut, sans `TLS_CERT_FILE`/`TLS_KEY_FILE` (volume)
+elle ne démarre pas, elle ne force pas `HOST` et tourne non privilégiée. Sa base
+est épinglée par digest. La commande ci-dessous durcit le conteneur (racine en
+lecture seule, capabilities retirées, escalade interdite) : `/tmp` et le HOME
+sont des tmpfs, le jar un volume nommé. Le couple TLS vient de la préparation
+locale (`~/.cache/veryslopnynotes/tls`, hors dépôt) :
 
 ```sh
-docker run --rm -p 3000:3000 \
+docker run --rm -p 127.0.0.1:3000:3000 \
   --read-only --cap-drop=ALL --security-opt no-new-privileges \
   --tmpfs /tmp --tmpfs /home/vsn:rw,nosuid,nodev,size=64m,mode=1777 \
   -v veryslopnynotes-jar:/app/playwright/.auth \
@@ -41,11 +41,16 @@ docker run --rm -p 3000:3000 \
   veryslopnynotes-server:local
 ```
 
-Sans `-e HOST=0.0.0.0`, le service n'écoute que sur la boucle locale du
-conteneur (comme `make runServer`). Sans le couple TLS, il ne démarre pas :
-un point d'entrée sans authentification ne se sert pas en clair. Hors image,
-un lancement local sans couple TLS sert en clair et le dit bruyamment
-(`[server] ATTENTION : service en CLAIR`).
+`-p 127.0.0.1:3000:3000` publie sur la boucle locale seulement ; c'est `-p`,
+pas `HOST=0.0.0.0` (requis dans le conteneur), qui borne l'exposition. Sans
+auth : hors boucle locale, proxy authentifié OBLIGATOIRE.
+
+Public = opt-in explicite : `-p 3000:3000` expose sans auth avec la session du
+serveur (compte épuisable, usage détourné) ; uniquement derrière ce proxy.
+
+Sans couple TLS, le conteneur ne démarre pas : un point d'entrée sans auth ne se
+sert pas en clair. Hors image, un lancement local sans couple TLS sert en clair
+et le dit (`[server] ATTENTION : service en CLAIR`).
 
 Garde-fous côté serveur (#362, #779) : seuls des hôtes publics sont visités
 (IP privée refusée, IPv4-mapped comprise), la chaîne de redirections est

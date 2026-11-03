@@ -181,3 +181,28 @@ describe("#779 — image épinglée par digest, commande durcie", () => {
     }
   });
 });
+
+// #921 : l'exemple publiait sur toutes les interfaces un service sans auth
+// (I8). Défaut = boucle locale ; public = opt-in explicite derrière un proxy.
+describe("#921 — exposition Docker : boucle locale par défaut", () => {
+  const readme = readFileSync(join(ROOT, "server", "README.md"), "utf8");
+  const published = /```sh\n(docker run[\s\S]*?)```/.exec(readme)?.[1] ?? "";
+
+  test("l'exemple `docker run` ne publie que sur 127.0.0.1", () => {
+    expect(published).toContain("-p 127.0.0.1:3000:3000");
+    expect(published).not.toMatch(/-p 3000:3000/);
+  });
+
+  test("l'exposition hors boucle locale exige un proxy authentifié", () => {
+    expect(readme).toMatch(/proxy authentifié/i);
+    expect(readme).toMatch(/OBLIGATOIRE/);
+    expect(readme).toMatch(/sans auth/i);
+  });
+
+  test("le mode public est un opt-in explicite qui nomme le risque", () => {
+    expect(readme).toMatch(/opt-in explicite/i);
+    // Le mode public montre le port publié sur toutes les interfaces.
+    expect(readme).toContain("-p 3000:3000");
+    expect(readme).toMatch(/épuisable|usage détourné|risque/i);
+  });
+});

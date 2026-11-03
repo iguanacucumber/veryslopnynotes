@@ -67,10 +67,10 @@ make build   # check-secrets + docker build (skip si daemon absent)
   écrit un jar de session — en root, il laissait des fichiers root, et
   Chromium refuse de démarrer en root sans `--no-sandbox`. `HOME` est celui de
   cet utilisateur (sinon Chromium n'écrit pas son profil).
-- TLS OBLIGATOIRE et exposition EXPLICITE : le CMD refuse de démarrer sans
-  `TLS_CERT_FILE`/`TLS_KEY_FILE` (le scraper est sans auth, I8 — jamais de
-  repli en clair) et `HOST` n'est pas forcé (`-e HOST=0.0.0.0` pour exposer le
-  conteneur). Voir `server/README.md` pour la commande complète.
+- TLS OBLIGATOIRE et exposition LOOPBACK par défaut : le CMD refuse de
+  démarrer sans `TLS_CERT_FILE`/`TLS_KEY_FILE` (sans auth, I8 — jamais de
+  repli en clair) ; la commande de `server/README.md` publie `127.0.0.1:3000`
+  et exige un proxy authentifié au-delà. `HOST` non forcé.
 - Contexte minimal (`server/`, `shared/` + manifests) ; `.dockerignore`
   exclut `.env*`, clés (`*.pem/*.key/*.keystore/*.jks`), `secrets/`,
   données (`data/`, `*.db`), `android/`, `tests/`, `agents/`, `docs/`.
