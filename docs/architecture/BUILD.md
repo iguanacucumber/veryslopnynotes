@@ -73,9 +73,10 @@ source `test/` Gradle). JaCoCo est épinglé par version et sha256
 scannent des déclarations.
 
 `coverage-baseline.json` porte la MESURE (date, machine, périmètre) et
-`headroomPoints = 2` : seuil = `plancher(mesure - 2 points)` (79,59 % → 77,5
-%). La marge absorbe la variation mesurée de Bun (quelques centièmes) sans
-laisser passer une baisse réelle ; une baisse sous le seuil rougit le job.
+`headroomPoints = 2` : seuil = `plancher(mesure - 2 points)` (80,45 % → 78,4
+%). La marge absorbe la variation mesurée de Bun (moins d'un point entre le
+poste et la CI) sans laisser passer une baisse réelle ; une baisse sous le
+seuil rougit le job.
 Baisser la base exige un **diff explicite** dans la PR ; une hausse de
 couverture remonte la base dans la même PR.
 

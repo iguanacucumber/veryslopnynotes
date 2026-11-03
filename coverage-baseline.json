@@ -1,8 +1,8 @@
 {
   "measuredAt": "2026-11-03",
-  "measuredOn": "linux-x64, bun 1.4.4, kotlinc 2.4.21, JaCoCo 0.8.13",
+  "measuredOn": "GitHub Actions ubuntu-latest, bun 1.4.4, kotlinc 2.4.21, JaCoCo 0.8.13 (poste linux-x64 : bun 79,59 %, kotlin 83,81 %)",
   "scope": "bun = tests/unit + tests/web + tests/contracts ; kotlin = port de parité exécuté par ces tests",
   "headroomPoints": 2,
-  "bun": { "lines": 79.59 },
+  "bun": { "lines": 80.45 },
   "kotlin": { "lines": 83.81 }
 }
