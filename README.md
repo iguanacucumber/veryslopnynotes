@@ -89,7 +89,9 @@ règle une fois dans l'app. Le point d'entrée est **sans authentification** :
 
 ## Contribuer
 
-Workflow, branches, gate, commandes et dépendances : [`AGENTS.md`](AGENTS.md).
+Parcours humain (fork, PR, gate, signature) :
+[`CONTRIBUTING.md`](CONTRIBUTING.md). Règles et workflow :
+[`AGENTS.md`](AGENTS.md).
 
 ## État et limites
 

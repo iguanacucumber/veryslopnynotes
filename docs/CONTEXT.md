@@ -22,6 +22,7 @@ Registre : [`INVARIANTS.md`](architecture/INVARIANTS.md).
 |---|---|---|
 | `README.md` | produit, démarrage, limites | présenter le projet |
 | `AGENTS.md` | 5 lois, workflow, gate | avant de toucher au dépôt |
+| `CONTRIBUTING.md` | fork, PR, gate, signature | première contribution |
 | `docs/CONTEXT.md` | cette carte | chercher l'invariant d'une tâche |
 | `docs/architecture/INVARIANTS.md` | index des 20 invariants actifs | choisir une entrée |
 | `docs/architecture/invariants/OPERATING.md` | format, ajout, retrait | créer ou réviser un invariant |
