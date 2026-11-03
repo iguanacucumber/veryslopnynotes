@@ -1,6 +1,8 @@
 package fr.veryslopnynotes.data
 
+import fr.veryslopnynotes.core.MessagePaging
 import fr.veryslopnynotes.pronote.Client
+import fr.veryslopnynotes.pronote.Message
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -49,6 +51,7 @@ internal fun discussionsPayload(
     val arr = JSONArray()
     val known = knownThreads(previous)
     val raws = client.discussions()
+    DiscussionListCache.put(raws)
     raws.forEachIndexed { i, d ->
         val id = boundedCp(d.id, 64)
         if (id.isEmpty()) return@forEachIndexed
@@ -62,13 +65,9 @@ internal fun discussionsPayload(
             // Participants non téléchargés ici : la liste ne promet pas de nom,
             // le fil ouvert les redemande.
             try {
-                val msgs = d.messages()
-                val last = msgs.lastOrNull()
-                val first = msgs.firstOrNull()
-                last?.created?.parisIso()?.let {
-                    lastMessageAt = it
-                    updatedAt = it
-                } ?: first?.created?.parisIso()?.let { updatedAt = it }
+                val dates = datesOf(d.messages())
+                lastMessageAt = dates.first
+                updatedAt = dates.second
             } catch (e: Exception) {
                 if (mustPropagateReadFailure(e)) throw e
             }
@@ -84,33 +83,48 @@ internal fun discussionsPayload(
     return JSONObject().put("discussions", arr).toString()
 }
 
-internal fun messagesPayload(
-    discussionId: String,
-    discussion: fr.veryslopnynotes.pronote.Discussion,
-): String {
+/** Dates réelles d'un fil : dernier message, sinon premier (fil sans réponse). */
+private fun datesOf(messages: List<Message>): Pair<String?, String?> {
+    val last = messages.lastOrNull()
+    val first = messages.firstOrNull()
+    var lastMessageAt: String? = null
+    var updatedAt: String? = null
+    last?.created?.parisIso()?.let {
+        lastMessageAt = it
+        updatedAt = it
+    } ?: first?.created?.parisIso()?.let { updatedAt = it }
+    return lastMessageAt to updatedAt
+}
+
+/**
+ * Enrichissement EXPLICITE des fils visibles : mêmes dates que la liste, mais
+ * seulement pour les identifiants demandés. La liste déjà téléchargée est
+ * réutilisée quand elle est fraîche, donc une vue qui défile ne refait pas
+ * `ListeMessagerie` pour chaque ligne.
+ */
+internal fun enrichmentPayload(client: Client, ids: List<String>): String {
+    val byId = (DiscussionListCache.get() ?: client.discussions().also { DiscussionListCache.put(it) })
+        .associateBy { it.id }
     val arr = JSONArray()
-    discussion.messages().forEachIndexed { i, m ->
-        val body = boundedCp(m.content, 4000)
-        if (body.isEmpty()) return@forEachIndexed
+    val wanted = MessagePaging.enrichBatch(ids, emptySet())
+    for (id in wanted) {
+        val discussion = byId[id] ?: continue
+        var lastMessageAt: String? = null
+        var updatedAt: String? = null
+        try {
+            val dates = datesOf(discussion.messages())
+            lastMessageAt = dates.first
+            updatedAt = dates.second
+        } catch (e: Exception) {
+            if (mustPropagateReadFailure(e)) throw e
+        }
         arr.put(JSONObject().apply {
-            put("id", m.id.ifBlank { "m-$i" }.take(64))
-            put("discussionId", discussionId)
-            putIf("authorName", boundedCp(m.author, 100).ifEmpty { null })
-            put("body", body)
-            put("sentAt", m.created.parisIso())
+            put("id", boundedCp(id, 64))
+            putIf("lastMessageAt", lastMessageAt)
+            putIf("updatedAt", updatedAt)
         })
     }
-    // Participants demandés à l'ouverture du fil (la liste ne les charge pas).
-    val parts = JSONArray()
-    try {
-        discussion.participants()
-            .mapNotNullTo(LinkedHashSet()) { boundedCp(it, 100).ifEmpty { null } }
-            .take(20)
-            .forEach { parts.put(it) }
-    } catch (e: Exception) {
-        if (mustPropagateReadFailure(e)) throw e
-    }
-    return JSONObject().put("messages", arr).put("participants", parts).toString()
+    return JSONObject().put("discussions", arr).toString()
 }
 
 internal fun recipientsPayload(client: Client): String {

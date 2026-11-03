@@ -3,6 +3,7 @@
 // sont demandés À L'OUVERTURE. Le vrai `Client` est rejoué avec un stub qui
 // compte les requêtes ; outillage absent = SKIP BRUYANT.
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
 import { payloadsSource } from "./fixtures/payload-sources";
@@ -61,8 +62,11 @@ describe("les participants d'un fil, à la demande (#476)", () => {
     const payloads = payloadsSource();
     const list = slice(payloads, "internal fun discussionsPayload(");
     expect(list).not.toContain("participants()");
-    // Les messages d'un fil, eux, les demandent (à l'ouverture).
-    const thread = slice(payloads, "internal fun messagesPayload(");
-    expect(thread).toContain("participants()");
+    // Les messages d'un fil, eux, les demandent à l'OUVERTURE (première page).
+    const repo = readFileSync(join(ROOT, "android/data/src/main/java/fr/veryslopnynotes/data/DiscussionsRepository.kt"), "utf8");
+    const participants = slice(repo, "private fun participantsOf(");
+    expect(participants).toContain("discussion.participants()");
+    // « Charger plus ancien » ne les redemande pas : une seule requête.
+    expect(repo).toContain("if (before == null) participantsOf(discussion) else emptyList()");
   });
 });

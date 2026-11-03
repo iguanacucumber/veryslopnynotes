@@ -80,6 +80,9 @@ export const PRODUCTION_SOURCES: string[] = [
   join(CORE, "Averages.kt"),
   join(CORE, "Capabilities.kt"),
   join(CORE, "CapabilityProbe.kt"),
+  // #909 : le modèle de messagerie (bornes, messages) est compilé pour le
+  // pager de fils et ses invariants de taille.
+  join(CORE, "Discussion.kt"),
   // #651 : le MODÈLE du candidat DS/interro (la détection heuristique est
   // supprimée avec la chaîne de notifications).
   join(CORE, "ExamDetect.kt"),
@@ -109,6 +112,10 @@ export const PRODUCTION_SOURCES: string[] = [
   join(CORE, "LlmGuard.kt"),
   join(CORE, "ManualUrl.kt"),
   join(CORE, "ManualCatalog.kt"),
+  // #909 : la pagination locale des fils (une requête par fil, cache mémoire
+  // borné) et le lot d'enrichissement visible. Fichier PUR : le harnais EXÉCUTE
+  // le nombre de téléchargements et de requêtes.
+  join(CORE, "MessagePaging.kt"),
   join(CORE, "RevisionAi.kt"),
   join(CORE, "RevisionSheet.kt"),
   join(CORE, "SecurityAlert.kt"),
@@ -154,6 +161,10 @@ export const PRODUCTION_SOURCES: string[] = [
   // Android) : le harnais les compile et les REJOUE (un rejet de session
   // purge vraiment le cache, sur le code de production).
   join(DATA, "DeviceAuth.kt"),
+  // #909 : la liste de fils déjà téléchargée, réutilisée par l'ouverture et
+  // l'enrichissement visible. Fichier PUR : le harnais compile `SessionRepair`
+  // qui la purge à la déconnexion.
+  join(DATA, "DiscussionListCache.kt"),
   join(DATA, "LocalRequestQueue.kt"),
   join(DATA, "OfflineArtifacts.kt"),
   join(DATA, "OfflineCache.kt"),

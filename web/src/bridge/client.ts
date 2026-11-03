@@ -300,7 +300,12 @@ export const bridge = {
   openAttachment: (homeworkId: string, attachmentId: string, weekStart: string) =>
     call<{ ok: boolean; error?: string }>("assignments.attachment", { homeworkId, attachmentId, weekStart }),
   messages: () => call<{ payload: string | null; error?: string }>("messages.list"),
-  thread: (id: string) => call<{ payload: string | null; error?: string }>("messages.thread", { id }),
+  thread: (id: string, before?: number) =>
+    call<{ payload: string | null; error?: string }>(
+      "messages.thread",
+      before === undefined ? { id } : { id, before },
+    ),
+  enrich: (ids: string[]) => call<{ payload: string | null; error?: string }>("messages.enrich", { ids }),
   reply: (id: string, body: string) => call<{ ok: boolean; error?: string }>("messages.reply", { id, body }),
   createMessage: (recipients: string[], subject: string, body: string) =>
     call<{ ok: boolean; error?: string }>("messages.create", { recipients, subject, body }),

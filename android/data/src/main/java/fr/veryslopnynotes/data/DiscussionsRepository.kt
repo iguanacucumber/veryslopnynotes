@@ -6,8 +6,11 @@ import fr.veryslopnynotes.core.Discussion
 import fr.veryslopnynotes.core.DiscussionMessage
 import fr.veryslopnynotes.core.DiscussionRecipient
 import fr.veryslopnynotes.core.DiscussionRules
-import fr.veryslopnynotes.core.MessageAttachment
+import fr.veryslopnynotes.core.MessagePaging
+import fr.veryslopnynotes.core.ThreadMessageCache
+import fr.veryslopnynotes.pronote.Client
 import fr.veryslopnynotes.pronote.DiscussionClosed
+import fr.veryslopnynotes.pronote.Message
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -31,13 +34,18 @@ class DiscussionNotFound : IllegalArgumentException("fil introuvable")
 class UnknownRecipients : IllegalArgumentException("destinataires inconnus")
 
 /**
- * Un fil OUVERT : ses messages et ses participants, demandés à l'ouverture
- * du fil (un POST de plus là, douze de moins dans la liste).
+ * Un fil OUVERT : une PAGE de ses messages et ses participants. La première
+ * page télécharge le fil (le protocole ne pagine pas) ; les suivantes sortent
+ * du cache mémoire et ne coûtent aucune requête.
  */
 data class DiscussionThread(
     val messages: List<DiscussionMessage>,
     val participants: List<String>,
-)
+    val total: Int = messages.size,
+    val start: Int = 0,
+) {
+    val hasMore: Boolean get() = start > 0
+}
 
 class DiscussionsRepository(
     private val cache: CacheStore,
@@ -46,30 +54,73 @@ class DiscussionsRepository(
 ) {
 
     /**
-     * Messages d'un fil : lus à la demande, JAMAIS en cache (donnée
-     * personnelle). Fil vide/illisible = liste vide, l'écran affiche son état
-     * vide propre. Les participants voyagent avec les messages.
+     * Une PAGE de messages d'un fil : lue à la demande, JAMAIS en cache disque.
+     * Fil vide/illisible = liste vide, l'écran affiche son état vide propre.
+     * Les participants voyagent avec la PREMIÈRE page ; les suivantes les
+     * omettent (l'écran garde déjà les siens).
      */
-    fun fetchMessages(discussionId: String, cb: (DiscussionThread?, String?) -> Unit) {
+    fun fetchMessages(discussionId: String, before: Int? = null, cb: (DiscussionThread?, String?) -> Unit) {
         Thread {
             val client = provider()
             if (client == null) {
                 // Sans session : liste vide, état vide propre, pas d'écran
                 // d'erreur plein écran pour l'absence de connexion.
+                ThreadMessageCache.clear()
+                DiscussionListCache.clear()
                 post { cb(null, null) }
                 return@Thread
             }
             try {
                 val target = boundedCp(discussionId, 64)
-                val discussion = client.discussions().firstOrNull { it.id == target }
+                val discussion = findDiscussion(client, target)
                 if (discussion == null) {
                     post { cb(null, "Fil introuvable.") }
                     return@Thread
                 }
-                val body = messagesPayload(discussionId, discussion)
-                post { cb(parseThread(body), null) }
+                val page = ThreadMessageCache.page(target, before) {
+                    discussion.messages().mapIndexedNotNull { i, m -> toDiscussionMessage(target, m, i) }
+                }
+                // Participants demandés à l'ouverture (première page) seulement.
+                val participants = if (before == null) participantsOf(discussion) else emptyList()
+                post {
+                    cb(
+                        DiscussionThread(
+                            messages = page.items,
+                            participants = participants,
+                            total = page.total,
+                            start = page.start,
+                        ),
+                        null,
+                    )
+                }
             } catch (e: Exception) {
                 if (isSessionFailure(e)) {
+                    ThreadMessageCache.clear()
+                    DiscussionListCache.clear()
+                    DeviceAuth.reject()
+                    post { cb(null, DeviceAuth.REJECTED_MESSAGE) }
+                } else {
+                    post { cb(null, null) }
+                }
+            }
+        }.start()
+    }
+
+    /** Fils visibles à enrichir : une requête `ListeMessages` par identifiant. */
+    fun fetchEnrichment(ids: List<String>, cb: (String?, String?) -> Unit) {
+        Thread {
+            val client = provider()
+            if (client == null) {
+                post { cb(null, null) }
+                return@Thread
+            }
+            try {
+                val body = enrichmentPayload(client, ids)
+                post { cb(body, null) }
+            } catch (e: Exception) {
+                if (isSessionFailure(e)) {
+                    ThreadMessageCache.clear()
+                    DiscussionListCache.clear()
                     DeviceAuth.reject()
                     post { cb(null, DeviceAuth.REJECTED_MESSAGE) }
                 } else {
@@ -154,10 +205,11 @@ class DiscussionsRepository(
                 return@Thread
             }
             val outcome = writeLocal("Réponse impossible.") {
-                val discussion = client.discussions().firstOrNull { it.id == target }
+                val discussion = findDiscussion(client, target)
                     ?: throw DiscussionNotFound()
                 discussion.reply(text)
             }
+            if (outcome.ok) ThreadMessageCache.invalidate(target)
             post { cb(outcome) }
         }.start()
     }
@@ -180,7 +232,7 @@ class DiscussionsRepository(
                 return@Thread
             }
             val outcome = writeLocal("État de lecture refusé.") {
-                val discussion = client.discussions().firstOrNull { it.id == target }
+                val discussion = findDiscussion(client, target)
                     ?: throw DiscussionNotFound()
                 discussion.markAs(read)
             }
@@ -206,12 +258,49 @@ class DiscussionsRepository(
                 return@Thread
             }
             val outcome = writeLocal("Suppression impossible.") {
-                val discussion = client.discussions().firstOrNull { it.id == target }
+                val discussion = findDiscussion(client, target)
                     ?: throw DiscussionNotFound()
                 discussion.delete()
             }
+            if (outcome.ok) ThreadMessageCache.invalidate(target)
             post { cb(outcome) }
         }.start()
+    }
+
+    /** Liste déjà téléchargée d'abord : une ouverture ne refait pas `ListeMessagerie`. */
+    private fun findDiscussion(client: Client, id: String): fr.veryslopnynotes.pronote.Discussion? {
+        val list = DiscussionListCache.get() ?: client.discussions().also { DiscussionListCache.put(it) }
+        return list.firstOrNull { it.id == id }
+    }
+
+    /** Participants d'un fil ouvert ; une panne réseau non-session = liste vide. */
+    private fun participantsOf(discussion: fr.veryslopnynotes.pronote.Discussion): List<String> {
+        return try {
+            discussion.participants()
+                .mapNotNull { boundedCp(it, 100).ifEmpty { null } }
+                .distinct()
+                .take(20)
+        } catch (e: Exception) {
+            if (mustPropagateReadFailure(e)) throw e
+            emptyList()
+        }
+    }
+
+    /** Message Pronote → contrat : corps borné, auteur vide = message du compte. */
+    private fun toDiscussionMessage(
+        discussionId: String,
+        message: Message,
+        index: Int,
+    ): DiscussionMessage? {
+        val body = boundedCp(message.content, 4000)
+        if (body.isEmpty()) return null
+        return DiscussionMessage(
+            id = message.id.ifBlank { "m-$index" }.take(64),
+            discussionId = discussionId,
+            authorName = boundedCp(message.author, 100),
+            body = body,
+            sentAt = message.created.parisIso(),
+        )
     }
 
     /** Écriture locale : succès = pas d'exception ; fil fermé/session = message. */
@@ -220,6 +309,8 @@ class DiscussionsRepository(
             // Écriture CONFIRMÉE → invalide le cache : l'état d'avant ne
             // ressort plus. Une écriture refusée (exception) ne purge rien.
             writeAndInvalidate(cache, CachePolicy.DISCUSSIONS) { block() }
+            // La liste (non-lus) et les objets `Discussion` ne sont plus à jour.
+            DiscussionListCache.clear()
             DiscussionWriteOutcome(true, null)
         } catch (e: Exception) {
             if (isSessionFailure(e)) {
@@ -274,56 +365,6 @@ class DiscussionsRepository(
                 )
                 // Discussion hors contrat écartée (pas de ligne cassée affichée).
                 if (d.isValid()) out.add(d)
-            }
-            return out
-        }
-
-        fun parseMessages(body: String): List<DiscussionMessage> {
-            val root = JSONObject(body)
-            val arr = root.optJSONArray("messages") ?: JSONArray()
-            val out = mutableListOf<DiscussionMessage>()
-            for (i in 0 until arr.length()) {
-                val o = arr.optJSONObject(i) ?: continue
-                val m = DiscussionMessage(
-                    id = o.optString("id", ""),
-                    discussionId = o.optString("discussionId", ""),
-                    authorName = o.optString("authorName", ""),
-                    body = o.optString("body", ""),
-                    sentAt = o.optString("sentAt", ""),
-                    attachments = parseAttachments(o.optJSONArray("attachments")),
-                )
-                if (m.isValid()) out.add(m)
-            }
-            return out
-        }
-
-        /**
-         * Un fil ouvert : ses messages et ses participants, bornés (20) et
-         * ignorés s'ils sont vides — un nom est une DONNÉE affichée telle quelle.
-         */
-        fun parseThread(body: String): DiscussionThread {
-            val root = JSONObject(body)
-            val parts = mutableListOf<String>()
-            val pArr = root.optJSONArray("participants")
-            for (i in 0 until (pArr?.length() ?: 0)) {
-                val name = pArr?.optString(i, "") ?: ""
-                if (name.isNotBlank()) parts.add(name)
-            }
-            return DiscussionThread(parseMessages(body), parts)
-        }
-
-        /** Pièces jointes : `ref` en URL = rejetée (règle d'or média, I1). */
-        private fun parseAttachments(arr: JSONArray?): List<MessageAttachment> {
-            val out = mutableListOf<MessageAttachment>()
-            for (i in 0 until (arr?.length() ?: 0)) {
-                val o = arr?.optJSONObject(i) ?: continue
-                val a = MessageAttachment(
-                    id = o.optString("id", ""),
-                    label = o.optString("label", ""),
-                    ref = o.optString("ref", ""),
-                )
-                if (!a.isValid()) return emptyList()
-                out.add(a)
             }
             return out
         }

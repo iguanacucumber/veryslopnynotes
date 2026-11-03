@@ -12,7 +12,14 @@ import { readBridgeSource } from "../unit/fixtures/bridge-source";
 import {
   isMessagesPayloadReadable,
   MESSAGE_WINDOW,
+  mergeEnrichedDiscussions,
+  mergeOlderMessages,
+  nextEnrichBatch,
   nextMessageWindow,
+  parseEnrichedDiscussions,
+  remainingMessages,
+  threadPageStart,
+  threadPageTotal,
   visibleMessages,
   type Discussion,
   type DiscussionMessage,
@@ -557,5 +564,102 @@ describe("messagerie — le fil rend une fenêtre bornée de messages (#966)", (
     expect(html).toContain("corps-m-000");
     expect(html).not.toContain("Charger les messages plus anciens");
     expect(html).not.toContain("Tous les messages sont affichés");
+  });
+});
+
+// #909 : le pont pagine le fil et n'enrichit que les fils VISIBLES. Le contrat
+// pur est exécuté ici ; les bornes de requêtes sont prouvées par le test Kotlin
+// `kotlin-message-paging.test.ts` (vrai pager compilé, fetch synthétique).
+describe("messagerie — pagination et enrichissement visible (#909)", () => {
+  function message(id: string): DiscussionMessage {
+    return { id, discussionId: "d1", authorName: "", body: `corps-${id}`, sentAt: "", attachments: [] };
+  }
+
+  test("la page plus ancienne est préfixée sans doublon ni perte", () => {
+    const current = ["m-051", "m-052"].map(message);
+    const older = ["m-001", "m-050", "m-051"].map(message);
+    const merged = mergeOlderMessages(older, current);
+    expect(merged.map((m) => m.id)).toEqual(["m-001", "m-050", "m-051", "m-052"]);
+  });
+
+  test("le total et le début viennent du pont, avec repli sur ce qui est reçu", () => {
+    expect(threadPageTotal(JSON.stringify({ messages: [], total: 120 }), 50)).toBe(120);
+    expect(threadPageTotal(JSON.stringify({ messages: [] }), 50)).toBe(50);
+    expect(threadPageStart(JSON.stringify({ start: 70 }))).toBe(70);
+    expect(threadPageStart(null)).toBe(0);
+    expect(remainingMessages(120, 50)).toBe(70);
+    expect(remainingMessages(40, 40)).toBe(0);
+  });
+
+  test("le fil paginé rend une page et annonce le reste, sans fenêtre locale", () => {
+    const discussion: Discussion = {
+      id: "d1",
+      subject: "Cahier de texte",
+      participants: [],
+      unreadCount: 0,
+      lastMessageAt: null,
+      updatedAt: null,
+    };
+    const page = Array.from({ length: 50 }, (_, i) => message(`m-${String(i + 70).padStart(3, "0")}`));
+    const html = renderToStaticMarkup(
+      createElement(ThreadScreen, {
+        discussion,
+        messages: page,
+        loading: false,
+        error: null,
+        draft: "",
+        sending: false,
+        onDraftChange: () => {},
+        onReply: () => {},
+        onToggleRead: () => {},
+        onDelete: () => {},
+        onRefresh: () => {},
+        total: 120,
+        onLoadOlder: () => {},
+      }),
+    );
+    expect(html).toContain("Charger les messages plus anciens (70)");
+    expect(html).toContain("corps-m-070");
+    expect(html).toContain("corps-m-119");
+  });
+
+  test("l'enrichissement ne touche ni les non-lus ni l'ordre d'arrivée", () => {
+    const list: Discussion[] = [
+      { id: "b", subject: "B", participants: [], unreadCount: 3, lastMessageAt: null, updatedAt: null },
+      { id: "a", subject: "A", participants: [], unreadCount: 0, lastMessageAt: null, updatedAt: null },
+    ];
+    const enriched = parseEnrichedDiscussions(
+      JSON.stringify({
+        discussions: [{ id: "a", lastMessageAt: "2026-10-10T09:00:00.000Z" }],
+      }),
+    );
+    const merged = mergeEnrichedDiscussions(list, enriched);
+    expect(merged.map((d) => d.id)).toEqual(["b", "a"]);
+    expect(merged[0]?.unreadCount).toBe(3);
+    expect(merged[1]?.lastMessageAt).toBe("2026-10-10T09:00:00.000Z");
+  });
+
+  test("le lot visible est borné : jamais plus de 12 requêtes d'un coup", () => {
+    const visible = Array.from({ length: 50 }, (_, i) => `d-${i}`);
+    const first = nextEnrichBatch(visible, new Set());
+    expect(first).toHaveLength(12);
+    expect(first[0]).toBe("d-0");
+    const second = nextEnrichBatch(visible, new Set(first));
+    expect(second[0]).toBe("d-12");
+    expect(nextEnrichBatch(["d-0"], new Set(["d-0"]))).toEqual([]);
+  });
+
+  test("la route demande l'enrichissement des lignes observées et pagine le fil", () => {
+    const route = readFileSync(join(ROOT, "web/src/routes/messages.tsx"), "utf8");
+    expect(route).toContain("nextEnrichBatch(");
+    expect(route).toContain("bridge.enrich(");
+    expect(route).toContain("bridge.thread(target, threadStart)");
+    expect(route).toContain("mergeOlderMessages(");
+    const screen = readFileSync(
+      join(ROOT, "web/src/features/messages/MessagesScreen.tsx"),
+      "utf8",
+    );
+    expect(screen).toContain("IntersectionObserver");
+    expect(screen).toContain("data-discussion-id");
   });
 });
