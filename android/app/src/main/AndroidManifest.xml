@@ -11,6 +11,17 @@
     <uses-feature
         android:name="android.hardware.camera.any"
         android:required="false" />
+    <!-- Visibilité des ouvreurs (API 30+) : sans cette requête,
+         `resolveActivity` rend null et toute pièce jointe semblerait sans
+         application. Aucun accès aux données n'est accordé. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <!-- Pas de schéma : avec un type MIME, `content:` et `file:` sont
+                 couverts (résolution des URI FileProvider). -->
+            <data android:mimeType="*/*" />
+        </intent>
+    </queries>
     <!-- Thème de FENÊTRE sans barre d'action : sinon la plateforme affiche le
          LABEL de l'app au-dessus de la WebView (+ 56 dp perdus). -->
     <!-- AUCUNE sauvegarde automatique : les payloads Pronote sont écrits EN
@@ -39,7 +50,7 @@
              d'établissement). -->
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="fr.veryslopnynotes.app.fileprovider"
+            android:authorities="${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

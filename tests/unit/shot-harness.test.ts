@@ -54,8 +54,11 @@ describe("deep links de debug (#133)", () => {
   });
 
   test("le manifeste MAIN (donc la release) n'a AUCUN deep link", () => {
-    // L'APK publiable ne répond à aucune URL extérieure.
-    expect(MAIN_MANIFEST).not.toContain("android.intent.action.VIEW");
+    // L'APK publiable ne répond à aucune URL extérieure. La visibilité
+    // `<queries>` du viewer (#878) n'est pas un intent-filter : elle n'ouvre
+    // aucune route, donc seuls les filtres sont inspectés.
+    const filters = [...MAIN_MANIFEST.matchAll(/<intent-filter>([\s\S]*?)<\/intent-filter>/g)];
+    expect(filters.some((f) => f[1]!.includes("android.intent.action.VIEW"))).toBe(false);
     expect(MAIN_MANIFEST).not.toContain("veryslopnynotes://");
     expect(MAIN_MANIFEST).not.toContain('android:launchMode="singleTask"');
     expect(MAIN_MANIFEST).toContain("android.intent.category.LAUNCHER");

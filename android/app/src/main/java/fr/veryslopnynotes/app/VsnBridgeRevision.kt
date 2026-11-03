@@ -72,8 +72,12 @@ internal fun VsnBridge.revisionExportPdf(p: JSONObject): JSONObject {
             bytes,
             epoch,
         ) ?: return JSONObject().put("ok", false).put("message", "Export PDF indisponible.")
-        openFile(file, "application/pdf")
-        JSONObject().put("ok", true)
+        val viewerError = openFile(file, "application/pdf")
+        if (viewerError == null) {
+            JSONObject().put("ok", true)
+        } else {
+            JSONObject().put("ok", false).put("message", viewerError)
+        }
     } catch (_: Exception) {
         JSONObject().put("ok", false).put("message", "Export PDF indisponible.")
     }

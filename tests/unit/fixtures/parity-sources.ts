@@ -205,6 +205,9 @@ export const PRODUCTION_SOURCES: string[] = [
   // MIME des pièces jointes, la traduction d'un échec natif en rejet et la
   // route de l'interface web (le chemin porté par le HASH de l'URL, #400).
   join(APP, "AttachmentMime.kt"),
+  // #878 : l'autorité FileProvider dérivée de l'`applicationId` et le refus
+  // « aucun ouvreur ». Fichier PUR : le harnais l'EXÉCUTE avant tout lancement.
+  join(APP, "AttachmentViewer.kt"),
   join(APP, "BridgeErrors.kt"),
   // #646 : l'admission d'un appel AVANT tout fil (#539) — identifiant mal
   // formé, méthode inconnue, requête trop volumineuse, abandon et pont fermé.

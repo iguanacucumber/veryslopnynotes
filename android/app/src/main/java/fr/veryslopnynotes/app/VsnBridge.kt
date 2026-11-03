@@ -706,19 +706,24 @@ class VsnBridge(
         else -> null
     }
 
-    internal fun openFile(file: File, mime: String) {
-        val uri = FileProvider.getUriForFile(activity, ATTACHMENT_PROVIDER_AUTHORITY, file)
+    /** `null` = lancement demandé ; sinon le refus à remonter au JS. */
+    internal fun openFile(file: File, mime: String): String? {
+        val authority = attachmentProviderAuthority(BuildConfig.APPLICATION_ID)
+        val uri = FileProvider.getUriForFile(activity, authority, file)
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, mime)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
+        // Sans `<queries>` cette résolution rendrait toujours null (API 30+).
+        viewerLaunchError(intent.resolveActivity(activity.packageManager) != null)?.let { return it }
         activity.runOnUiThread {
             try {
                 activity.startActivity(intent)
             } catch (_: Exception) {
-                // Aucun ouvreur : la pièce reste dans le cache, rien n'est affiché.
+                // Course avec la désinstallation du seul ouvreur : rien à afficher.
             }
         }
+        return null
     }
 
     /** Attend un callback de dépôt (toujours livré sur le thread principal). */

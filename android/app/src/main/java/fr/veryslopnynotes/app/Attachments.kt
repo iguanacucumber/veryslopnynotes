@@ -12,9 +12,6 @@ import java.io.File
 // par le serveur : il ne peut pas être exécutable (I6). Le nom et la purge vivent
 // dans `data/DownloadedFiles.kt`.
 
-/** Autorité FileProvider (manifeste app) : seul `cacheDir/attachments/` est partagé. */
-const val ATTACHMENT_PROVIDER_AUTHORITY = "fr.veryslopnynotes.app.fileprovider"
-
 /**
  * [epoch] est l'époque de session capturée AVANT le téléchargement : une pièce
  * jointe téléchargée pendant une déconnexion n'est pas écrite.

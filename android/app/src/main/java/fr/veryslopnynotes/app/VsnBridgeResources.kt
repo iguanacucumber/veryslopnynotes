@@ -170,8 +170,12 @@ internal fun VsnBridge.openAttachment(p: JSONObject): JSONObject {
             data,
             epoch,
         ) ?: return JSONObject().put("ok", false).put("error", "Pièce jointe indisponible.")
-        openFile(file, mimeOf(data.name))
-        JSONObject().put("ok", true)
+        val viewerError = openFile(file, mimeOf(data.name))
+        if (viewerError == null) {
+            JSONObject().put("ok", true)
+        } else {
+            JSONObject().put("ok", false).put("error", viewerError)
+        }
     } catch (_: Exception) {
         JSONObject().put("ok", false).put("error", "Pièce jointe illisible.")
     }
