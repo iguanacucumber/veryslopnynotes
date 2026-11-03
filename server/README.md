@@ -25,14 +25,18 @@ en clair.
 L'IMAGE Docker suit la même règle (#533, #921) : la commande documentée publie
 sur la boucle locale par défaut, sans `TLS_CERT_FILE`/`TLS_KEY_FILE` (volume)
 elle ne démarre pas, elle ne force pas `HOST` et tourne non privilégiée. Sa base
-est épinglée par digest. La commande ci-dessous durcit le conteneur (racine en
-lecture seule, capabilities retirées, escalade interdite) : `/tmp` et le HOME
-sont des tmpfs, le jar un volume nommé. Le couple TLS vient de la préparation
-locale (`~/.cache/veryslopnynotes/tls`, hors dépôt) :
+est épinglée par digest. Le sandbox de Chromium est ACTIF : Playwright le
+désactive par défaut, donc `CHROMIUM_LAUNCH_OPTIONS` l'impose et la commande
+fournit le profil seccomp étroit `server/chromium-seccomp.json`. La commande
+ci-dessous durcit le conteneur (racine en lecture seule, capabilities retirées,
+escalade interdite, sandbox Chromium) : `/tmp` et le HOME sont des tmpfs, le jar
+un volume nommé. Le couple TLS vient de la préparation locale
+(`~/.cache/veryslopnynotes/tls`, hors dépôt) :
 
 ```sh
 docker run --rm -p 127.0.0.1:3000:3000 \
   --read-only --cap-drop=ALL --security-opt no-new-privileges \
+  --security-opt seccomp=./server/chromium-seccomp.json \
   --tmpfs /tmp --tmpfs /home/vsn:rw,nosuid,nodev,size=64m,mode=1777 \
   -v veryslopnynotes-jar:/app/playwright/.auth \
   -e HOST=0.0.0.0 \
@@ -40,6 +44,16 @@ docker run --rm -p 127.0.0.1:3000:3000 \
   -v ~/.cache/veryslopnynotes/tls:/tls:ro \
   veryslopnynotes-server:local
 ```
+
+Le profil seccomp est le profil par défaut de Docker (moby/profiles,
+Apache-2.0) plus trois règles : `clone` pour les namespaces user/PID/net,
+`unshare(CLONE_NEWUSER)` seul, et `chroot` ; mount, cgroup, UTS et IPC restent
+refusés. L'hôte doit autoriser les user namespaces non privilégiés
+(sysctl/AppArmor) ; sinon le scrape ÉCHOUE (501 « sandbox Chromium
+indisponible »), sans repli vers un Chromium non sandboxé. Renouveler le profil
+quand le défaut Docker évolue. Ce n'est PAS une isolation VM : une faille du
+processus navigateur ou du noyau reste hors du sandbox ; gVisor ou une VM
+dédiée est le cran supérieur.
 
 `-p 127.0.0.1:3000:3000` publie sur la boucle locale seulement ; c'est `-p`,
 pas `HOST=0.0.0.0` (requis dans le conteneur), qui borne l'exposition. Sans

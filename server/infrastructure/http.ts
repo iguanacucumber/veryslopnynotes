@@ -329,6 +329,12 @@ async function handleScrape(
         if (onClientAbort) req.signal?.removeEventListener("abort", onClientAbort);
       }
     } catch (err) {
+      // Le sandbox est une exigence, pas une option : un hôte qui refuse les
+      // user namespaces fait échouer le lancement. On le dit franchement,
+      // jamais un repli vers un Chromium non sandboxé.
+      if (isSandboxUnavailableError(err)) {
+        return error("not_implemented", 501, "sandbox Chromium indisponible");
+      }
       // Navigateur absent = capability manquante (501 franc), pas un faux
       // succès ni un 500 « unexpected failure » : le message Playwright réel
       // (exécutable absent, install-deps) est conservé.
@@ -439,6 +445,12 @@ async function handleWebScrape(
         if (onClientAbort) req.signal?.removeEventListener("abort", onClientAbort);
       }
     } catch (err) {
+      // Le sandbox est une exigence, pas une option : un hôte qui refuse les
+      // user namespaces fait échouer le lancement. On le dit franchement,
+      // jamais un repli vers un Chromium non sandboxé.
+      if (isSandboxUnavailableError(err)) {
+        return error("not_implemented", 501, "sandbox Chromium indisponible");
+      }
       if (isMissingBrowserError(err)) {
         return error("not_implemented", 501, "scraper sans navigateur");
       }
@@ -487,6 +499,21 @@ const MISSING_BROWSER_PATTERNS: readonly RegExp[] = [
 function isMissingBrowserError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : typeof err === "string" ? err : "";
   return MISSING_BROWSER_PATTERNS.some((re) => re.test(message));
+}
+
+/**
+ * Chromium refuse de démarrer plutôt que de tourner sans sandbox ; Playwright
+ * remonte le diagnostic complet. Ces motifs sont ceux du binaire, pas une
+ * promesse de stabilité : un motif absent laisse un 500, jamais un faux succès.
+ */
+const SANDBOX_UNAVAILABLE_PATTERNS: readonly RegExp[] = [
+  /chromium sandboxing failed/i,
+  /no usable sandbox/i,
+];
+
+function isSandboxUnavailableError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  return SANDBOX_UNAVAILABLE_PATTERNS.some((re) => re.test(message));
 }
 
 function error(code: string, status: number, message: string, extraHeaders?: Record<string, string>): Response {
