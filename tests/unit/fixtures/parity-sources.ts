@@ -206,6 +206,9 @@ export const PRODUCTION_SOURCES: string[] = [
   join(DATA, "PairingFailure.kt"),
   join(DATA, "PronoteSession.kt"),
   join(DATA, "RequestScope.kt"),
+  // #876 : le registre des travaux longs (IA/photo/profil) et leur annulation
+  // par époque. Fichier PUR : le harnais EXÉCUTE la réponse retardée après logout.
+  join(DATA, "InFlightWork.kt"),
   join(DATA, "SessionRepair.kt"),
   // `data/SessionGate.kt` : LE verrou d'ouverture/fermeture de session,
   // partagé par appairage, restauration et déconnexion. Fichier PUR : le

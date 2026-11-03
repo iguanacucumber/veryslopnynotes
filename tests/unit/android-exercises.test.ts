@@ -26,7 +26,7 @@ describe("pont exercices — proposition locale (#632)", () => {
       expect(ALLOWLIST).toContain(`"${method}"`);
     }
     expect(BRIDGE).toContain('"exercises.propose" -> exercisesPropose(p)');
-    expect(BRIDGE).toContain('"exercises.help" -> exercisesHelp(p)');
+    expect(BRIDGE).toContain('"exercises.help" -> exercisesHelp(p, epoch)');
   });
 
   test("proposer un exercice ne lance AUCUN appel payant", () => {

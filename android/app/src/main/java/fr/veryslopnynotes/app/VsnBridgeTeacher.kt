@@ -105,11 +105,12 @@ internal fun VsnBridge.exercisesPropose(p: JSONObject): JSONObject {
  * La réponse de l'élève (texte ou photo) est une DONNÉE Untrusted. Aucun effet
  * Pronote, aucune écriture.
  */
-internal fun VsnBridge.exercisesHelp(p: JSONObject): JSONObject {
+internal fun VsnBridge.exercisesHelp(p: JSONObject, epoch: Long = SessionEpoch.current()): JSONObject {
     val subject = bounded(p.string("subject"), TeacherChat.MAX_SUBJECT_CHARS)
     if (subject.isEmpty()) {
         return JSONObject().put("ok", false).put("message", "Choisis une matière.")
     }
+    ensureCurrent(epoch)
     val number = bounded(p.string("number"), Exercises.MAX_NUMBER_CHARS)
     val statement = bounded(p.string("statement"), Exercises.MAX_STATEMENT_CHARS)
     if (statement.isEmpty()) {
@@ -143,8 +144,9 @@ internal fun VsnBridge.exercisesHelp(p: JSONObject): JSONObject {
                         .put("message", "Photo illisible ou trop lourde : reprends-la.")
                 }
                 studentAnswer = try {
+                    ensureCurrent(epoch)
                     transcribeLesson(
-                        provider = OpenRouterLlm(timeoutMs = AWAIT_LLM_MS),
+                        provider = llmForCall(epoch, AWAIT_LLM_MS),
                         image = VisionImage(
                             mime = "image/jpeg",
                             base64 = Base64.encodeToString(bytes, Base64.NO_WRAP),
@@ -187,8 +189,9 @@ internal fun VsnBridge.exercisesHelp(p: JSONObject): JSONObject {
     val context = AiContext.assembleFor(AiContextEntry.REVISION, items)
     if (context.sources.isEmpty()) return refusalJson(context, ok = false)
     return try {
+        ensureCurrent(epoch)
         val reply = Exercises.requestHelp(
-            provider = OpenRouterLlm(timeoutMs = AWAIT_LLM_MS),
+            provider = llmForCall(epoch, AWAIT_LLM_MS),
             mode = mode,
             context = context,
             exerciseNumber = number,
@@ -230,11 +233,12 @@ internal fun VsnBridge.exercisesHelp(p: JSONObject): JSONObject {
  * rend un texte + des libellés cités, et une réponse sans citation est
  * marquée `unsourced` (jamais masquée).
  */
-internal fun VsnBridge.teacherTurn(p: JSONObject): JSONObject {
+internal fun VsnBridge.teacherTurn(p: JSONObject, epoch: Long = SessionEpoch.current()): JSONObject {
     val subject = bounded(p.string("subject"), TeacherChat.MAX_SUBJECT_CHARS)
     if (subject.isEmpty()) {
         return JSONObject().put("ok", false).put("message", "Choisis une matière.")
     }
+    ensureCurrent(epoch)
     val message = bounded(p.string("message"), TeacherChat.MAX_MESSAGE_CHARS)
     if (message.isEmpty()) {
         return JSONObject().put("ok", false).put("message", "Écris ta question.")
@@ -269,8 +273,9 @@ internal fun VsnBridge.teacherTurn(p: JSONObject): JSONObject {
             .withTeacherHistory(context, summary.length)
     }
     return try {
+        ensureCurrent(epoch)
         val reply = TeacherChat.requestTurn(
-            provider = OpenRouterLlm(timeoutMs = AWAIT_LLM_MS),
+            provider = llmForCall(epoch, AWAIT_LLM_MS),
             mode = mode,
             context = context,
             message = message,

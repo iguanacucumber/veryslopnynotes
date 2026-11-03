@@ -32,6 +32,7 @@ import fr.veryslopnynotes.data.DownloadedFiles
 import fr.veryslopnynotes.data.LlmError
 import fr.veryslopnynotes.data.OpenRouterHomework
 import fr.veryslopnynotes.data.OpenRouterLlm
+import fr.veryslopnynotes.data.RequestScope
 import fr.veryslopnynotes.data.SessionEpoch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -103,14 +104,16 @@ internal fun VsnBridge.askHomework(p: JSONObject, epoch: Long, requestId: String
         (base.take(room) + suffix).take(fr.veryslopnynotes.core.Homework.MAX_QUESTION_CHARS)
     }
     emitProgress(requestId, "model")
+    ensureCurrent(epoch)
+    val homework = OpenRouterHomework(llmForCall(epoch, HOMEWORK_LLM_TIMEOUT_MS), llmKeys)
+    RequestScope.current()?.onCancel(homework::cancel)
     val result = await<fr.veryslopnynotes.data.HomeworkResult>(AWAIT_LLM_MS) { cb ->
         // Budget fournisseur STRICTEMENT sous l'attente du pont : à budget
         // égal, une réponse produite par la reprise arrive quand `await`
         // abandonne déjà (« L'assistant n'a pas répondu »).
-        OpenRouterHomework(OpenRouterLlm(timeoutMs = HOMEWORK_LLM_TIMEOUT_MS), llmKeys)
-            .generate(question, sources, cb, allowUnsourced = proceedAnyway) { phase ->
-                if (phase == "verify") emitProgress(requestId, "verify")
-            }
+        homework.generate(question, sources, cb, allowUnsourced = proceedAnyway) { phase ->
+            if (phase == "verify") emitProgress(requestId, "verify")
+        }
     } ?: return JSONObject().put("ok", false).put("message", "L'assistant n'a pas répondu.")
         .withAiContext(context)
     emitProgress(requestId, "done")
@@ -325,7 +328,7 @@ internal fun VsnBridge.attachmentContextItems(
                     AttachmentTextResult.Unreadable("image_vision")
                 } else {
                     visionCalls += 1
-                    imageAttachmentText(file)
+                    imageAttachmentText(file, epoch)
                 }
             } else {
                 AttachmentText.extract(att.label, mime, file.readBytes())
@@ -369,7 +372,7 @@ internal fun VsnBridge.attachmentFile(
  * cours (#587) : ré-encodage JPEG borné (métadonnées retirées), prompt
  * gardé, sortie validée. Aucune clé = source illisible explicite.
  */
-internal fun VsnBridge.imageAttachmentText(file: File): AttachmentTextResult {
+internal fun VsnBridge.imageAttachmentText(file: File, epoch: Long): AttachmentTextResult {
     val apiKey = llmKeys.apiKey()?.trim().orEmpty()
     if (apiKey.length < OpenRouterLlm.MIN_API_KEY_CHARS) {
         return AttachmentTextResult.Unreadable("image_vision_indisponible")
@@ -377,8 +380,9 @@ internal fun VsnBridge.imageAttachmentText(file: File): AttachmentTextResult {
     val bytes = PhotoPrep.prepare(file)
         ?: return AttachmentTextResult.Unreadable("image_vision")
     return try {
+        ensureCurrent(epoch)
         val draft = transcribeLesson(
-            provider = OpenRouterLlm(timeoutMs = AWAIT_LLM_MS),
+            provider = llmForCall(epoch, AWAIT_LLM_MS),
             image = VisionImage(
                 mime = "image/jpeg",
                 base64 = Base64.encodeToString(bytes, Base64.NO_WRAP),
@@ -489,8 +493,9 @@ internal fun VsnBridge.solveHomeworkPhoto(p: JSONObject, epoch: Long, requestId:
             }
             try {
                 emitProgress(requestId, "model")
+                ensureCurrent(epoch)
                 val outcome = HomeworkAi.generateHomeworkFromPhotos(
-                    provider = OpenRouterLlm(timeoutMs = AWAIT_LLM_MS),
+                    provider = llmForCall(epoch, AWAIT_LLM_MS),
                     question = fr.veryslopnynotes.data.HomeworkRepository.questionFor(assignment),
                     sources = context.sources.map { it.toHomeworkSource() },
                     images = images,
@@ -584,7 +589,8 @@ internal fun VsnBridge.generateRevision(p: JSONObject, epoch: Long): JSONObject 
         // un seul endroit decide du prompt et du schema.
         // #594 : même délai que l'aide photo — la fiche (manuel + consigne)
         // prend souvent plus de 20 s sur un modèle gratuit.
-        val sheet = RevisionAi.requestRevisionSheet(OpenRouterLlm(timeoutMs = AWAIT_LLM_MS), exam, chunks, apiKey)
+        ensureCurrent(epoch)
+        val sheet = RevisionAi.requestRevisionSheet(llmForCall(epoch, AWAIT_LLM_MS), exam, chunks, apiKey)
         val candidate = ExamCandidate(
             source = "assignment",
             id = assignment.id,

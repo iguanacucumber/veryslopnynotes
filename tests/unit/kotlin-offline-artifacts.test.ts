@@ -64,7 +64,7 @@ describe("écritures hors CacheStore et purge de déconnexion (#404)", () => {
     const bridge = readBridgeSource();
     const iCapture = bridge.indexOf("val epoch = SessionEpoch.current()");
     // Le MARQUEUR de dispatch reste générique : le nom de la file peut changer.
-    const iDispatch = bridge.indexOf(".execute {");
+    const iDispatch = bridge.indexOf(".submit(method) {");
     expect(iCapture).toBeGreaterThan(-1);
     expect(iDispatch).toBeGreaterThan(-1);
     expect(iCapture).toBeLessThan(iDispatch);

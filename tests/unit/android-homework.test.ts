@@ -488,10 +488,10 @@ describe("android homework — le credential reste dans l'app", () => {
     // AWAIT_LLM_MS : le constructeur porte le budget fournisseur, STRICTEMENT
     // sous l'attente native pour qu'une réponse reprise ne soit pas jetée.
     expect(bridge).toMatch(
-      /OpenRouterHomework\(OpenRouterLlm\(timeoutMs = HOMEWORK_LLM_TIMEOUT_MS\), llmKeys\)/,
+      /OpenRouterHomework\(llmForCall\(epoch, HOMEWORK_LLM_TIMEOUT_MS\), llmKeys\)/,
     );
     // Les trois chemins LLM sont alignés : la photo l'était déjà (#588).
-    expect(bridge).toMatch(/provider = OpenRouterLlm\(timeoutMs = AWAIT_LLM_MS\)/);
+    expect(bridge).toMatch(/provider = llmForCall\(epoch, AWAIT_LLM_MS\)/);
   });
 
   test("la clé enregistrée est bornée à l'ASCII imprimable (#595)", () => {

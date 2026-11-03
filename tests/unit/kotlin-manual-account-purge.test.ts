@@ -131,7 +131,7 @@ describe("manuel — purge durable, panne de commit (#886)", () => {
     expect(logout).toContain("if (result.ok)");
     expect(logout).toContain("WriteResult.Failed");
 
-    const bridgeLogout = bodyOf(bridge, "private fun logout()");
+    const bridgeLogout = bodyOf(bridge, "private fun logout(requestId: String)");
     const failure = bridgeLogout.indexOf("throw BridgeFailure(");
     const success = bridgeLogout.indexOf('put("ok", true)');
     expect(failure).toBeGreaterThan(-1);
@@ -151,7 +151,7 @@ describe("pont — la purge part avec celle du cache, jamais au redémarrage", (
     // Le pont ne refait pas une seconde purge à côté de l'orchestrateur.
     expect(bridge).not.toContain("purgeManualAccountData");
     expect(bridge).toContain("onManualPurged = { manualFailures.clear() }");
-    for (const signature of ["private fun logout()", "private fun onSessionRejected()"]) {
+    for (const signature of ["private fun logout(requestId: String)", "private fun onSessionRejected()"]) {
       const path = bodyOf(bridge, signature);
       expect(path).toContain("pairing.logoutBlocking()");
       expect(path).not.toContain("manuals.clearAccountData()");

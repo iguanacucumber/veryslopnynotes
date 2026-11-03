@@ -36,6 +36,7 @@ import fr.veryslopnynotes.data.FileCooldownStore
 import fr.veryslopnynotes.data.FileRevisionStore
 import fr.veryslopnynotes.data.FileSubjectPrefsStore
 import fr.veryslopnynotes.data.FileTeacherChatStore
+import fr.veryslopnynotes.data.InFlight
 import fr.veryslopnynotes.data.InMemoryCacheStore
 import fr.veryslopnynotes.data.InMemoryTeacherChatStore
 import fr.veryslopnynotes.data.InMemorySubjectPrefsStore
@@ -46,6 +47,7 @@ import fr.veryslopnynotes.data.LlmKeys
 import fr.veryslopnynotes.data.LocalDataStore
 import fr.veryslopnynotes.data.ManualStore
 import fr.veryslopnynotes.data.ManualsClient
+import fr.veryslopnynotes.data.OpenRouterLlm
 import fr.veryslopnynotes.data.PairingInput
 import fr.veryslopnynotes.data.PairingRepository
 import fr.veryslopnynotes.data.PairingResult
@@ -71,12 +73,16 @@ import java.io.File
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 
 /**
  * Lectures dont le résultat appartient à la session : l'époque de l'ARRIVÉE
  * est revérifiée avant la lecture et au moment de livrer. Une bascule de
  * compte rend un rejet typé, jamais les données du précédent.
+ *
+ * Les travaux IA/photo/profil sont ici pour la MÊME raison : un modèle peut
+ * répondre APRÈS une déconnexion, et son résultat ne doit jamais s'afficher.
  */
 private val EPOCH_GUARDED_READS = setOf(
     "resources.cached",
@@ -91,7 +97,13 @@ private val EPOCH_GUARDED_READS = setOf(
     "messages.recipients",
     "lessons.list",
     "lessons.load",
+    "lessons.addPhoto",
     "teacher.load",
+    "llm.askHomework",
+    "llm.solvePhoto",
+    "llm.generateRevision",
+    "llm.teacherTurn",
+    "exercises.help",
 )
 
 /**
@@ -131,6 +143,8 @@ class VsnBridge(
         Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
     /** Jeton réseau par appel : un abandon ou un timeout coupe la connexion en vol. */
     private val cancels: MutableMap<String, RequestCancellation> = ConcurrentHashMap()
+    /** Future par appel : un logout ou une bascule coupe le fil, pas seulement son socket. */
+    private val futures: MutableMap<String, Future<*>> = ConcurrentHashMap()
 
     // Mêmes objets que `AppNav` : une seule session chiffrée, un seul cache.
     // Release : graine vide (aucun hôte par défaut) ; debug seul porte l'émulateur.
@@ -376,35 +390,75 @@ class VsnBridge(
         // (autre fil) et le travail réseau doit quand même être annulable.
         val cancellation = RequestCancellation()
         cancels[requestId] = cancellation
+        // #876 : IA/photo/profil sont des travaux LONGS. Leur époque est
+        // vérifiée avant l'envoi ET avant la livraison, et leur Future est
+        // annulé avec le reste à la déconnexion.
+        val work = if (method in EPOCH_GUARDED_READS) InFlight.start(requestId, epoch) else null
+        work?.onCancel { cancellation.cancel() }
         // #393 : le LLM part sur SA file (bornée) : deux appels LLM simultanés
         // ne prennent plus les fils des appels ordinaires.
-        executors.workerFor(method).execute {
-            try {
-                if (cancelled.contains(requestId)) return@execute
-                // #394 : TOUT échec natif — un `Error` compris — devient un
-                // REJET. Sans ce filet, l'`Error` tuait le fil du worker
-                // SANS `resolve` ni `reject` : la promesse JS pendait (pour
-                // `pairing.scanQr`, dont le délai JS est 0, elle pendait
-                // POUR TOUJOURS : chargement infini, sans message).
-                val failure = bridgeCallOutcome {
-                    val params = try {
-                        if (paramsJson.isBlank()) JSONObject() else JSONObject(paramsJson)
-                    } catch (_: org.json.JSONException) {
-                        throw BridgeFailure("bad_request", "Paramètres illisibles.")
+        val future = try {
+            executors.submit(method) {
+                try {
+                    if (cancelled.contains(requestId)) return@submit
+                    if (work != null && !work.canSend()) throw StaleSessionRead()
+                    // #394 : TOUT échec natif — un `Error` compris — devient un
+                    // REJET. Sans ce filet, l'`Error` tuait le fil du worker
+                    // SANS `resolve` ni `reject` : la promesse JS pendait (pour
+                    // `pairing.scanQr`, dont le délai JS est 0, elle pendait
+                    // POUR TOUJOURS : chargement infini, sans message).
+                    val failure = bridgeCallOutcome {
+                        val params = try {
+                            if (paramsJson.isBlank()) JSONObject() else JSONObject(paramsJson)
+                        } catch (_: org.json.JSONException) {
+                            throw BridgeFailure("bad_request", "Paramètres illisibles.")
+                        }
+                        // null = réponse différée (scan QR).
+                        RequestScope.with(cancellation) {
+                            val result = handle(requestId, method, params, epoch)
+                            if (result != null) {
+                                if (work != null && !work.canDeliver()) throw StaleSessionRead()
+                                deliver(requestId, method, epoch, result)
+                            }
+                        }
                     }
-                    // null = réponse différée (scan QR).
-                    RequestScope.with(cancellation) {
-                        val result = handle(requestId, method, params, epoch)
-                        if (result != null) deliver(requestId, method, epoch, result)
-                    }
+                    // Jamais le message brut : il peut nommer un hôte ou un compte.
+                    if (failure != null) reject(requestId, failure.code, failure.message)
+                } finally {
+                    InFlight.finish(requestId)
+                    inFlight.remove(requestId)
+                    cancelled.remove(requestId)
+                    cancels.remove(requestId)
+                    futures.remove(requestId)
                 }
-                // Jamais le message brut : il peut nommer un hôte ou un compte.
-                if (failure != null) reject(requestId, failure.code, failure.message)
-            } finally {
-                inFlight.remove(requestId)
-                cancelled.remove(requestId)
-                cancels.remove(requestId)
             }
+        } catch (t: Throwable) {
+            InFlight.finish(requestId)
+            cancels.remove(requestId)
+            throw t
+        }
+        publishFuture(requestId, future)
+        work?.onCancel { future.cancel(true) }
+    }
+
+    /** Publie un Future sans laisser d'entrée fantôme s'il est déjà terminé. */
+    private fun publishFuture(requestId: String, future: Future<*>) {
+        futures[requestId] = future
+        if (future.isDone) futures.remove(requestId, future)
+    }
+
+    /**
+     * Coupe les travaux de la session qui part : aucun résultat ne sera livré
+     * (l'époque a changé) et aucun fil ne continue jusqu'à son plafond.
+     * [except] = l'appel de logout lui-même, qui doit pouvoir répondre.
+     */
+    private fun cancelInFlightWork(except: String?) {
+        InFlight.cancelAll(except)
+        for ((id, future) in futures) {
+            if (id != except) future.cancel(true)
+        }
+        for ((id, cancellation) in cancels) {
+            if (id != except) cancellation.cancel()
         }
     }
 
@@ -433,7 +487,10 @@ class VsnBridge(
 
     /** Fin de vie de la WebView : aucun fil ne survit à la rotation. */
     fun close() {
+        InFlight.cancelAll()
         for (cancellation in cancels.values) cancellation.cancel()
+        for (future in futures.values) future.cancel(true)
+        futures.clear()
         photos.cancel()
         executors.shutdown()
     }
@@ -468,14 +525,14 @@ class VsnBridge(
             "app.backState" -> setBackState(p)
             "session.status" -> sessionStatus()
             "session.restore" -> restoreSession()
-            "session.logout" -> logout()
+            "session.logout" -> logout(requestId)
             "session.accounts" -> JSONObject().put("count", accounts.count())
             "pairing.scanQr" -> {
                 scanQr(requestId)
                 null
             }
-            "pairing.pair" -> pair(p)
-            "pairing.pairDemo" -> pairDemo()
+            "pairing.pair" -> pair(p, requestId)
+            "pairing.pairDemo" -> pairDemo(requestId)
             "pairing.cancel" -> cancelPairing()
             "resources.cached" -> resourceCached(p, epoch)
             "resources.load" -> resourceLoad(p, epoch)
@@ -506,7 +563,7 @@ class VsnBridge(
             "lessons.save" -> lessonsSave(p, epoch)
             "lessons.delete" -> lessonsDelete(p, epoch)
             "lessons.setManual" -> lessonsSetManual(p)
-            "lessons.addPhoto" -> lessonsAddPhoto(p)
+            "lessons.addPhoto" -> lessonsAddPhoto(p, epoch)
             "llm.status" -> JSONObject().put("configured", llmKeys.isConfigured())
             "llm.saveKey" -> saveLlmKey(p)
             "llm.forgetKey" -> {
@@ -516,9 +573,9 @@ class VsnBridge(
             "llm.askHomework" -> askHomework(p, epoch, requestId)
             "llm.solvePhoto" -> solveHomeworkPhoto(p, epoch, requestId)
             "llm.generateRevision" -> generateRevision(p, epoch)
-            "llm.teacherTurn" -> teacherTurn(p)
+            "llm.teacherTurn" -> teacherTurn(p, epoch)
             "exercises.propose" -> exercisesPropose(p)
-            "exercises.help" -> exercisesHelp(p)
+            "exercises.help" -> exercisesHelp(p, epoch)
             "teacher.load" -> teacherLoad(epoch)
             "teacher.save" -> teacherSave(p, epoch)
             "teacher.delete" -> teacherDelete(epoch)
@@ -633,7 +690,10 @@ class VsnBridge(
      */
     private fun storageState(): String = SecureStorage.health().name.lowercase()
 
-    private fun logout(): JSONObject {
+    private fun logout(requestId: String): JSONObject {
+        // Le compte s'en va : tout travail long encore en vol est coupé AVANT
+        // la purge, sinon une réponse du modèle arriverait après la déconnexion.
+        cancelInFlightWork(except = requestId)
         sessionReady = false
         cachedProfile = null
         qrHandles.clear()
@@ -663,6 +723,7 @@ class VsnBridge(
      * la session n'existe plus, `session.status` ne doit pas dire « restaurée ».
      */
     private fun onSessionRejected() {
+        cancelInFlightWork(except = null)
         sessionReady = false
         cachedProfile = null
         qrHandles.clear()
@@ -843,13 +904,16 @@ class VsnBridge(
         resolve(pending.requestId, JSONObject().put("ok", false).put("message", LOCAL_NETWORK_UNAVAILABLE))
     }
 
-    private fun pair(p: JSONObject): JSONObject {
+    private fun pair(p: JSONObject, requestId: String): JSONObject {
         val handle = bounded(p.string("handle"), QrHandle.HANDLE_MAX_CHARS)
         if (handle.isEmpty()) throw BridgeFailure("bad_request", "QR et PIN requis.")
         val pin = bounded(p.string("pin"), PairingRepository.PIN_MAX_CHARS)
         if (pin.isEmpty()) throw BridgeFailure("bad_request", "PIN requis.")
         val qr = qrHandles.lookup(handle)
             ?: throw BridgeFailure("bad_request", "QR expiré : rescane le code de l'établissement.")
+        // Une bascule remplace la session : le travail de l'ancienne n'a plus
+        // le droit de livrer, et son fil ne continue pas pendant l'authentification.
+        cancelInFlightWork(except = requestId)
         // Même verrou que la restauration : un appairage et un restore
         // concurrents écriraient deux sessions dans le même store.
         val result = synchronized(restoreLock) {
@@ -887,12 +951,13 @@ class VsnBridge(
      * phrase choisie par lui — jamais le message brut d'une exception, qui
      * pourrait nommer l'hôte (I10, #396).
      */
-    private fun pairDemo(): JSONObject {
+    private fun pairDemo(requestId: String): JSONObject {
         // DAT-06 : la release ne peut pas ouvrir ce compte. Le bouton web est
         // déjà masqué par `app.ready`, mais le pont est l'autorité.
         if (!BuildConfig.DEMO_MODE) {
             throw BridgeFailure("unavailable", "Connexion démo disponible uniquement en build de développement.")
         }
+        cancelInFlightWork(except = requestId)
         val result = synchronized(restoreLock) {
             pairing.pairDemoBlocking()
         }
@@ -957,6 +1022,22 @@ class VsnBridge(
             }
         }
         return null
+    }
+
+    /** Refuse un travail dont la session a changé AVANT l'appel réseau. */
+    internal fun ensureCurrent(epoch: Long) {
+        if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
+    }
+
+    /**
+     * Client LLM du travail en cours : époque vérifiée avant l'envoi et client
+     * annulé avec l'appel (logout, abandon, timeout) pour couper le socket.
+     */
+    internal fun llmForCall(epoch: Long, timeoutMs: Long): OpenRouterLlm {
+        ensureCurrent(epoch)
+        val llm = OpenRouterLlm(timeoutMs = timeoutMs)
+        RequestScope.current()?.onCancel(llm::cancel)
+        return llm
     }
 
     /** Attend un callback de dépôt (toujours livré sur le thread principal). */
