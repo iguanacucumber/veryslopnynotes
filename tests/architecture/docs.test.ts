@@ -717,6 +717,74 @@ describe("liens et doublons des docs", () => {
   });
 });
 
+describe("modèle de menace", () => {
+  const FILE = "docs/THREAT-MODEL.md";
+  // Les cinq menaces nommées par #904 : un identifiant stable, un titre lisible.
+  const THREATS = [
+    { id: "T1", titre: "Appareil partagé" },
+    { id: "T2", titre: "Charge scolaire malveillante" },
+    { id: "T3", titre: "Dépendance compromise" },
+    { id: "T4", titre: "Scraper local" },
+    { id: "T5", titre: "Clé perdue" },
+  ] as const;
+  const SECTIONS = [
+    "Actifs",
+    "Attaquant",
+    "Point d'entrée",
+    "Mitigations existantes",
+    "Risque résiduel",
+    "Preuves",
+  ];
+  const exists = (path: string) => {
+    try {
+      statSync(join(ROOT, path));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const block = (text: string, id: string) => {
+    const start = text.indexOf(`## ${id} — `);
+    if (start === -1) return "";
+    const end = text.indexOf("\n## ", start + 1);
+    return text.slice(start, end === -1 ? undefined : end);
+  };
+
+  test("le fichier existe et couvre les cinq menaces nommées", () => {
+    expect({ fichier: FILE, existe: exists(FILE) }).toEqual({ fichier: FILE, existe: true });
+    const text = read(FILE);
+    for (const { id, titre } of THREATS) {
+      expect({ id, titre, présent: new RegExp(`^## ${id} — ${titre}$`, "m").test(text) }).toEqual({
+        id,
+        titre,
+        présent: true,
+      });
+    }
+  });
+
+  test("chaque menace porte actifs, attaquant, entrée, mitigations, risque et preuve", () => {
+    const text = read(FILE);
+    for (const { id } of THREATS) {
+      const body = block(text, id);
+      expect({ id, nonVide: body.length > 0 }).toEqual({ id, nonVide: true });
+      for (const section of SECTIONS) {
+        expect({ id, section, présent: body.includes(`**${section}**`) }).toEqual({
+          id,
+          section,
+          présent: true,
+        });
+      }
+    }
+  });
+
+  test("ses liens relatifs résolvent depuis le fichier", () => {
+    const text = read(FILE);
+    const links = relativeLinks(text);
+    expect(links.length).toBeGreaterThan(0);
+    expect({ bad: brokenDocLinks([{ path: FILE, text }], exists) }).toEqual({ bad: [] });
+  });
+});
+
 describe("ADR", () => {
   test("chaque ADR déclare un statut", () => {
     const dir = join(ROOT, "docs/adr");

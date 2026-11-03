@@ -23,6 +23,12 @@ Hors périmètre : une faille propre à Pronote ou à OpenRouter, une
 configuration de l'établissement, et un déploiement du scraper fait par un
 opérateur hors des règles ci-dessous.
 
+## Modèle de menace
+
+Les menaces, leurs mitigations et leurs preuves sont détaillées dans
+[`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) : appareil partagé, charge scolaire
+malveillante, dépendance compromise, scraper local et clé perdue.
+
 ## Règles que le dépôt tient
 
 - **Aucun secret dans le dépôt.** Pas de clé, de session, de mot de passe, de
