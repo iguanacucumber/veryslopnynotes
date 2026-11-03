@@ -46,7 +46,9 @@ dépôt est facultatif : il ne sert qu'au scraper de manuels.
 Prérequis : **Bun 1.4.4** ; pour l'APK, **JDK 17–21** + **SDK Android 37** ;
 pour la parité TS ↔ Kotlin, **`kotlinc`** et un `java` dans le `PATH` — sans
 eux `make check` **échoue** (un gate vert sans Kotlin exécuté est un faux
-vert ; `make check-fast` garde le saut bruyant, pour l'itération).
+vert ; `make check-fast` saute la compilation Android et l'audit réseau, mais
+exécute la parité quand l'outillage est là — boucle interne, pas une preuve
+avant PR).
 
 ```bash
 bun install

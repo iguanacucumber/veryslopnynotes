@@ -1,12 +1,11 @@
 # BUILD.md — comment le gate est construit et pourquoi
 
-Détail du `Makefile` et de `check.ts` ; `AGENTS.md` reste court.
+Détail du `Makefile` et de `check.ts`.
 
 ## `make check` — le gate de merge (9 étapes)
 
-Toutes les étapes tournent en parallèle (`check.ts`) ; seul goulot : le CPU
-(16 cœurs). Chaque étape est une cible `make -s` : une recette, jamais
-dupliquée.
+Toutes les étapes tournent en parallèle (`check.ts`) ; seul goulot : le CPU.
+Chaque étape est une cible `make -s` : une recette, jamais dupliquée.
 
 | Étape | Ce qu'elle vérifie |
 |---|---|
@@ -47,8 +46,9 @@ l'empreinte des **sources de production**.
 
 ### `make check-fast`
 
-Tout sauf `android-compile` et `audit` (réseau) (~3,2 s à chaud) ; `architecture` teste `buildWebUi`
-sur vrai Gradle. Usage interne, jamais avant une PR.
+Sans `android-compile` ni `audit` (réseau), mais la parité TS ↔ Kotlin tourne
+si `kotlinc`/`java` sont là et `architecture` teste `buildWebUi` sur vrai
+Gradle : durée variable, jamais une preuve avant PR.
 
 ## Autres cibles `make`
 

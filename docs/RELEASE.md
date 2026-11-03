@@ -54,9 +54,9 @@ build targets fail instead.
 make build   # check-secrets + docker build (skip si daemon absent)
 ```
 
-- Base `oven/bun:1.4.4` exacte (corrige CVE-2026-111497, Brotli). Digest :
-  `docker pull oven/bun:1.4.4`, figer
-  `FROM oven/bun:1.4.4@sha256:<digest>` (daemon absent en local).
+- Base `oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d`
+  (index multi-arch ; corrige CVE-2026-111497). Renouveler : `docker pull`,
+  relever `RepoDigests` et reporter tag + digest dans `Dockerfile.server`.
 - Install strict `bun install --frozen-lockfile` (aucun fallback).
 - Chromium installé AU BUILD : `bunx playwright install --with-deps chromium`
   (le paquet `playwright` n'a aucun script d'installation : sans cette ligne,

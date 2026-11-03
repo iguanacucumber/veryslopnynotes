@@ -196,7 +196,7 @@ describe("check.ts : pilote de `make check`", () => {
       "saute `android-compile` et `audit`",
     );
     expect(await Bun.file(join(ROOT, "docs", "architecture", "BUILD.md")).text()).toContain(
-      "Tout sauf `android-compile` et `audit`",
+      "Sans `android-compile` ni `audit`",
     );
     // Le GATE (la phase 1, `check-run`) : l'opt-in est VIDE, donc même un
     // shell qui exporterait CHECK_HARNESS=1 ne peut pas rétrécir le gate.
