@@ -25,9 +25,11 @@ import fr.veryslopnynotes.data.AccountIdentity
 import fr.veryslopnynotes.data.AccountStore
 import fr.veryslopnynotes.data.AssignmentsRepository
 import fr.veryslopnynotes.data.CachePolicy
+import fr.veryslopnynotes.data.ClientQueue
 import fr.veryslopnynotes.data.DeviceAuth
 import fr.veryslopnynotes.data.DiscussionsRepository
 import fr.veryslopnynotes.data.FileCacheStore
+import fr.veryslopnynotes.data.FileCooldownStore
 import fr.veryslopnynotes.data.FileRevisionStore
 import fr.veryslopnynotes.data.FileSubjectPrefsStore
 import fr.veryslopnynotes.data.FileTeacherChatStore
@@ -158,6 +160,9 @@ class VsnBridge(
     // d'un secret ». Le journal ne porte QUE l'état — ni clé, ni jeton, ni
     // chemin, ni hôte. L'interface, elle, affiche le message à l'utilisateur.
     init {
+        // Cooldown PERSISTANT : après un 429/G=25, un redémarrage ne doit pas
+        // relancer une requête avant la fin de la fenêtre.
+        ClientQueue.attachCooldown(FileCooldownStore(File(ctx.filesDir, "school-cooldown")))
         if (SecureStorage.health() == StoreHealth.UNAVAILABLE) {
             Log.w(TAG, "Stockage chiffré indisponible : les identifiants vivent en mémoire, ils ne sont pas conservés.")
         }

@@ -32,7 +32,7 @@ invariant, détail par thème. Format, ajout et retrait :
 | I16 | Une donnée n'est servie qu'à son compte et purgée avec lui (cache, offline, téléchargements, session morte). | `tests/unit/kotlin-cache-scope.test.ts` | [`I16`](invariants/donnees.md#i16) |
 | I17 | Un seul rafraîchissement de session à la fois ; refresh seulement sur 401/G=10, écriture jamais rejouée, rate-limit ≠ session morte. | `tests/unit/kotlin-auth-refresh.test.ts` | [`I17`](invariants/donnees.md#i17) |
 | I18 | Keystore indisponible = état `UNAVAILABLE` signalé, jamais un secret en clair. | `tests/unit/kotlin-store-health.test.ts` | [`I18`](invariants/donnees.md#i18) |
-| I19 | Le job et l'interface lisent par la même file ; session restaurée d'abord, résultat toujours livré. | `tests/architecture/shared-queue.test.ts` | [`I19`](invariants/donnees.md#i19) |
+| I19 | Le job et l'interface lisent par la même file cadencée ; session restaurée d'abord, cooldown persistant, résultat toujours livré. | `tests/architecture/shared-queue.test.ts` | [`I19`](invariants/donnees.md#i19) |
 | I22 | Le gate ne peut pas être neutralisé par l'environnement. | `tests/unit/check-runner.test.ts` | [`I22`](invariants/frontieres.md#i22) |
 | I25 | Une réponse périmée n'écrit pas dans l'écran : payload lié à sa requête, réponse tardive ignorée. | `tests/web/grades.test.ts` | [`I25`](invariants/ia.md#i25) |
 | I31 | Un enregistrement publié = une ligne (clé kind + id). | `tests/unit/kotlin-payload-dedupe.test.ts` | [`I31`](invariants/donnees.md#i31) |

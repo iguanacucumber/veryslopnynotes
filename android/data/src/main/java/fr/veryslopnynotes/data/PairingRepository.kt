@@ -64,52 +64,59 @@ class PairingRepository(
 ) {
     /** Le `uuid` identifie CET appareil (2e tour 2FA), persisté avec la session. */
     fun pairBlocking(input: PairingInput, deviceName: String = "", uuid: String = newUuid()): PairingResult =
-        // Même verrou que la restauration : deux `tokenLogin` en parallèle sur
-        // le même compte = erreur 25, et l'établissement LIMITE le compte.
-        // Ordre pont -> dépôt, jamais l'inverse.
-        SessionGate.serialized {
-            val qr = input.qr
-            val pin = input.pin.trim()
-            if (qr == null || pin.isEmpty()) {
-                return@serialized PairingResult.Err("bad_request", "QR de l'établissement et son PIN requis")
-            }
-            if (pin.length > PIN_MAX_CHARS) {
-                return@serialized PairingResult.Err("bad_request", "PIN refusé : vérifie le code défini dans ton compte établissement.")
-            }
-            val schoolUrl = qr.url
-            val client = try {
-                Client.qrcodeLogin(
-                    QrCode(login = qr.login, jeton = qr.jeton, url = schoolUrl),
-                    pin,
-                    uuid,
-                    QrLoginOptions(
-                        deviceName = deviceName.trim().ifEmpty { null },
-                        // Mémo des lectures identiques (60 s) : moins d'appels.
-                        memoizeReads = true,
-                    ),
-                )
-            } catch (e: IllegalArgumentException) {
-                // URL du QR malformée : rescanner est le seul geste utile.
-                return@serialized PairingResult.Err("bad_request", "QR sans adresse d'établissement valide : rescane le code affiché par son application.")
-            } catch (e: Exception) {
-                return@serialized failure(e)
-            }
-            publish(client, SessionMode.JETON, schoolUrl)
+        // Même file ET même verrou que la restauration : deux `tokenLogin` en
+        // parallèle sur le même compte = erreur 25, et l'établissement LIMITE
+        // le compte. Ordre unique : file -> session.
+        queuedPairing("auth|pair|") { SessionGate.serialized { pairLocked(input, deviceName, uuid) } }
+
+    /** Corps de l'appairage, exécuté DANS la file et sous le verrou de session. */
+    private fun pairLocked(input: PairingInput, deviceName: String, uuid: String): PairingResult {
+        val qr = input.qr
+        val pin = input.pin.trim()
+        if (qr == null || pin.isEmpty()) {
+            return PairingResult.Err("bad_request", "QR de l'établissement et son PIN requis")
         }
+        if (pin.length > PIN_MAX_CHARS) {
+            return PairingResult.Err("bad_request", "PIN refusé : vérifie le code défini dans ton compte établissement.")
+        }
+        val schoolUrl = qr.url
+        val client = try {
+            Client.qrcodeLogin(
+                QrCode(login = qr.login, jeton = qr.jeton, url = schoolUrl),
+                pin,
+                uuid,
+                QrLoginOptions(
+                    deviceName = deviceName.trim().ifEmpty { null },
+                    // Mémo des lectures identiques (60 s) : moins d'appels.
+                    memoizeReads = true,
+                ),
+            )
+        } catch (e: IllegalArgumentException) {
+            // URL du QR malformée : rescanner est le seul geste utile.
+            return PairingResult.Err("bad_request", "QR sans adresse d'établissement valide : rescane le code affiché par son application.")
+        } catch (e: Exception) {
+            return failure(e)
+        }
+        return publish(client, SessionMode.JETON, schoolUrl)
+    }
 
     /**
      * Connexion à l'établissement de DÉMONSTRATION : compte public, ouvert par
-     * identifiant (pas de jeton). Même verrou : une seule session à la fois.
+     * identifiant (pas de jeton). Même file et même verrou : une seule session
+     * à la fois.
      */
-    fun pairDemoBlocking(): PairingResult = SessionGate.serialized {
+    fun pairDemoBlocking(): PairingResult =
+        queuedPairing("auth|demo|") { SessionGate.serialized { demoLocked() } }
+
+    private fun demoLocked(): PairingResult {
         val client = try {
             Client.demoLogin()
         } catch (_: Exception) {
             // Un seul code pour la démo, et jamais le message brut (il peut
             // nommer l'hôte).
-            return@serialized PairingResult.Err("demo_failed", "Connexion à la démo impossible : réessaie dans un instant.")
+            return PairingResult.Err("demo_failed", "Connexion à la démo impossible : réessaie dans un instant.")
         }
-        publish(client, SessionMode.IDENTIFIANT)
+        return publish(client, SessionMode.IDENTIFIANT)
     }
 
     /**
@@ -204,14 +211,16 @@ class PairingRepository(
      * appelant attend et trouve la session en RAM. Session morte = store vidé
      * et cache purgé ; réseau KO = store gardé.
      */
-    fun restoreBlocking(): RestoreResult = SessionGate.serialized {
+    fun restoreBlocking(): RestoreResult = queuedRestore { SessionGate.serialized { restoreLocked() } }
+
+    private fun restoreLocked(): RestoreResult {
         val stored = try {
             sessions.load()
         } catch (_: Exception) {
             null
-        } ?: return@serialized RestoreResult.NoSession
-        if (provider() != null) return@serialized RestoreResult.Restored
-        try {
+        } ?: return RestoreResult.NoSession
+        if (provider() != null) return RestoreResult.Restored
+        return try {
             val client = if (SessionMode.of(stored.mode) == SessionMode.IDENTIFIANT) {
                 // Démo : couple identifiant / mot de passe public, pas de jeton.
                 Client.login(
@@ -256,6 +265,40 @@ class PairingRepository(
     }
 
     /**
+     * Toute ouverture de session passe par LA file unique : elle est cadencée
+     * (seau à jetons, cooldown persistant) comme les lectures. Un travail qui
+     * jette livre une cause typée, jamais une attente sans fin.
+     */
+    private fun queuedPairing(key: String, block: () -> PairingResult): PairingResult {
+        val outcome = ClientQueue.submitAndAwait<PairingResult>(key, AUTH_TIMEOUT_MS) { block() }
+            ?: return PairingResult.Err(
+                PairingFailureCause.SCHOOL_UNREACHABLE.code,
+                PairingFailureCause.SCHOOL_UNREACHABLE.message,
+            )
+        return when (outcome) {
+            is QueueOutcome.Ok -> outcome.value
+            is QueueOutcome.Failed -> failureOr(outcome.cause)
+        }
+    }
+
+    /** Une restauration interrompue garde le store : jamais une session effacée. */
+    private fun queuedRestore(block: () -> RestoreResult): RestoreResult {
+        val outcome = ClientQueue.submitAndAwait<RestoreResult>("auth|restore|", AUTH_TIMEOUT_MS) { block() }
+            ?: return RestoreResult.Offline
+        return when (outcome) {
+            is QueueOutcome.Ok -> outcome.value
+            is QueueOutcome.Failed -> RestoreResult.Offline
+        }
+    }
+
+    private fun failureOr(cause: Throwable): PairingResult.Err =
+        if (cause is Exception) {
+            failure(cause)
+        } else {
+            PairingResult.Err("internal", "Appairage impossible : réessaie.")
+        }
+
+    /**
      * Déconnexion sous le MÊME verrou que l'appairage et la restauration : une
      * restauration EN VOL ne peut plus publier l'ancien client après la purge.
      * [onPurged] efface l'état qui n'appartient pas au dépôt (liste de comptes)
@@ -291,6 +334,13 @@ class PairingRepository(
     companion object {
         /** Miroir de SETUP_PIN_MAX_CHARS (shared/contracts/api.ts). */
         const val PIN_MAX_CHARS = 64
+
+        /**
+         * Attente maximale d'une ouverture de session dans la file. Au-delà,
+         * l'appelant reçoit un échec typé et peut réessayer : aucune promesse
+         * du pont ne reste pendante.
+         */
+        const val AUTH_TIMEOUT_MS = 180_000L
 
         fun newUuid(): String = UUID.randomUUID().toString()
     }
