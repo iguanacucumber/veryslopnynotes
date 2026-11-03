@@ -7,9 +7,12 @@
 #     n'est pas activé, l'action ne peut pas lire l'API : le job se replie sur
 #     `bun audit --audit-level=high`, déclenché seulement quand une PR touche un
 #     manifeste. Le repli est plus strict (tout le graphe), jamais plus laxiste ;
-#   - Trivy scanne l'arbre (lockfile bun, Dockerfile) puis l'IMAGE construite.
-#     Le binaire est épinglé et vérifié par SHA-256, et un cache indisponible ne
-#     change pas le verdict (`continue-on-error` sur le cache SEULEMENT) ;
+#   - le job `server-image` construit `Dockerfile.server`, scanne l'IMAGE avec
+#     Trivy, puis DÉMARRE ce conteneur derrière TLS + jeton et attend que
+#     `/v1/ready` réponde ET que le HEALTHCHECK passe : une image qui build et
+#     se scanne mais ne sert rien n'est pas livrable (#920). Le binaire Trivy
+#     est épinglé et vérifié par SHA-256, et un cache indisponible ne change pas
+#     le verdict (`continue-on-error` sur le cache SEULEMENT) ;
 #   - les empreintes Gradle vivent dans `android/gradle/verification-metadata.xml`
 #     et sont appliquées par le `android-compile` du gate : un artefact inconnu
 #     fait échouer `make check`, pas seulement un job séparé.
@@ -92,9 +95,9 @@ jobs:
           printf 'manifestes modifiés :\n%s\n' "$changed"
           bun audit --audit-level=high
 
-  trivy:
+  server-image:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -167,6 +170,107 @@ jobs:
             --exit-code 1 \
             --no-progress \
             veryslopnynotes-server:scan | tee "$RUNNER_TEMP/trivy-image.txt"
+
+      # Le certificat ne protège que le runner : jetable, généré ici, jamais
+      # commité. Il est lisible par vsn (uid 10001) car le conteneur tourne
+      # non-root ; la clé ne quitte pas $RUNNER_TEMP.
+      - name: TLS de test
+        run: |
+          set -euo pipefail
+          tls="$RUNNER_TEMP/tls"
+          mkdir -p "$tls"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout "$tls/key.pem" -out "$tls/cert.pem" \
+            -subj "/CN=127.0.0.1" -addext "subjectAltName=IP:127.0.0.1" \
+            >/dev/null 2>&1
+          chmod 644 "$tls/cert.pem" "$tls/key.pem"
+
+      # Même commande que `server/README.md`, à l'image scannée près. Hors
+      # loopback (0.0.0.0 pour publier le port) le service exige ALLOW_PUBLIC=1
+      # ET un jeton Bearer ; le jeton ci-dessous est une valeur de TEST, pas un
+      # secret : il ne protège que cette boucle locale et meurt avec le run.
+      - name: Conteneur serveur
+        env:
+          SCRAPER_TOKEN: ci-server-image-smoke
+        run: |
+          set -euo pipefail
+          docker run -d --name vsn-server-image \
+            -p 127.0.0.1:3000:3000 \
+            --read-only --cap-drop=ALL --security-opt no-new-privileges \
+            --security-opt seccomp=./server/chromium-seccomp.json \
+            --memory=1g --memory-swap=1g --cpus=1 --pids-limit=256 --stop-timeout=40 \
+            --tmpfs /tmp --tmpfs /home/vsn:rw,nosuid,nodev,size=64m,mode=1777 \
+            -v vsn-ci-jar:/app/playwright/.auth \
+            -e HOST=0.0.0.0 -e ALLOW_PUBLIC=1 -e SCRAPER_TOKEN \
+            -e TLS_CERT_FILE=/tls/cert.pem -e TLS_KEY_FILE=/tls/key.pem \
+            -v "$RUNNER_TEMP/tls:/tls:ro" \
+            veryslopnynotes-server:scan
+
+      # Disponibilité RÉELLE : le jar est inscriptible et Chromium installé
+      # (Dockerfile). Sans jeton la route doit refuser (I8) : un 200 anonyme
+      # serait une régression de sécurité, pas un succès de smoke.
+      - name: Disponibilité
+        env:
+          SCRAPER_TOKEN: ci-server-image-smoke
+        run: |
+          set -euo pipefail
+          url=https://127.0.0.1:3000/v1/ready
+          deadline=$((SECONDS + 120))
+          until curl -fsS --insecure --max-time 5 \
+            -H "Authorization: Bearer $SCRAPER_TOKEN" "$url" >/dev/null; do
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::/v1/ready ne répond pas après 120 s"
+              docker logs vsn-server-image || true
+              exit 1
+            fi
+            sleep 2
+          done
+          code=$(curl -sS --insecure --max-time 5 -o /dev/null -w '%{http_code}' "$url")
+          if [ "$code" != "401" ]; then
+            echo "::error::/v1/ready sans jeton = $code (401 attendu, I8)"
+            exit 1
+          fi
+          curl -fsS --insecure --max-time 5 \
+            -H "Authorization: Bearer $SCRAPER_TOKEN" \
+            https://127.0.0.1:3000/v1/health >/dev/null
+          echo "disponibilité : /v1/ready 200 avec jeton, 401 sans jeton"
+
+      # Le HEALTHCHECK de l'image est la preuve demandée : on attend le verdict
+      # de Docker, pas seulement une réponse HTTP. `unhealthy` = échec immédiat.
+      - name: Santé du conteneur
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 90))
+          while :; do
+            status=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}absent{{end}}' vsn-server-image)
+            if [ "$status" = "healthy" ]; then
+              echo "santé : healthy"
+              exit 0
+            fi
+            if [ "$status" != "starting" ]; then
+              echo "::error::santé du conteneur = $status"
+              docker inspect --format '{{json .State.Health}}' vsn-server-image || true
+              docker logs vsn-server-image || true
+              exit 1
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::santé toujours « starting » après 90 s"
+              docker inspect --format '{{json .State.Health}}' vsn-server-image || true
+              docker logs vsn-server-image || true
+              exit 1
+            fi
+            sleep 3
+          done
+
+      - name: Journaux du conteneur
+        if: always()
+        run: docker logs vsn-server-image 2>&1 || true
+
+      - name: Nettoyage du conteneur
+        if: always()
+        run: |
+          docker rm -f vsn-server-image 2>/dev/null || true
+          docker volume rm vsn-ci-jar 2>/dev/null || true
 
       - name: Rapports Trivy
         if: always()
