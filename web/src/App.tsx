@@ -12,6 +12,7 @@ import GradesRoute from "./routes/grades";
 import TasksRoute from "./routes/tasks";
 import ProfileRoute from "./routes/profile";
 import SettingsRoute from "./routes/settings";
+import HelpRoute from "./routes/help";
 import PairingRoute from "./routes/pairing";
 import MessagesRoute from "./routes/messages";
 import AttendanceRoute from "./routes/attendance";
@@ -123,6 +124,7 @@ export function App() {
               <Route path="/tasks" element={<TasksRoute />} />
               <Route path="/profile" element={<ProfileRoute />} />
               <Route path="/settings" element={<SettingsRoute />} />
+              <Route path="/help" element={<HelpRoute />} />
               <Route path="/messages" element={<MessagesRoute />} />
               <Route path="/messages/new" element={<MessagesRoute />} />
               <Route path="/messages/:id" element={<MessagesRoute />} />

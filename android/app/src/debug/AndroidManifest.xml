@@ -26,6 +26,7 @@
                 <data android:host="tasks" />
                 <data android:host="profile" />
                 <data android:host="settings" />
+                <data android:host="help" />
                 <data android:host="news" />
                 <data android:host="canteen" />
                 <data android:host="attendance" />

@@ -40,7 +40,7 @@ usage() {
 usage : shot.sh <route> [--theme <t>] [--wait <secondes>] [--no-build]
 
   <route>               route de l'app : index, calendar, grades, tasks,
-                        profile, settings, news, canteen, attendance,
+                        profile, settings, help, news, canteen, attendance,
                         messages, pairing, alerts, revision-sheets,
                         course-notes, prof, sanctions.
   --theme <dark|light|system>
@@ -340,6 +340,7 @@ grades|Notes|Matières;Aucune note sur cette période;Aucune moyenne sur cette p
 tasks|Tâches|Devoirs;Aucun devoir
 profile|Profil|Se déconnecter;Compte;Ressources
 settings|Réglages|Apparence;Serveur;Sécurité
+help|Aide|Trouver le QR;Dépannage;Clé OpenRouter, coût et âge
 news|Actualités|Dernières actualités en cache;Autres actualités;Aucune actualité;Aucune donnée en cache
 canteen|Cantine|Menus de la semaine;Aucun menu publié cette semaine
 attendance|Vie scolaire|Absences et retards;Heures manquées;Aucune absence ni retard;Aucune donnée en cache

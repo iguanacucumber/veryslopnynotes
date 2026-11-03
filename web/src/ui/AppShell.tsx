@@ -47,6 +47,7 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   "/grades": { title: "Notes", tab: true },
   "/profile": { title: "Profil", back: "/" },
   "/settings": { title: "Réglages", back: "/profile" },
+  "/help": { title: "Aide", back: "/settings" },
   "/news": { title: "Actualités", back: "/" },
   "/canteen": { title: "Cantine", back: "/" },
   "/attendance": { title: "Vie scolaire", back: "/profile" },
