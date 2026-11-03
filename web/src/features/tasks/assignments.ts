@@ -504,6 +504,12 @@ export function assignmentSections(
   return sections;
 }
 
+/** Nombre de devoirs en retard, lu dans les sections RENDUES : le badge et la
+ *  liste ne peuvent pas diverger. */
+export function overdueCount(sections: readonly AssignmentSection[]): number {
+  return sections.find((section) => section.id === "overdue")?.items.length ?? 0;
+}
+
 /** Jour civil `AAAA-MM-JJ` d'une échéance, à l'heure de Paris.
  *
  *  Le natif publie un INSTANT (`dueDate` avec offset) et borne ses semaines en

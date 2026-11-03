@@ -9,6 +9,7 @@
    L'anneau est décoratif ; la phrase porte le statut pour les lecteurs. */
 .tasks-summary {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 12px;
