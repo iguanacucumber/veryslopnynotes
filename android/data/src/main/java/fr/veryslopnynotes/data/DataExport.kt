@@ -2,17 +2,19 @@ package fr.veryslopnynotes.data
 
 import fr.veryslopnynotes.core.LessonNote
 import fr.veryslopnynotes.core.LessonNotes
+import fr.veryslopnynotes.core.RevisionSheet
 import fr.veryslopnynotes.core.TeacherChat
 import fr.veryslopnynotes.core.TeacherChatMessage
 import fr.veryslopnynotes.core.TeacherChatSourceMeta
 import fr.veryslopnynotes.core.TeacherThread
+import fr.veryslopnynotes.core.isRevisionSheetValid
 import fr.veryslopnynotes.pronote.JVal
 import fr.veryslopnynotes.pronote.Json
 
 /**
  * Export local et portable de la donnée de l'utilisateur : notes (carnet),
- * cahier de cours, fil du professeur, manuel choisi, préférences matière et
- * état de lecture.
+ * cahier de cours, fiches de révision, fil du professeur, manuel choisi,
+ * préférences matière et état de lecture.
  *
  * Ce qui n'entre JAMAIS ici : jeton de session, clé du fournisseur, adresse du
  * serveur, identifiants. Aucun champ n'est recopié d'un store chiffré ; les
@@ -28,6 +30,7 @@ object DataExport {
     const val MAX_BYTES = 8 * 1024 * 1024
     const val MAX_GRADE_PAYLOADS = 32
     const val MAX_GRADES = 5_000
+    const val MAX_REVISION_SHEETS = 500
     const val MAX_MANUAL_DOCS = 8
     const val MAX_MANUAL_SUBJECTS = 32
     const val MAX_SUBJECTS = 64
@@ -107,6 +110,7 @@ data class ExportInput(
     val exportedAt: String,
     val grades: List<String> = emptyList(),
     val notes: List<LessonNote> = emptyList(),
+    val revisionSheets: List<RevisionSheet> = emptyList(),
     val teacherChat: TeacherThread = TeacherThread(),
     val manual: ManualSnapshot? = null,
     val subjects: List<SubjectSnapshot> = emptyList(),
@@ -118,6 +122,7 @@ data class ExportDocument(
     val manifest: ExportManifest,
     val grades: List<JVal.Obj>,
     val notes: List<LessonNote>,
+    val revisionSheets: List<RevisionSheet>,
     val teacherChat: TeacherThread,
     val manual: ManualSnapshot?,
     val subjects: List<SubjectSnapshot>,
@@ -154,6 +159,9 @@ fun buildDataExport(input: ExportInput): String {
     }
 
     val notes = input.notes.filter { LessonNote.isValid(it) }.take(LessonNotes.MAX_NOTES)
+    val revisionSheets = input.revisionSheets
+        .filter { isRevisionSheetValid(it) }
+        .take(DataExport.MAX_REVISION_SHEETS)
     val chat = TeacherChat.trimThread(input.teacherChat)
     val manual = input.manual?.let { sanitizeManual(it) }
     val subjects = input.subjects
@@ -169,6 +177,7 @@ fun buildDataExport(input: ExportInput): String {
     val sections = listOf(
         ExportSection("grades", grades.size, skipped),
         ExportSection("notes", notes.size),
+        ExportSection("revisionSheets", revisionSheets.size),
         ExportSection("teacherChat", chat.messages.size),
         ExportSection("manual", manual?.docs?.size ?: 0),
         ExportSection("subjectPrefs", subjects.size),
@@ -183,6 +192,7 @@ fun buildDataExport(input: ExportInput): String {
         "manifest" to manifestJson(manifest),
         "grades" to JVal.Arr(grades),
         "notes" to JVal.Arr(notes.map { noteJson(it) }),
+        "revisionSheets" to JVal.Arr(revisionSheets.map { revisionJson(it) }),
         "teacherChat" to chatJson(chat),
         "manual" to (manual?.let { manualJson(it) } ?: JVal.Null),
         "subjectPrefs" to JVal.Arr(subjects.map { subjectJson(it) }),
@@ -217,6 +227,13 @@ fun parseDataExport(raw: String): ExportDocument? = try {
 
     val chat = parseChat(root.fields["teacherChat"] as? JVal.Obj ?: return null) ?: return null
 
+    val revisionSheets = ArrayList<RevisionSheet>()
+    for (item in (root.fields["revisionSheets"] as? JVal.Arr)?.items.orEmpty()) {
+        val sheet = parseRevision(item as? JVal.Obj ?: return null) ?: return null
+        if (revisionSheets.size >= DataExport.MAX_REVISION_SHEETS) return null
+        revisionSheets.add(sheet)
+    }
+
     val manual = when (val node = root.fields["manual"]) {
         null, JVal.Null -> null
         is JVal.Obj -> parseManual(node) ?: return null
@@ -237,7 +254,7 @@ fun parseDataExport(raw: String): ExportDocument? = try {
         readIds.add(id)
     }
 
-    ExportDocument(exportedAt, manifest, grades, notes, chat, manual, subjects, readIds)
+    ExportDocument(exportedAt, manifest, grades, notes, revisionSheets, chat, manual, subjects, readIds)
 } catch (_: Exception) {
     null
 }
@@ -306,6 +323,27 @@ private fun parseNote(node: JVal.Obj): LessonNote? {
         createdAt = node.string("createdAt")?.trim().orEmpty(),
     )
     return note.takeIf { LessonNote.isValid(it) }
+}
+
+private fun parseRevision(node: JVal.Obj): RevisionSheet? {
+    val sources = ArrayList<String>()
+    for (item in (node.fields["sources"] as? JVal.Arr)?.items.orEmpty()) {
+        val value = (item as? JVal.Str)?.value?.trim().orEmpty()
+        if (value.isEmpty()) return null
+        sources.add(value)
+    }
+    val sheet = RevisionSheet(
+        id = node.string("id")?.trim().orEmpty(),
+        examId = node.string("examId")?.trim().orEmpty(),
+        subject = node.string("subject")?.trim().orEmpty(),
+        date = node.string("date")?.trim().orEmpty(),
+        title = node.string("title")?.trim().orEmpty(),
+        body = node.string("body")?.trim().orEmpty(),
+        sources = sources,
+        templateVersion = node.string("templateVersion")?.trim().orEmpty(),
+        createdAt = node.string("createdAt")?.trim().orEmpty(),
+    )
+    return sheet.takeIf { isRevisionSheetValid(it) }
 }
 
 private fun parseChat(node: JVal.Obj): TeacherThread? {
@@ -419,6 +457,18 @@ private fun noteJson(note: LessonNote): JVal.Obj = jobj(
     "title" to JVal.Str(note.title),
     "text" to JVal.Str(note.text),
     "createdAt" to JVal.Str(note.createdAt),
+)
+
+private fun revisionJson(sheet: RevisionSheet): JVal.Obj = jobj(
+    "id" to JVal.Str(sheet.id),
+    "examId" to JVal.Str(sheet.examId),
+    "subject" to JVal.Str(sheet.subject),
+    "date" to JVal.Str(sheet.date),
+    "title" to JVal.Str(sheet.title),
+    "body" to JVal.Str(sheet.body),
+    "sources" to JVal.Arr(sheet.sources.map { JVal.Str(it) }),
+    "templateVersion" to JVal.Str(sheet.templateVersion),
+    "createdAt" to JVal.Str(sheet.createdAt),
 )
 
 private fun chatJson(thread: TeacherThread): JVal.Obj = jobj(

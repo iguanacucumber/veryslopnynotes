@@ -41,8 +41,9 @@ export function DataExportCard() {
     <Card className="card--flat">
       <strong style={{ display: "block" }}>Exporter mes données</strong>
       <p className="tiny muted" style={{ margin: "2px 0 0" }}>
-        Un fichier JSON avec tes notes, ton cahier de cours, la discussion du professeur, le
-        manuel mémorisé, tes préférences de matières et l’état de lecture des actualités.
+        Un fichier JSON avec tes notes, ton cahier de cours, tes fiches de révision, la discussion
+        du professeur, le manuel mémorisé, tes préférences de matières et l’état de lecture des
+        actualités.
       </p>
       <p className="tiny muted" style={{ margin: "6px 0 0" }}>
         Le partage passe par Android ; l’application n’envoie rien au réseau. Le jeton de session,

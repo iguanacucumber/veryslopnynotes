@@ -7,6 +7,7 @@ import { IconTrash } from "../../ui/icons";
 import { useViewNavigate } from "../../ui/viewTransition";
 import { actionMessage } from "./action";
 import { DELETE_ALL_ARTIFACTS, failedArtifactLabels } from "./deleteAll";
+import { ExportBeforePurge, useExportBeforePurge } from "./ExportBeforePurge";
 
 /**
  * « Supprimer toutes mes données » : la confirmation liste l'inventaire
@@ -16,12 +17,14 @@ import { DELETE_ALL_ARTIFACTS, failedArtifactLabels } from "./deleteAll";
 export function DeleteAllCard() {
   const { refresh, notify, closeSession } = useApp();
   const navigate = useViewNavigate();
+  const exportState = useExportBeforePurge();
   const [ask, setAsk] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<string[]>([]);
   const [error, setError] = useState("");
 
   async function removeAll(): Promise<void> {
+    if (exportState.exporting) return;
     setBusy(true);
     setFailed([]);
     setError("");
@@ -55,6 +58,7 @@ export function DeleteAllCard() {
           onClick={() => {
             setFailed([]);
             setError("");
+            exportState.reset();
             setAsk(true);
           }}
         />
@@ -82,7 +86,7 @@ export function DeleteAllCard() {
             <button
               type="button"
               className="btn btn--danger btn--small"
-              disabled={busy}
+              disabled={busy || exportState.exporting}
               onClick={() => void removeAll()}
             >
               {busy ? "Suppression…" : "Tout supprimer"}
@@ -90,6 +94,7 @@ export function DeleteAllCard() {
           </>
         }
       >
+        <ExportBeforePurge state={exportState} disabled={busy} />
         <ul className="delete-all__artifacts">
           {DELETE_ALL_ARTIFACTS.map((artifact) => (
             <li key={artifact.id}>

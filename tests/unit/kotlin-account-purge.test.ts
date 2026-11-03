@@ -156,6 +156,11 @@ describe("purge de compte — inventaire (#861)", () => {
     expect(pairing).toContain("private val purge: AccountPurgeRunner");
     expect(pairing).toContain("purge.purge(AccountPurgeMode.LOGOUT, null)");
     expect(pairing).toContain("purge.purge(AccountPurgeMode.SESSION_DEAD, null)");
+    // #858 : l'export demandé avant la purge survit au logout ; seule la
+    // suppression totale efface la copie.
+    expect(readFileSync(FACTORY, "utf8")).toContain(
+      "if (mode == AccountPurgeMode.DELETE_ALL)",
+    );
     expect(pairing).toContain("purge.purge(");
 
     const bridge = readFileSync(join(APP, "VsnBridge.kt"), "utf8");

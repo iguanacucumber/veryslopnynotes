@@ -133,7 +133,8 @@ class AccountPurgeInstrumentedTest {
         assertFalse(prefsFile.exists())
         assertFalse(manualFile.exists())
         assertFalse(attachments.exists())
-        assertFalse(exports.exists())
+        // #858 : l'export demandé avant la déconnexion survit pour le partage.
+        assertTrue(exports.resolve("fiche.pdf").isFile)
         assertFalse(photos.exists())
         assertNull(cache.load(CachePolicy.GRADES, "trimestre-1"))
         assertEquals(0, cacheDir.listFiles().orEmpty().size)
@@ -160,6 +161,8 @@ class AccountPurgeInstrumentedTest {
 
         val cache = FileCacheStore(cacheDir)
         cache.save(CachePolicy.GRADES, "payload-du-compte", System.currentTimeMillis(), "trimestre-1")
+        val exports = File(cacheRoot, "exports").apply { mkdirs() }
+        exports.resolve("copie.json").writeText("export")
 
         val targets = AccountPurgeTargets(
             sessions = sessions,
@@ -199,6 +202,8 @@ class AccountPurgeInstrumentedTest {
         val seed = url("seed.invalid")
         assertEquals(seed, ServerStore(context, CleartextPolicy.FORBID).baseUrl(seed))
         assertNull(cache.load(CachePolicy.GRADES, "trimestre-1"))
+        // La suppression TOTALE efface aussi la copie exportée.
+        assertFalse(exports.exists())
     }
 
     private fun session() = StoredSession(

@@ -18,6 +18,7 @@ import {
 } from "../../ui/components";
 import { Dialog } from "../../ui/Dialog";
 import { IconBook, IconSparkles, IconUser } from "../../ui/icons";
+import { ExportBeforePurge, useExportBeforePurge } from "../settings/ExportBeforePurge";
 import {
   accountCountHint,
   accountCountLabel,
@@ -42,6 +43,7 @@ function messageOf(error: unknown): string {
 export default function ProfileScreen() {
   const { refresh, refreshTick, notify, closeSession, storageUnavailable } = useApp();
   const navigate = useNavigate();
+  const exportState = useExportBeforePurge();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [accountCount, setAccountCount] = useState<number | null>(null);
@@ -107,6 +109,7 @@ export default function ProfileScreen() {
   }
 
   async function logout(): Promise<void> {
+    if (exportState.exporting) return;
     setLoggingOut(true);
     setLogoutError("");
     try {
@@ -234,6 +237,7 @@ export default function ProfileScreen() {
             trailing={null}
             onClick={() => {
               setLogoutError("");
+              exportState.reset();
               setLogoutAsk(true);
             }}
           />
@@ -336,7 +340,7 @@ export default function ProfileScreen() {
             <button
               type="button"
               className="btn btn--danger btn--small"
-              disabled={loggingOut}
+              disabled={loggingOut || exportState.exporting}
               onClick={() => void logout()}
             >
               {loggingOut ? "Déconnexion…" : "Se déconnecter"}
@@ -344,6 +348,7 @@ export default function ProfileScreen() {
           </>
         }
       >
+        <ExportBeforePurge state={exportState} disabled={loggingOut} />
         {logoutError ? (
           <p className="tiny" role="alert" style={{ color: "var(--danger-ink)", margin: "10px 0 0" }}>
             {logoutError}

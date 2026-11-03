@@ -1,5 +1,6 @@
 package fr.veryslopnynotes.app
 
+import fr.veryslopnynotes.core.listRevisionSheets
 import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.DataExport
 import fr.veryslopnynotes.data.DownloadedFiles
@@ -26,6 +27,7 @@ internal fun VsnBridge.dataExport(p: JSONObject, epoch: Long): JSONObject = try 
     val exportedAt = Instant.now().toString()
     val grades = repo.allPayloads(CachePolicy.GRADES, epoch).orStale()
     val notes = lessons.notes()
+    val revisionSheets = revisions?.let { listRevisionSheets(it) } ?: emptyList()
     val chat = teacherChat.load()
     val manual = manuals.exportSnapshot()
     val subjects = prefsRepo.prefs().map {
@@ -36,6 +38,7 @@ internal fun VsnBridge.dataExport(p: JSONObject, epoch: Long): JSONObject = try 
             exportedAt = exportedAt,
             grades = grades,
             notes = notes,
+            revisionSheets = revisionSheets,
             teacherChat = chat,
             manual = manual,
             subjects = subjects,
