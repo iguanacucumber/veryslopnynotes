@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import {
+  NavLink,
+  Outlet,
+  useLocation,
+  useNavigate,
+  useNavigationType,
+} from "react-router-dom";
 import { useApp } from "./AppContext";
 import { bridge } from "../bridge/client";
 import { Avatar } from "./components";
@@ -26,6 +32,7 @@ import {
   IconUser,
 } from "./icons";
 import { useViewNavigate } from "./viewTransition";
+import { scrollDecision, scrollKey, type ScrollPosition } from "./scrollMemory";
 
 interface RouteMeta {
   title: string;
@@ -71,6 +78,7 @@ const TABS = [
 
 export function Shell() {
   const location = useLocation();
+  const navigationType = useNavigationType();
   const navigate = useNavigate();
   const go = useViewNavigate();
   const { refresh, refreshTick, busy, notify, authLost, sessionClosed, scheme } = useApp();
@@ -78,6 +86,8 @@ export function Shell() {
   const [photo, setPhoto] = useState<string | null>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const titleFocusedOnce = useRef(false);
+  const scrollMemory = useRef(new Map<string, number>());
+  const lastScroll = useRef<ScrollPosition | null>(null);
   const isHome = location.pathname === "/";
   const meta = metaFor(location.pathname);
   // Papillon nomme l'en-tête par son contenu : la date pour le calendrier.
@@ -133,11 +143,27 @@ export function Shell() {
     titleRef.current?.focus({ preventScroll: true });
   }, [location.pathname, meta.title]);
 
-  // Seul le CHANGEMENT D'ÉCRAN remonte la page : changer de semaine est une
-  // query, pas une nouvelle page. Le focus du titre reste en `preventScroll`.
+  // Le navigateur restaure le scroll de traversée en parallèle du nôtre ;
+  // on garde la main pour appliquer la position de l'entrée d'historique.
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [location.pathname]);
+    window.history.scrollRestoration = "manual";
+  }, []);
+
+  // POP restaure la position de l'entrée ; une query seule (semaine, période)
+  // ne remonte pas l'écran ; un nouveau pathname repart en haut.
+  useEffect(() => {
+    const key = scrollKey(location.pathname, location.search);
+    const decision = scrollDecision({
+      navigationType,
+      previous: lastScroll.current,
+      key,
+      pathname: location.pathname,
+      saved: scrollMemory.current.get(key),
+    });
+    for (const entry of decision.save) scrollMemory.current.set(entry.key, entry.y);
+    if (decision.restore !== null) window.scrollTo(0, decision.restore);
+    lastScroll.current = { key, pathname: location.pathname, y: window.scrollY };
+  }, [location.key, location.pathname, location.search, navigationType]);
 
   useEffect(() => {
     // Session fermée par l'utilisateur ≠ session expirée : le bandeau
