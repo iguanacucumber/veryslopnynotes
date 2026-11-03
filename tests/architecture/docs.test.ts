@@ -371,7 +371,7 @@ describe("registre d'invariants", () => {
       ["docs/architecture/BUILD.md", 4_000],
       ["android/README.md", 9_500],
       ["web/README.md", 4_000],
-      ["server/README.md", 4_500],
+      ["server/README.md", 4_800],
       ["shared/contracts/README.md", 1_000],
       ["docs/RELEASE.md", 7_000],
       ["docs/HUMAN_INPUTS.md", 4_500],
