@@ -84,6 +84,27 @@ bloque pas un merge. Sa promotion (retirer `continue-on-error`, puis ajouter le
 check requis) se décide sur des **runs réels** — une série verte sans reprise —
 jamais dans la PR qui l'introduit.
 
+## Tests instrumentés Android (#887)
+
+`android/app/src/androidTest/` couvre les scénarios qui exigent un vrai
+appareil : roundtrip de la clé LLM chiffrée (Keystore + fichier non lisible en
+clair), Keystore dégradé → logout → Keystore sain sans résurrection, purge
+complète d'un compte sur les stores réels (session, comptes, cahier, chat,
+préférences, manuel, pièces jointes, exports, photos, WebView, cache), fichier
+corrompu mis en quarantaine avec restauration de la sauvegarde, et
+`FLAG_SECURE` sur une vraie fenêtre (debug capturable, release protégée).
+
+Le job CI `emulator-instrumentation` réutilise l'émulateur épinglé de #891
+(même action SHA, API 35, `google_apis`, `x86_64`), puis lance
+`:app:connectedDebugAndroidTest` en une invocation Gradle. Il est borné
+(`timeout-minutes` au job et à l'étape) et garde les résultats XML, le rapport
+HTML et le logcat en artefact `emulator-instrumentation` 7 jours, même en
+échec. Comme le smoke, il est **non bloquant** jusqu'à une série verte réelle.
+
+Ces tests ne lisent aucun secret, aucun hôte d'établissement et aucune donnée
+scolaire : les fixtures sont des identifiants de test locaux.
+
+
 ## Couverture (#895)
 
 `make coverage` est HORS du gate : une exécution des tests alimente deux
