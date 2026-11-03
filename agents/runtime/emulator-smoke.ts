@@ -140,6 +140,12 @@ async function attendreAccueil(page: Page): Promise<void> {
     .waitFor({ state: "visible", timeout: DELAI_HOME_MS });
   const nav = page.locator('nav[aria-label="Navigation principale"]');
   if (!(await nav.isVisible())) throw new Error("barre de navigation absente de l'accueil");
+  // Le titre suffit à la route, pas à la PREUVE : on attend la fin du
+  // chargement des ressources, sinon la capture montre un spinner.
+  await page.waitForFunction(() => !document.querySelector(".spinner"), null, {
+    timeout: DELAI_HOME_MS,
+  });
+  await page.locator(".home-actions").waitFor({ state: "visible", timeout: DELAI_HOME_MS });
   if (page.url().includes("#/pairing")) throw new Error("retombé sur l'écran d'appairage");
 }
 
