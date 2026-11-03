@@ -1,0 +1,113 @@
+# Analyse statique CodeQL (#899) : TypeScript et Kotlin/Java, sur chaque PR et
+# une fois par semaine.
+#
+# Ce workflow ne remplace ni ne complète le gate : `ci.yml` reste l'autorité de
+# merge et rejoue `make check`. CodeQL est un SECOND regard, sans `make check`
+# ici — un job vert CodeQL ne rachète jamais un gate rouge.
+#
+# Kotlin n'a pas de mode sans build : les modules Android sont compilés par le
+# MÊME Gradle que le poste (tâches `compileDebugKotlin`), après installation du
+# SDK épinglé. Le JavaScript/TypeScript se passe de build.
+#
+# Aucun secret : le dépôt est public, le workflow ne lit que le code et écrit
+# uniquement les résultats SARIF (security-events), jamais une PR.
+
+name: codeql
+
+on:
+  pull_request:
+  schedule:
+    # Hebdomadaire, lundi 05:17 UTC : hors des heures pleines, pas de collision
+    # avec les autres workflows planifiés.
+    - cron: "17 5 * * 1"
+
+# Moindre privilège : lecture du dépôt. Le job d'analyse élargit UNE permission,
+# celle qu'exige l'envoi du SARIF, et rien d'autre.
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyse ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      # Les deux langages sont indépendants : un échec TS ne doit pas masquer
+      # l'absence de verdict Kotlin.
+      fail-fast: false
+      matrix:
+        include:
+          - language: javascript-typescript
+            build-mode: none
+          - language: java-kotlin
+            build-mode: manual
+    steps:
+      - name: Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Initialiser CodeQL
+        uses: github/codeql-action/init@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: JDK 17
+        if: matrix.language == 'java-kotlin'
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Mêmes archives et mêmes empreintes que le gate : la version analysée est
+      # celle que compile la CI, pas celle de l'image du runner.
+      - name: SDK Android
+        if: matrix.language == 'java-kotlin'
+        run: |
+          set -euo pipefail
+          sdk="$RUNNER_TEMP/android-sdk"
+          base=https://dl.google.com/android/repository
+          mkdir -p "$sdk/platforms" "$sdk/build-tools" "$RUNNER_TEMP/dl"
+          curl -sSfL -o "$RUNNER_TEMP/dl/platform.zip" "$base/platform-37.0_r02.zip"
+          curl -sSfL -o "$RUNNER_TEMP/dl/build-tools.zip" "$base/build-tools_r36_linux.zip"
+          curl -sSfL -o "$RUNNER_TEMP/dl/platform-tools.zip" "$base/platform-tools_r37.0.1-linux.zip"
+          printf '%s  %s\n' \
+            '840b23e827f96e64aea4c89a1194aac3dc5f6bad37edb231c5c795d890330e8d' "$RUNNER_TEMP/dl/platform.zip" \
+            '5d9ac77fb6ff43d9da518a337b4fcf8f9097113df531d99ccefe80ef7ce8250b' "$RUNNER_TEMP/dl/build-tools.zip" \
+            'd230f13842f60f782a8645f9c813f8f845bf36089ea7289f28c48f17979313f1' "$RUNNER_TEMP/dl/platform-tools.zip" |
+            sha256sum -c -
+          unzip -q "$RUNNER_TEMP/dl/platform.zip" -d "$RUNNER_TEMP/dl/x-platform"
+          mv "$RUNNER_TEMP/dl/x-platform/$(ls "$RUNNER_TEMP/dl/x-platform")" "$sdk/platforms/android-37.0"
+          unzip -q "$RUNNER_TEMP/dl/build-tools.zip" -d "$RUNNER_TEMP/dl/x-build-tools"
+          mv "$RUNNER_TEMP/dl/x-build-tools/$(ls "$RUNNER_TEMP/dl/x-build-tools")" "$sdk/build-tools/36.0.0"
+          unzip -q "$RUNNER_TEMP/dl/platform-tools.zip" -d "$RUNNER_TEMP/dl/x-platform-tools"
+          mv "$RUNNER_TEMP/dl/x-platform-tools/$(ls "$RUNNER_TEMP/dl/x-platform-tools")" "$sdk/platform-tools"
+          mkdir -p "$sdk/licenses"
+          printf '\n24333f8a63b6825ea9c5514f83c2829b004d1fee\nd56f5187479451eabf01fb78af6dfcb131a6481e\n8933bad161af4178b1185d1a37fbf41ea5269c55\n' > "$sdk/licenses/android-sdk-license"
+          printf '\n84831b9409646a918e30573bab4c9c91346d8abd\n' > "$sdk/licenses/android-sdk-preview-license"
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$sdk" >> "$GITHUB_ENV"
+
+      # `buildWebUi` exige bun et le build web : hors analyse Kotlin, comme dans
+      # le gate. Les tâches visent les sources de production des quatre modules.
+      - name: Compiler Kotlin
+        if: matrix.language == 'java-kotlin'
+        run: |
+          set -euo pipefail
+          cd android
+          ./gradlew --no-daemon --console=plain -x buildWebUi \
+            :core:compileDebugKotlin :data:compileDebugKotlin \
+            :pronote:compileDebugKotlin :app:compileDebugKotlin
+
+      - name: Analyser
+        uses: github/codeql-action/analyze@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          category: /language:${{ matrix.language }}
