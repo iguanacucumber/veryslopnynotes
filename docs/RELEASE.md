@@ -116,6 +116,14 @@ make build   # check-secrets + docker build (skip si daemon absent)
    (AAB), aucune clé/secret dans les artefacts,
    `git status` propre (APK/AAB ignorés `*.apk`/`*.aab`).
 
+## Notes de version
+
+Chaque PR ajoute sa ligne sous `[Unreleased]` de
+[`CHANGELOG.md`](../CHANGELOG.md), catégorie Keep a Changelog. Au tag,
+renommer `[Unreleased]` en `## [x.y.z] - AAAA-MM-JJ`, recréer une section
+`[Unreleased]` vide, puis recopier **tel quel** ce corps dans la GitHub
+Release : la note publiée est la section du changelog.
+
 ## Check-list avant livrable
 
 - [ ] `make build` OK (ou `check-secrets` + `tsc` si daemon absent).
