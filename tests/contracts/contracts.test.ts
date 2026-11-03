@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   API_ROUTES,
+  MANUALS_SCRAPE_PAGE_MAX,
   isHealthResponse,
   isManualsScrapeRequest,
   isManualsScrapeResponse,
@@ -77,6 +78,16 @@ describe("contracts", () => {
     expect(raw).not.toContain("required: [platform, username, password, startUrl]");
   });
 
+  // `page` optionnelle : le schéma OpenAPI déclare la MÊME borne que le
+  // validateur TS, sinon un client généré enverrait une page que le serveur
+  // refuse (400).
+  test("openapi : le scrape déclare page bornée comme le validateur", () => {
+    const raw = readFileSync(OPENAPI, "utf8");
+    expect(raw).toContain(
+      `page: { type: integer, minimum: 1, maximum: ${MANUALS_SCRAPE_PAGE_MAX} }`,
+    );
+  });
+
   test("sonde : valide OK, invalides rejetés", () => {
     expect(isHealthResponse({ status: "ok", version: CONTRACTS_VERSION })).toBe(true);
     expect(isHealthResponse({ status: "ko", version: CONTRACTS_VERSION })).toBe(false);
@@ -92,6 +103,12 @@ describe("contracts", () => {
     expect(isManualsScrapeRequest({ ...body, username: "u", password: "p" })).toBe(true);
     expect(isManualsScrapeRequest({ ...body, startUrl: "ftp://hote.invalid/x" })).toBe(false);
     expect(isManualsScrapeRequest(null)).toBe(false);
+    expect(isManualsScrapeRequest({ ...body, page: 1 })).toBe(true);
+    expect(isManualsScrapeRequest({ ...body, page: MANUALS_SCRAPE_PAGE_MAX })).toBe(true);
+    expect(isManualsScrapeRequest({ ...body, page: 0 })).toBe(false);
+    expect(isManualsScrapeRequest({ ...body, page: MANUALS_SCRAPE_PAGE_MAX + 1 })).toBe(false);
+    expect(isManualsScrapeRequest({ ...body, page: 1.5 })).toBe(false);
+    expect(isManualsScrapeRequest({ ...body, page: "12" })).toBe(false);
     const doc = {
       id: "scrape-1",
       platform: "editeur-fake",
