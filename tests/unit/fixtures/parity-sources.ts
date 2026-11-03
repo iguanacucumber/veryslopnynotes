@@ -203,6 +203,10 @@ export const PRODUCTION_SOURCES: string[] = [
   // démonstration). Fichier PUR : le harnais le compile et le REJOUE.
   join(DATA, "SessionMode.kt"),
   join(DATA, "SyncJobOutcome.kt"),
+  // #893 : fuseau de l'établissement et horloge injectable, partagés par les
+  // fenêtres EDT/devoirs et les payloads. Fichier PUR : le harnais EXÉCUTE le
+  // passage à l'heure d'été/hiver, la frontière de minuit et l'année.
+  join(DATA, "SchoolTime.kt"),
   join(DATA, "WeekWindow.kt"),
   // `app` — les messages d'appairage, le message de refus du devoir, le type
   // MIME des pièces jointes, la traduction d'un échec natif en rejet et la

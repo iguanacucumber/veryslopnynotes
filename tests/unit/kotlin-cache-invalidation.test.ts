@@ -238,10 +238,10 @@ describe("câblage de l'invalidation et de la fenêtre (#369)", () => {
 
   test("l'affichage et la recherche partagent la MÊME fenêtre", () => {
     // Le payload affiché et la recherche du toggle sortent de la même fonction.
-    expect(payloads).toContain('assignmentWindow(query["weekStart"], now)');
-    expect(assignments.match(/assignmentWindow\(weekStart\)/g)?.length).toBe(2);
+    expect(payloads).toContain('assignmentWindow(query["weekStart"], clock)');
+    expect(assignments.match(/assignmentWindow\(weekStart, schoolTime\)/g)?.length).toBe(2);
     // Toggle ET pièce jointe cherchent dans cette fenêtre (pas une autre).
-    expect(assignments).toContain("val (from, to) = assignmentWindow(weekStart)");
+    expect(assignments).toContain("val (from, to) = assignmentWindow(weekStart, schoolTime)");
     expect(assignments.match(/client\.homework\(from, to\)/g)?.length).toBe(2);
   });
 

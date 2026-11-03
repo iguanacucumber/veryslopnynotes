@@ -7,6 +7,7 @@ package fr.veryslopnynotes.cacheinvalid
 
 import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.InMemoryCacheStore
+import fr.veryslopnynotes.data.SCHOOL_ZONE
 import fr.veryslopnynotes.data.assignmentWindow
 import fr.veryslopnynotes.data.weekWindow
 import fr.veryslopnynotes.data.weeksCovering
@@ -81,7 +82,8 @@ private class Driver {
         "window" -> {
             val weekStart = op.str("weekStart")
             val now = LocalDateTime.parse(op.str("now") ?: "2026-10-19T12:00:00")
-            val (from, to) = assignmentWindow(weekStart, now)
+            val clock = java.time.Clock.fixed(now.atZone(SCHOOL_ZONE).toInstant(), SCHOOL_ZONE)
+            val (from, to) = assignmentWindow(weekStart, clock)
             val inside = mutableListOf<JVal>()
             val outside = mutableListOf<JVal>()
             for (due in op.arr("due")) {
