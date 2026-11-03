@@ -1,43 +1,39 @@
-/* SN Pro (SIL OFL 1.1) : la police de Papillon, dans ses six graisses. */
+/* SN Pro (SIL OFL 1.1), sous-ensembles WOFF2 des graisses RÉELLEMENT posées
+   par les styles : 400, 500, 600, 700 et 800 (aucune règle en 300 ni 900).
+   Le fichier Black sert la graisse 800 : c'est la face que le navigateur
+   choisissait déjà pour `font-weight: 800`. */
 @font-face {
   font-family: "SN Pro";
-  src: url("../fonts/SNPro-Light.ttf") format("truetype");
-  font-weight: 300;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "SN Pro";
-  src: url("../fonts/SNPro-Regular.ttf") format("truetype");
+  src: url("../fonts/SNPro-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "SN Pro";
-  src: url("../fonts/SNPro-Medium.ttf") format("truetype");
+  src: url("../fonts/SNPro-Medium.woff2") format("woff2");
   font-weight: 500;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "SN Pro";
-  src: url("../fonts/SNPro-Semibold.ttf") format("truetype");
+  src: url("../fonts/SNPro-Semibold.woff2") format("woff2");
   font-weight: 600;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "SN Pro";
-  src: url("../fonts/SNPro-Bold.ttf") format("truetype");
+  src: url("../fonts/SNPro-Bold.woff2") format("woff2");
   font-weight: 700;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "SN Pro";
-  src: url("../fonts/SNPro-Black.ttf") format("truetype");
-  font-weight: 900;
+  src: url("../fonts/SNPro-Black.woff2") format("woff2");
+  font-weight: 800;
   font-style: normal;
   font-display: swap;
 }

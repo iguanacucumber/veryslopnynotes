@@ -18,6 +18,11 @@ la section `0.1.0` le jour du tag.
 - Scraper de manuels facultatif, HTTPS obligatoire, sans authentification.
 - Taille du texte réglable (100/125/150 %) et suivi du réglage Android jusqu'à 200 %.
 
+### Modifié
+
+- Fontes SN Pro sous-ensemblées en WOFF2 (graisses réellement utilisées,
+  préchargement) et budget gzip vérifié à chaque build.
+
 ### Sécurité
 
 - Scraper : sandbox Chromium ACTIF dans l'image, confiné par un profil seccomp

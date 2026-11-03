@@ -9,10 +9,13 @@
 // Le réessai qui réussit est SIGNALÉ : rien n'est sauté, le crash ne passe pas
 // inaperçu.
 import { join, resolve } from "node:path";
+import { describeFontBudget, measureFontBudget } from "./font-budget";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const VITE = join(ROOT, "node_modules", ".bin", "vite");
 const CONFIG = join(ROOT, "web", "vite.config.ts");
+/** Miroir du `build.outDir` de `web/vite.config.ts` (testé par `licenses.test.ts`). */
+const DEFAULT_OUT_DIR = join(ROOT, "android", "app", "src", "main", "assets", "web");
 
 /** Plafond d'un essai, en ms : un build normal prend ~1 s. */
 export const BUILD_TIMEOUT_MS = 60_000;
@@ -138,5 +141,12 @@ if (import.meta.main) {
   if (!r.ok) {
     console.error(`\nbuild web ÉCHOUÉ :\n${describeOutcome(r)}`);
     process.exitCode = 1;
+  } else {
+    // Le budget ne juge que la SORTIE d'un build réussi : un test qui rejoue un
+    // processus mort avec une fausse commande n'a pas de fontes à mesurer.
+    const budget = measureFontBudget(join(outDir ? resolve(ROOT, outDir) : DEFAULT_OUT_DIR, "assets"));
+    console.log(`\n  ${describeFontBudget(budget)}`);
+    for (const failure of budget.failures) console.error(`  ÉCHEC budget fontes : ${failure}`);
+    if (budget.failures.length > 0) process.exitCode = 1;
   }
 }

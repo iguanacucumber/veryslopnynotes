@@ -56,6 +56,10 @@ schéma par écran.
 ## Budget
 
 - JS initial < 250 Ko gzip.
+- Fontes : cinq sous-ensembles WOFF2 (400 à 800), **180 Ko gzip** au total et
+  40 Ko par fichier, mesurés par `make web-build` ; 500/600/700 préchargées.
+  Latin-1, Latin étendu A, ponctuation, flèches et maths ; régénérer avec
+  `pyftsubset` depuis les TTF SN Pro (<https://github.com/supernotes/sn-pro>).
 - Pas de bibliothèque de composants : CSS + composants maison.
 - `prefers-reduced-motion` coupe les transitions.
 - Mouvement (#336) : transitions de route par View Transition native
