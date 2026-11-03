@@ -151,6 +151,10 @@ renommer `[Unreleased]` en `## [x.y.z] - AAAA-MM-JJ`, recréer une section
 `[Unreleased]` vide, puis recopier **tel quel** ce corps dans la GitHub
 Release : la note publiée est la section du changelog.
 
+Signaux, seuils et retrait :
+[RELEASE-HEALTH.md](RELEASE-HEALTH.md) ; incidents :
+[INCIDENTS.md](INCIDENTS.md).
+
 ## Check-list avant livrable
 
 - [ ] `make build` OK (ou `check-secrets` + `tsc` si daemon absent).
