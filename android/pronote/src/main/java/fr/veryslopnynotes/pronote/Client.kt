@@ -47,6 +47,25 @@ data class InfoFilter(
     val dateTo: LocalDateTime? = null,
 )
 
+/**
+ * Rejeu interdit, même après re-authentification : écritures non idempotentes
+ * et étapes de la poignée de main. Un 401 peut répondre après que
+ * l'établissement a déjà appliqué l'écriture ; la rejouer doublerait l'effet.
+ * Toute écriture nouvelle doit entrer ici.
+ */
+private val NEVER_REPLAY_FUNCTIONS: Set<String> = setOf(
+    "SaisieMessage",
+    "SaisieTAFFaitEleve",
+    "SecurisationCompteDoubleAuth",
+    "Identification",
+    "Authentification",
+    "ParametresUtilisateur",
+)
+
+/** 401 ou `G=10` : la session est refusée, un login peut la rouvrir. */
+private fun isAuthFailure(e: PronoteAPIError): Boolean =
+    e.httpStatus == 401 || e.pronoteErrorCode == 10
+
 /** Vérité JS d'une valeur (champs laissés bruts : `labels[l.N]`). */
 internal fun jsTruthy(v: JVal?): Boolean = boolOf(v)
 
@@ -322,7 +341,8 @@ open class ClientBase(
 
     /**
      * Enveloppe `{Signature, data}` (`Signature` omise si onglet nul/zéro/NaN,
-     * `data` omise si nulle), mémo des lectures et rejeu unique après `refresh`.
+     * `data` omise si nulle), mémo des lectures et rejeu unique après `refresh`
+     * sur un refus d'authentification seulement.
      *
      * `post` et `refresh` partagent le moniteur : deux rafraîchissements
      * concurrents (job de fond + interface) donnaient deux `Communication` et
@@ -351,8 +371,9 @@ open class ClientBase(
     }
 
     /**
-     * Envoi effectif, avec rejeu unique après `refresh` sur `PronoteAPIError`
-     * (`ExpiredObject` remonte tel quel).
+     * Envoi effectif, avec rejeu unique après `refresh` sur refus
+     * d'authentification (`401`/`G=10`) et jamais pour une écriture non
+     * idempotente (`ExpiredObject` remonte tel quel).
      *
      * `send`/`refresh` ouverts pour les TESTS : un stub compte les requêtes
      * sans réseau, et le pilote de rate-limit prouve qu'aucun refresh ne part.
@@ -370,6 +391,11 @@ open class ClientBase(
         } catch (e: ExpiredObject) {
             throw e
         } catch (e: PronoteAPIError) {
+            // Un 5xx ou une erreur applicative ne dit RIEN de la session :
+            // aucun login, l'appelant réessaie avec son backoff. Une écriture
+            // non idempotente ne se rejoue pas : un login de plus ne la
+            // terminerait pas, donc il n'apporte rien.
+            if (!isAuthFailure(e) || functionName in NEVER_REPLAY_FUNCTIONS) throw e
             // Un rafraîchissement est DÉJÀ en cours : ne pas le doubler.
             if (!refreshGate.tryEnter()) throw e
             try {

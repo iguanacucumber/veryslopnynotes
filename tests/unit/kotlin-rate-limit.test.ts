@@ -89,7 +89,7 @@ describe("porte de limitation de débit", () => {
 
   test.skipIf(skip)("un rate-limit au REJEU arme la porte", async () => {
     const r = await run<ClientResult>("retryRateLimited");
-    // Envoi 1 : erreur générique -> refresh. Envoi 2 (rejeu) : refus de débit.
+    // Envoi 1 : 401 -> refresh. Envoi 2 (rejeu de la lecture) : refus de débit.
     expect(r.sends).toBe(2);
     expect(r.refreshes).toBe(1);
     expect(r.first).toBe("RateLimitedError");
@@ -99,12 +99,12 @@ describe("porte de limitation de débit", () => {
     expect(r.refreshes).toBe(1);
   });
 
-  test.skipIf(skip)("une erreur GÉNÉRIQUE rafraîchit et rejoue encore", async () => {
-    const r = await run<ClientResult>("genericRefreshRetried");
-    // Pas de régression : seule la limitation de débit est spéciale.
-    expect(r.sends).toBe(2);
-    expect(r.refreshes).toBe(1);
-    expect(r.error).toBeNull();
+  test.skipIf(skip)("une erreur NON authentifiante ne rafraîchit pas et ne rejoue pas", async () => {
+    const r = await run<ClientResult>("genericNoRefresh");
+    // 5xx : la session est intacte, c'est le backoff de l'appelant qui gère.
+    expect(r.sends).toBe(1);
+    expect(r.refreshes).toBe(0);
+    expect(r.error).toBe("PronoteAPIError");
   });
 
   test.skipIf(skip)("les lectures tolérantes remontent rate-limit et session morte", async () => {

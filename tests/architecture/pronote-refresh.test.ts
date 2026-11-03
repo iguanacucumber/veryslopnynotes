@@ -55,4 +55,16 @@ describe("rafraîchissement de session atomique (#405)", () => {
     expect(retry).toMatch(/finally\s*\{\s*refreshGate\.leave\(\)\s*\}/);
     expect(retry).toContain("send(functionName, postData)");
   });
+
+  test("seuls 401/G=10 rouvrent la session ; aucune écriture rejouée", () => {
+    const client = codeOnly(readFileSync(CLIENT, "utf8"));
+    // 5xx, 403, G inconnu : la session n'est pas en cause, aucun login.
+    expect(client).toContain("e.httpStatus == 401 || e.pronoteErrorCode == 10");
+    const retry = slice(client, "private fun sendWithRefresh(", "\n    }\n");
+    expect(retry).toContain("if (!isAuthFailure(e) || functionName in NEVER_REPLAY_FUNCTIONS) throw e");
+    // Les écritures à effet de bord ne partent qu'UNE fois.
+    for (const fn of ["SaisieMessage", "SaisieTAFFaitEleve", "SecurisationCompteDoubleAuth"]) {
+      expect(client).toContain(`"${fn}"`);
+    }
+  });
 });

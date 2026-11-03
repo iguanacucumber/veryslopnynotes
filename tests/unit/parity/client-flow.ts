@@ -44,23 +44,20 @@ export function registerClientFlow(): void {
       expect(tsa.posts.filter((p) => p.id === "FonctionParametres")).toHaveLength(2);
       expect(kta.posts.filter((p) => p.id === "FonctionParametres")).toHaveLength(2);
 
-      // `G` inconnu UNE fois : refresh + retry qui aboutit, aucune erreur ne remonte.
-      tsa.script.nextEnvelope = { Erreur: { G: 99, Titre: "Bizarre" } };
+      // `G` inconnu : erreur APPLICATIVE, pas une session morte. Le port ne
+      // rafraîchit plus (la référence le fait encore : divergence voulue) ;
+      // l'erreur remonte inchangée.
       kta.script.nextEnvelope = { Erreur: { G: 99, Titre: "Bizarre" } };
-      const ts99 = await tsClient.post("TestEcho", 7, { data: { a: 1 } });
-      const kt99 = JSON.parse(await ask({ op: "clientPost", cid: ktCid, function: "TestEcho", onglet: 7, data: { data: { a: 1 } } }));
-      expect(tsa.posts.filter((p) => p.id === "FonctionParametres")).toHaveLength(3);
-      expect(kta.posts.filter((p) => p.id === "FonctionParametres")).toHaveLength(3);
-      expect(canonTs(kt99)).toBe(tsCanon(ts99));
+      const kt99 = portError(await ask({ op: "clientPost", cid: ktCid, function: "TestEcho", onglet: 7, data: { data: { a: 1 } } }, true));
+      expect(kta.posts.filter((p) => p.id === "FonctionParametres")).toHaveLength(2);
+      expect(kt99).toEqual({ name: "PronoteAPIError", message: "Unknown error from pronote: 99 | Bizarre" });
 
-      // HTTP 500 UNE fois : même scénario (refresh + retry + succès identique).
-      tsa.script.nextPostStatus = { status: 500, body: "oops" };
+      // HTTP 500 UNE fois : aucun login, aucun rejeu, l'erreur remonte.
       kta.script.nextPostStatus = { status: 500, body: "oops" };
-      const ts500 = await tsClient.post("TestEcho", 7, { data: { a: 1 } });
-      const kt500 = JSON.parse(await ask({ op: "clientPost", cid: ktCid, function: "TestEcho", onglet: 7, data: { data: { a: 1 } } }));
-      expect(tsa.posts.filter((p) => p.id === "FonctionParametres")).toHaveLength(4);
-      expect(kta.posts.filter((p) => p.id === "FonctionParametres")).toHaveLength(4);
-      expect(canonTs(kt500)).toBe(tsCanon(ts500));
+      const kt500 = portError(await ask({ op: "clientPost", cid: ktCid, function: "TestEcho", onglet: 7, data: { data: { a: 1 } } }, true));
+      expect(kta.posts.filter((p) => p.id === "FonctionParametres")).toHaveLength(2);
+      expect(kt500.name).toBe("PronoteAPIError");
+      expect(kt500.message).toContain("500");
 
       // JSON cassé : les deux jettent (classes brutes différentes, fait assumé).
       tsa.script.nextRaw = "pas du json{";
