@@ -22,6 +22,13 @@ val PRONOTE_ERROR_MESSAGES = mapOf(
 /** HTTP 429 : refus de débit, même sens que `G=25`. */
 private const val HTTP_TOO_MANY_REQUESTS = 429
 
+/** `Retry-After` d'une réponse refusée (secondes ou date RFC 1123). */
+private fun retryAfterOf(response: HttpResponse): Long? =
+    response.headers.entries
+        .firstOrNull { it.key.equals("Retry-After", ignoreCase = true) }
+        ?.value?.firstOrNull()
+        ?.let { RetryPolicy.parseRetryAfterMs(it) }
+
 /**
  * Cause d'une page d'ouverture, TYPÉE : l'appelant branche dessus, jamais sur
  * le texte. La page de suspension est reconnue par une phrase (« adresse IP …
@@ -306,7 +313,11 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
                     httpStatus = HTTP_TOO_MANY_REQUESTS,
                 )
             }
-            throw PronoteAPIError("Bad request (http status: ${response.status})", httpStatus = response.status)
+            throw PronoteAPIError(
+                "Bad request (http status: ${response.status})",
+                httpStatus = response.status,
+                retryAfterMs = retryAfterOf(response),
+            )
         }
         // ponytail: ping arme seulement sur succes, sinon session morte semble vivante.
         lastPing = System.currentTimeMillis() / 1000

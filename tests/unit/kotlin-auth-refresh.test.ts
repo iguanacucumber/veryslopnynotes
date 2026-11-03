@@ -28,7 +28,9 @@ async function policy(kind: string, fn = "DernieresNotes"): Promise<PolicyResult
 }
 
 const AUTH_ERRORS = ["http401", "g10"];
-const OTHER_ERRORS = ["http500", "http503", "http403", "g99"];
+// #874 : les lectures idempotentes réessaient un 5xx sans login.
+const TRANSIENT_ERRORS = ["http500", "http503"];
+const OTHER_ERRORS = ["http403", "g99"];
 
 describe("refresh seulement sur un refus d'authentification", () => {
   test.skipIf(skip)("401 et G=10 : UN refresh puis UN rejeu de la lecture", async () => {
@@ -44,8 +46,20 @@ describe("refresh seulement sur un refus d'authentification", () => {
     }
   });
 
-  test.skipIf(skip)("5xx, 403 et G inconnu : aucun login, l'erreur remonte", async () => {
-    // Le backoff (WorkManager) vit dans android/data : le client ne login pas.
+  test.skipIf(skip)("5xx : réessai de la lecture, AUCUN login", async () => {
+    for (const kind of TRANSIENT_ERRORS) {
+      expect({ kind, ...(await policy(kind)) }).toEqual({
+        kind,
+        sends: 2,
+        refreshes: 0,
+        replayed: true,
+        sessionFailure: false,
+        error: null,
+      });
+    }
+  });
+
+  test.skipIf(skip)("403 et G inconnu : aucun login, erreur immédiate", async () => {
     for (const kind of OTHER_ERRORS) {
       expect({ kind, ...(await policy(kind)) }).toEqual({
         kind,

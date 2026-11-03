@@ -24,6 +24,8 @@ data class ClientOptions(
     // Mémo des lectures (60 s) DÉSACTIVÉE par défaut : le harnais de parité
     // compare le fil de la référence TS. L'APP l'active (cf. `PairingRepository`).
     val memoizeReads: Boolean = false,
+    // Réessai borné des LECTURES idempotentes ; les tests injectent attente/clock.
+    val retryPolicy: RetryPolicy = RetryPolicy(),
     // Horloge de la semaine courante : lue à Paris par défaut, fixée en test.
     val clock: Clock = Clock.system(SCHOOL_ZONE),
 )
@@ -95,6 +97,8 @@ open class ClientBase(
      * `internal` : le harnais de parité y injecte une horloge.
      */
     internal var readMemo: ReadMemo? = if (opts.memoizeReads) ReadMemo() else null
+
+    private val retryPolicy: RetryPolicy = opts.retryPolicy
 
     /**
      * `refresh()` remplace ces champs d'un bloc sous le moniteur de session ;
@@ -366,13 +370,37 @@ open class ClientBase(
         val key = memo?.keyFor(functionName, onglet, JVal.Obj(postData))
         if (key == null) {
             memo?.clear()
-            return sendWithRefresh(functionName, postData)
+            return sendWithRetry(functionName, postData)
         }
         memo.get(key)?.let { return it }
-        val response = sendWithRefresh(functionName, postData)
+        val response = sendWithRetry(functionName, postData)
         // Seule une RÉUSSITE est mémorisée.
         memo.put(key, response)
         return response
+    }
+
+    /**
+     * Réessai BORNÉ des seules LECTURES idempotentes (liste blanche de
+     * [ReadMemo]) : 5xx et pannes de transport transitoires, attente jitterée,
+     * `Retry-After` honoré, budget total plafonné. Tout le reste — 4xx, TLS,
+     * auth, annulation, écriture — remonte au premier échec.
+     */
+    private fun sendWithRetry(functionName: String, postData: Map<String, JVal>): JVal {
+        if (functionName !in ReadMemo.READ_FUNCTIONS) return sendWithRefresh(functionName, postData)
+        val startedAt = retryPolicy.now()
+        var attempt = 0
+        while (true) {
+            attempt += 1
+            try {
+                return sendWithRefresh(functionName, postData)
+            } catch (e: Exception) {
+                if (!RetryPolicy.isTransient(e) || attempt >= retryPolicy.maxAttempts) throw e
+                val remaining = retryPolicy.budgetMs - (retryPolicy.now() - startedAt)
+                val delay = retryPolicy.retryDelayMs(attempt, RetryPolicy.retryAfterOf(e), remaining)
+                    ?: throw e
+                retryPolicy.sleepBeforeRetry(delay)
+            }
+        }
     }
 
     /**
