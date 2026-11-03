@@ -99,7 +99,7 @@ jobs:
           path: |
             ~/.gradle/wrapper/dists
             ~/.gradle/caches/modules-2
-            ~/.gradle/caches/9.8.1
+            ~/.gradle/caches/9.8.2
           key: gradle-${{ runner.os }}-${{ hashFiles('android/gradle/libs.versions.toml', 'android/gradle/wrapper/gradle-wrapper.properties', 'android/gradle.properties', 'android/build.gradle.kts', 'android/settings.gradle.kts', 'android/*/build.gradle.kts') }}
 
       # SDK Android : même version que `compileSdk`/`buildToolsVersion` du
@@ -121,6 +121,13 @@ jobs:
           curl -sSfL -o "$RUNNER_TEMP/dl/platform.zip" "$base/platform-37.0_r02.zip"
           curl -sSfL -o "$RUNNER_TEMP/dl/build-tools.zip" "$base/build-tools_r36_linux.zip"
           curl -sSfL -o "$RUNNER_TEMP/dl/platform-tools.zip" "$base/platform-tools_r37.0.1-linux.zip"
+          # Une archive substituée devient un outil exécuté par le gate :
+          # l'empreinte est comparée AVANT toute extraction.
+          printf '%s  %s\n' \
+            '840b23e827f96e64aea4c89a1194aac3dc5f6bad37edb231c5c795d890330e8d' "$RUNNER_TEMP/dl/platform.zip" \
+            '5d9ac77fb6ff43d9da518a337b4fcf8f9097113df531d99ccefe80ef7ce8250b' "$RUNNER_TEMP/dl/build-tools.zip" \
+            'd230f13842f60f782a8645f9c813f8f845bf36089ea7289f28c48f17979313f1' "$RUNNER_TEMP/dl/platform-tools.zip" |
+            sha256sum -c -
           # Chaque archive contient UN dossier de premier niveau : on l'extrait
           # dans un dossier temporaire, puis on RENOMME ce dossier à
           # l'emplacement que Gradle attend (le nom interne du build-tools
@@ -192,6 +199,11 @@ jobs:
             mkdir -p "$root"
             curl -sSfL -o /tmp/kotlin.zip \
               "https://github.com/JetBrains/kotlin/releases/download/v${version}/kotlin-compiler-${version}.zip"
+            # Même contrôle qu'au SDK : le compilateur exécuté doit être
+            # l'archive attendue, pas seulement une archive téléchargée.
+            printf '%s  %s\n' \
+              '7cc140e76daf416a0424a5557f99afd7ca89ebd463ea1101261e3e01c33e75cd' /tmp/kotlin.zip |
+              sha256sum -c -
             unzip -q /tmp/kotlin.zip -d "$root"
           fi
           # Le binaire ÉCRIT passe AVANT celui de l'image : c'est la version

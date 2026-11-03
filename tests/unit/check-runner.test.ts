@@ -480,7 +480,7 @@ exit "\${FAKE_BUN_CODE:-0}"
     // Les dépendances Gradle : sans elles, chaque run retélécharge 378 Mo et
     // refait 353 Mo de transformations AAR.
     expect(paths).toContain("~/.gradle/caches/modules-2");
-    expect(paths).toContain("~/.gradle/caches/9.8.1");
+    expect(paths).toContain("~/.gradle/caches/9.8.2");
     // Le compilateur Kotlin (90 Mo d'archive, 9-17 s de téléchargement).
     // #624 : la version vient de `env.KOTLIN_VERSION`, comparée au catalogue
     // par tests/architecture/gradle-versions.test.ts.
