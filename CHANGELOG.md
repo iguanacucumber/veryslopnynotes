@@ -16,6 +16,7 @@ la section `0.1.0` le jour du tag.
 - Assistant IA local (clé OpenRouter chiffrée) : contenu externe délimité et
   marqué non fiable avant chaque prompt.
 - Scraper de manuels facultatif, HTTPS obligatoire, sans authentification.
+- Taille du texte réglable (100/125/150 %) et suivi du réglage Android jusqu'à 200 %.
 
 ### Sécurité
 

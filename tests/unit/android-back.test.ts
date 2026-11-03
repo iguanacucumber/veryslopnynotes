@@ -60,6 +60,6 @@ describe("unit android retour matériel (#914)", () => {
   });
 
   test("la coquille branche la disponibilité sur le pont", () => {
-    expect(shell).toContain("VsnBridge(activity, webView) { setBackAvailable(it) }");
+    expect(shell).toContain("VsnBridge(activity, webView, { setBackAvailable(it) }, ::applyTextZoom)");
   });
 });

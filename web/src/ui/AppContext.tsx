@@ -10,12 +10,13 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import { bridge } from "../bridge/client";
-import { BridgeCallError, type ResourceKey, type SessionStatus } from "../bridge/types";
+import { BridgeCallError, type ResourceKey, type SessionStatus, type TextSizeChoice } from "../bridge/types";
 import { beginBusy, isBusy, subscribeBusy } from "../lib/busy";
 import { clearNewsReadIds } from "../features/news/readState";
 import { forceReload, type LoadSignature } from "../lib/refresh";
 import { beginLoad, canUseCached, invalidateOnRequestChange, requestId, visibleResource, type ResourceStatus } from "../lib/resource";
 import { cssVarsOf, paletteOf, parseScheme } from "../lib/schemes";
+import { isLargeText, parseTextSize } from "../lib/textScale";
 
 type Theme = "SYSTEM" | "LIGHT" | "DARK";
 type NoticeKind = "info" | "error";
@@ -27,6 +28,9 @@ interface AppContextValue {
   /** Id de palette de `lib/schemes.ts` ; la variante vient de `dark`. */
   scheme: string;
   setScheme: (scheme: string) => void;
+  /** `SYSTEM` suit le réglage Android ; 100/125/150 le remplacent. */
+  textSize: TextSizeChoice;
+  setTextSize: (size: TextSizeChoice) => void;
   refreshTick: number;
   refresh: () => void;
   /** Au moins une lecture de ressource est en cours. */
@@ -61,6 +65,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   });
   const [systemDark, setSystemDark] = useState(() => matchMedia("(prefers-color-scheme: dark)").matches);
   const [scheme, setSchemeState] = useState<string>(() => parseScheme(localStorage.getItem("vsn:scheme")));
+  const [textSize, setTextSizeState] = useState<TextSizeChoice>("SYSTEM");
+  const [textZoom, setTextZoom] = useState(100);
   const [refreshTick, setRefreshTick] = useState(0);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
   const [authLost, setAuthLost] = useState(false);
@@ -99,6 +105,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.dataset["scheme"] = scheme;
   }, [scheme]);
+
+  // Le natif applique déjà `textZoom` ; l'attribut sert au CSS à laisser les
+  // libellés passer à la ligne à partir de 150 %.
+  useEffect(() => {
+    document.documentElement.dataset["textZoom"] = isLargeText(textZoom) ? "large" : "normal";
+  }, [textZoom]);
+
+  useEffect(() => {
+    let alive = true;
+    void bridge
+      .textSize()
+      .then((state) => {
+        if (!alive) return;
+        setTextSizeState(parseTextSize(state.size));
+        setTextZoom(state.zoom);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     const mq = matchMedia("(prefers-color-scheme: dark)");
@@ -178,6 +205,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("vsn:scheme", id);
   }, []);
 
+  // Le natif reste l'écrivain : il persiste le choix et applique `textZoom`.
+  const setTextSize = useCallback((next: TextSizeChoice) => {
+    const size = parseTextSize(next);
+    setTextSizeState(size);
+    void bridge
+      .setTextSize(size)
+      .then((state) => setTextZoom(state.zoom))
+      .catch(() => undefined);
+  }, []);
+
   const refresh = useCallback(() => setRefreshTick((n) => n + 1), []);
 
   const value = useMemo<AppContextValue>(
@@ -187,6 +224,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setTheme,
       scheme,
       setScheme,
+      textSize,
+      setTextSize,
       refreshTick,
       refresh,
       busy,
@@ -207,6 +246,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setTheme,
       scheme,
       setScheme,
+      textSize,
+      setTextSize,
       refreshTick,
       refresh,
       busy,

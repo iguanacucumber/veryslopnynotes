@@ -27,6 +27,8 @@ import {
   type TeacherThread,
   type TeacherTurnParams,
   type TeacherTurnResult,
+  type TextSizeChoice,
+  type TextSizeState,
 } from "./types";
 
 /** Surface exposée au JS : UNE seule méthode (miroir de `VsnBridge`). */
@@ -274,6 +276,8 @@ export const bridge = {
   ready: () => call<{ ok: true }>("app.ready"),
   theme: () => call<{ theme: SettingsSnapshot["theme"] }>("app.theme"),
   setTheme: (theme: SettingsSnapshot["theme"]) => call<{ ok: true }>("app.setTheme", { theme }),
+  textSize: () => call<TextSizeState>("app.textSize"),
+  setTextSize: (size: TextSizeChoice) => call<TextSizeState & { ok: true }>("app.setTextSize", { size }),
   backState: (available: boolean) => call<{ ok: true }>("app.backState", { available }),
   sessionStatus: () => call<SessionStatus>("session.status"),
   restore: () => call<SessionStatus>("session.restore"),
