@@ -168,7 +168,6 @@ describe("web mouvement", () => {
     const allowed = new Set(["opacity", "transform", "width", "stroke-dashoffset", "background-position"]);
     const files = [
       join(ROOT, "web/src/styles/app.css"),
-      join(ROOT, "web/src/styles/madoka.css"),
       join(ROOT, "web/src/styles/liquid-glass.css"),
       ...["grades", "home", "settings", "timetable"].map((feature) =>
         join(ROOT, "web/src/features", feature, `${feature}.css`),

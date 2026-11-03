@@ -64,7 +64,7 @@ describe("web palettes", () => {
   test("ids uniques, deux variantes par palette, libellés non vides", () => {
     const ids = SCHEMES.map((scheme) => scheme.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids.length).toBeGreaterThanOrEqual(20);
+    expect(ids).toEqual([DEFAULT_SCHEME_ID, "material", "liquid-glass"]);
     expect(ids).toContain(DEFAULT_SCHEME_ID);
     for (const scheme of SCHEMES) {
       expect(scheme.id).toMatch(/^[a-z0-9-]+$/);
@@ -72,21 +72,6 @@ describe("web palettes", () => {
       expect(scheme.light).toBeDefined();
       expect(scheme.dark).toBeDefined();
     }
-  });
-
-  // #620 : la palette Madoka porte un accent doré WebView-local. Le test
-  // vérifie le CÂBLAGE (palette → `data-scheme` → feuille importée), pas les
-  // couleurs : elles sont déjà tenues par les contrats génériques ci-dessus.
-  test("la palette Madoka existe et son accent doré est câblé", () => {
-    const scheme = SCHEMES.find((entry) => entry.id === "madoka");
-    expect(scheme?.label).toBe("Madoka Magica");
-    const app = readFileSync(join(ROOT, "web/src/ui/AppContext.tsx"), "utf8");
-    expect(app).toContain('dataset["scheme"] = scheme');
-    const main = readFileSync(join(ROOT, "web/src/main.tsx"), "utf8");
-    expect(main).toContain('import "./styles/madoka.css";');
-    const css = readFileSync(join(ROOT, "web/src/styles/madoka.css"), "utf8");
-    expect(css).toContain(':root[data-scheme="madoka"]');
-    expect(css).toContain("border-color: var(--brand-light)");
   });
 
   // La palette Liquid Glass porte une matière WebView-locale. Le test vérifie
@@ -109,11 +94,11 @@ describe("web palettes", () => {
   });
 
   test("parseScheme : valeur inconnue = palette par défaut", () => {
-    expect(parseScheme("tokyo-night")).toBe("tokyo-night");
+    expect(parseScheme("material")).toBe("material");
     expect(parseScheme("inconnu")).toBe(DEFAULT_SCHEME_ID);
     expect(parseScheme(null)).toBe(DEFAULT_SCHEME_ID);
     expect(parseScheme(42)).toBe(DEFAULT_SCHEME_ID);
-    expect(schemeById("nord").label).toBe("Nord");
+    expect(schemeById("material").label).toBe("Material You");
     expect(schemeLabel("inconnu")).toBe(schemeLabel(DEFAULT_SCHEME_ID));
     expect(paletteOf("inconnu", true)).toBe(SCHEMES[0]!.dark);
   });

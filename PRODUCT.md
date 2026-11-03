@@ -27,7 +27,7 @@ hors ligne, sans douter de sa fraîcheur.
 
 Le seul accès scolaire qui reste entièrement local : la session Pronote, les
 données et la clé du modèle vivent sur l'appareil. Le web ne parle qu'au pont
-natif, jamais à l'établissement ni à un serveur tiers. Les 22 palettes et les
+natif, jamais à l'établissement ni à un serveur tiers. Les 3 palettes et les
 deux thèmes font partie du produit, pas d'un habillage optionnel.
 
 ## Operating Context
@@ -43,7 +43,7 @@ la même hiérarchie à chaque visite.
   fonctionnalité métier dans une refonte visuelle.
 - Le web reste sans réseau ; seuls le pont natif, le client OpenRouter et le
   scraper parlent réseau, hors de cette surface.
-- 22 palettes, thème clair/sombre/système, SN Pro auto-hébergée (SIL OFL 1.1) ;
+- 3 palettes, thème clair/sombre/système, SN Pro auto-hébergée (SIL OFL 1.1) ;
   la palette Liquid Glass prend la pile système.
 - Cibles tactiles de 48 px, focus visible, contraste AA, mouvement réduit.
 - Les alertes de sécurité restent lisibles par lien direct mais n'ont plus
@@ -70,7 +70,7 @@ une capture commitée.
 1. Le prochain geste est visible avant le décor.
 2. La couleur porte un rôle : matière, état, sélection, chiffre.
 3. Une information datée dit toujours sa fraîcheur.
-4. La même hiérarchie sur les 22 palettes et les deux thèmes.
+4. La même hiérarchie sur les 3 palettes et les deux thèmes.
 5. Le calme vient de l'espace et du contraste, pas de l'absence de couleur.
 
 ## Accessibility & Inclusion
