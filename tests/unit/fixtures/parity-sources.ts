@@ -230,6 +230,9 @@ export const PRODUCTION_SOURCES: string[] = [
   // #907 : la politique WebView minimale (seuil, nom de version, message de
   // refus). Fichier PUR : le harnais l'EXÉCUTE au lieu de relire la constante.
   join(APP, "WebViewSupport.kt"),
+  // #898 : la décision `FLAG_SECURE` (release protégée, debug capturable).
+  // Fichier PUR : le harnais l'EXÉCUTE pour prouver l'exemption de capture.
+  join(APP, "SecureWindow.kt"),
 ];
 
 /** Les pilotes du dossier `kotlin-parity` (tous, triés : parcours déterministe). */
