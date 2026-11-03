@@ -237,8 +237,11 @@ sous-ressources du navigateur sont les chemins d'attaque.
 - Écoute sur `127.0.0.1` par défaut. Toute autre interface est REFUSÉE au
   démarrage sans `ALLOW_PUBLIC=1` ; ce mode exige `SCRAPER_TOKEN`, vérifié en
   `Authorization: Bearer` sur toutes les routes (comparaison à temps constant).
-  Boucle locale ou proxy authentifié, jamais public sans jeton (I8, ADR-005 §5) :
-  [`http.ts`](../server/infrastructure/http.ts).
+  Chaque jeton a son seau (6 en rafale, 10/min) et une file de 4 ; l'excès
+  reçoit `429` + `Retry-After`. mTLS se termine au proxy, jamais ici. Boucle
+  locale ou proxy authentifié, jamais public sans jeton (I8, ADR-005 §5) :
+  [`http.ts`](../server/infrastructure/http.ts),
+  [`rate-limit.ts`](../server/infrastructure/rate-limit.ts).
 - Garde SSRF : refus des IP privées/réservées et des noms qui résolvent vers
   elles, chaîne de redirections suivie et re-vérifiée, URL finale re-testée,
   WebSocket et service workers bloqués, téléchargements coupés :
@@ -267,8 +270,9 @@ documentée dans `ssrf.ts` ; la fermer demande d'épingler l'adresse résolue. S
 authentification, tout processus local peut utiliser le scraper, et une
 exposition publique est une erreur d'opérateur que l'image ne peut pas
 empêcher. Le service peut servir de proxy pour atteindre des sites publics
-depuis l'IP de l'opérateur (attribution, conditions d'utilisation), et il n'a
-pas de quota par client au-delà de deux scrapes simultanés. Chromium et
+depuis l'IP de l'opérateur (attribution, conditions d'utilisation). Le quota
+par jeton borne l'abus, mais un jeton volé garde sa rafale, et la file vit en
+mémoire (mono-instance). Chromium et
 Playwright restent une surface d'exécution : le sandbox protège le renderer,
 pas le processus navigateur, les services GPU/réseau ni le noyau. Le profil
 seccomp élargit clone/unshare au strict nécessaire : un renderer compromis
@@ -284,6 +288,7 @@ Keystore) : une compromission de l'hôte le lit.
 **Preuves** : `tests/unit/scraper-ssrf.test.ts`,
 `tests/unit/scraper-limits.test.ts`, `tests/unit/scraper-jar.test.ts`,
 `tests/unit/scraper-only.test.ts`, `tests/unit/scraper-concurrency.test.ts`,
+`tests/unit/server-rate-limit.test.ts`,
 `tests/unit/server-image-playwright.test.ts`,
 `tests/architecture/chromium-sandbox.test.ts` et
 `tests/contracts/contracts.test.ts`.

@@ -1,7 +1,8 @@
 // Scraper Playwright minimal : GET /v1/health, GET /v1/ready,
 // POST /v1/manuals/scrape, POST /v1/web/scrape ; tout le reste = 404.
 // Loopback = sans auth ; hors loopback = opt-in ALLOW_PUBLIC=1 + jeton Bearer
-// obligatoire (I8), jamais un service public muet.
+// obligatoire (I8), seau par jeton et file bornée (429 + Retry-After), jamais
+// un service public muet.
 // platform/startUrl viennent du corps (writeOnly), jamais d'env ni du dépôt ;
 // username/password sont refusés. Le jar est choisi par le serveur : seul son
 // nom vient de l'exploitant.
@@ -26,6 +27,7 @@ import {
 import { prepareJarStore } from "./jar-store";
 import type { ManualDoc } from "./manuals";
 import { DEFAULT_AUTH_FILE, ScrapeManualsError, scrapeManuals } from "./manuals-scrape";
+import { PublicAdmission } from "./rate-limit";
 import type { HostResolver } from "./ssrf";
 import { scrapeWebPage } from "./web-scrape";
 import type { WebDoc } from "./web-scrape";
@@ -82,6 +84,17 @@ export interface ScraperDeps {
    * loopback sans jeton reste ouvert ; le mode public l'impose dans start().
    */
   readonly token?: string;
+  /**
+   * Limites du mode public : seau par jeton et file FIFO des scrapes. Les
+   * défauts sont calibrés pour un seul Chromium séquentiel ; les tests les
+   * rétrécissent et injectent `now` (aucune horloge réelle).
+   */
+  readonly rateLimit?: {
+    readonly burst?: number;
+    readonly refillPerSecond?: number;
+    readonly maxQueue?: number;
+    readonly now?: () => number;
+  };
   /**
    * Sonde de disponibilité RÉELLE (`/v1/ready`) : chaque contrôle vrai = prêt.
    * Défaut = jar inscriptible + Chromium installé ; les tests injectent une
@@ -150,6 +163,14 @@ async function browserInstalled(): Promise<boolean> {
  */
 const SCRAPE_TIMEOUT_MS = 30_000;
 const MAX_CONCURRENT_SCRAPES = 2;
+// Mode public : 6 scrapes en rafale puis 10/min par jeton, 4 en file. Un scrape
+// coûte ~300 Mo : la rafale remplit deux Chromium et la file, jamais plus.
+// ponytail: constantes en code ; l'exploitant les change avec le reste du
+// dimensionnement (cf. cgroup dans server/README.md).
+// Upgrade: variables d'environnement si des profils de charge divergent.
+const PUBLIC_RATE_BURST = 6;
+const PUBLIC_RATE_REFILL_PER_SECOND = 10 / 60;
+const PUBLIC_QUEUE_MAX = 4;
 
 interface ScrapeState {
   inFlight: number;
@@ -162,6 +183,19 @@ export function createApp(deps: ScraperDeps = {}): App {
   const defaultJar = deps.authFile ?? DEFAULT_AUTH_FILE;
   const timeoutMs = deps.timeoutMs ?? SCRAPE_TIMEOUT_MS;
   const token = deps.token?.trim() ?? "";
+  const admission = token
+    ? new PublicAdmission(
+        {
+          burst: deps.rateLimit?.burst ?? PUBLIC_RATE_BURST,
+          refillPerSecond: deps.rateLimit?.refillPerSecond ?? PUBLIC_RATE_REFILL_PER_SECOND,
+          maxConcurrent: MAX_CONCURRENT_SCRAPES,
+          maxQueue: deps.rateLimit?.maxQueue ?? PUBLIC_QUEUE_MAX,
+        },
+        deps.rateLimit?.now,
+      )
+    : null;
+  // Clé de seau = empreinte : le jeton lui-même n'est jamais une clé en mémoire.
+  const admissionKey = token ? createHash("sha256").update(token).digest("hex") : "";
   const readiness = deps.readiness ?? (() => defaultReadiness(defaultJar));
   // Compteur PAR APP : un test qui laisse un scrape en vol n'empoisonne pas
   // les suivants (le serveur réel n'a qu'une instance).
@@ -184,10 +218,14 @@ export function createApp(deps: ScraperDeps = {}): App {
           return await readyResponse(req.method, readiness, draining);
         }
         if (path === MANUALS_SCRAPE_PATH && req.method === "POST") {
-          return await handleScrape(req, runScrape, defaultJar, log, state, timeoutMs, deps.resolveHost);
+          return await admitPublic(req, admission, admissionKey, () =>
+            handleScrape(req, runScrape, defaultJar, log, state, timeoutMs, deps.resolveHost),
+          );
         }
         if (path === WEB_SCRAPE_PATH && req.method === "POST") {
-          return await handleWebScrape(req, runWebScrape, log, state, timeoutMs, deps.resolveHost);
+          return await admitPublic(req, admission, admissionKey, () =>
+            handleWebScrape(req, runWebScrape, log, state, timeoutMs, deps.resolveHost),
+          );
         }
         if (path === HEALTH_PATH || path === READY_PATH || path === MANUALS_SCRAPE_PATH || path === WEB_SCRAPE_PATH) {
           return error("method_not_allowed", 405, `${req.method} not allowed on ${path}`, {
@@ -204,6 +242,29 @@ export function createApp(deps: ScraperDeps = {}): App {
       draining = true;
     },
   };
+}
+
+/**
+ * Mode public : seau par jeton puis file des scrapes. Sans jeton (loopback),
+ * aucune admission : le comportement 503 d'origine reste intact.
+ */
+async function admitPublic(
+  req: Request,
+  admission: PublicAdmission | null,
+  key: string,
+  run: () => Promise<Response>,
+): Promise<Response> {
+  if (!admission) return await run();
+  const result = await admission.acquire(key, req.signal);
+  if (!result.ok) {
+    discardBody(req);
+    return rateLimited(result.retryAfterMs);
+  }
+  try {
+    return await run();
+  } finally {
+    result.admission.release();
+  }
 }
 
 /**
@@ -608,6 +669,15 @@ function isSandboxUnavailableError(err: unknown): boolean {
 
 function error(code: string, status: number, message: string, extraHeaders?: Record<string, string>): Response {
   return Response.json({ error: { code, message } }, { status, headers: extraHeaders });
+}
+
+/** `Retry-After` en secondes entières (RFC 9110), jamais 0. */
+function rateLimited(retryAfterMs: number): Response {
+  const seconds = Math.max(1, Math.ceil(retryAfterMs / 1000));
+  return error("rate_limited", 429, "quota epuise, reessayer plus tard", {
+    "retry-after": String(seconds),
+    "cache-control": "no-store",
+  });
 }
 
 /** `PORT` : absent -> défaut ; `0` conservé (port éphémère) ; hors plage -> refus explicite. */

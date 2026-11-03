@@ -23,6 +23,12 @@ d'épuisement du compte : garder sur la boucle locale. Hors loopback, le
 démarrage est REFUSÉ sans `ALLOW_PUBLIC=1` + `SCRAPER_TOKEN` (Bearer exigé sur
 toutes les routes, comparé à temps constant), avec un proxy authentifié devant.
 `make runServer` écoute sur la boucle locale ; TLS obligatoire, échec = arrêt.
+En mode public, un seau par jeton borne les scrapes (6 en rafale, 10/min, 4
+en file, 2 simultanés) ; au-delà, `429 rate_limited` + `Retry-After` (secondes).
+`/v1/health` et `/v1/ready` restent hors quota. mTLS n'est pas terminé ici : un
+proxy termine mTLS puis injecte `Authorization: Bearer`, ou fait foi comme
+authentificateur ; le service garde TLS obligatoire et ne lit aucun certificat
+client.
 
 L'IMAGE Docker suit la même règle (#533, #921) : la commande documentée publie
 sur la boucle locale par défaut, sans `TLS_CERT_FILE`/`TLS_KEY_FILE` (volume)
