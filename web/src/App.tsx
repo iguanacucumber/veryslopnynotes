@@ -4,6 +4,7 @@ import { bridge } from "./bridge/client";
 import type { SessionStatus } from "./bridge/types";
 import { AppProvider, useApp } from "./ui/AppContext";
 import { Shell } from "./ui/AppShell";
+import { SessionGate } from "./ui/SessionGate";
 import { mustPair, storageUnavailable } from "./lib/session";
 import IndexRoute from "./routes/index";
 import CalendarRoute from "./routes/calendar";
@@ -104,7 +105,9 @@ function Gate({ children }: { children: ReactNode }) {
     }
   }, [session, sessionOpen, authLost, sessionClosed, location.pathname, navigate]);
 
-  return <>{children}</>;
+  // Aucune route ne monte avant le statut : leurs effets liraient le pont
+  // (cache, ressources) en parallèle de `session.restore`.
+  return <SessionGate status={session}>{children}</SessionGate>;
 }
 
 export function App() {
