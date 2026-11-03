@@ -1,0 +1,133 @@
+# CI-08 : la chaîne d'approvisionnement, pas seulement le code.
+#
+# Trois contrôles indépendants du gate de compilation :
+#   - `dependency-review` diffe le graphe de dépendances de la PR et échoue sur
+#     une vulnérabilité HIGH ou CRITICAL introduite (le défaut de l'action est
+#     LOW : on le relève explicitement) ;
+#   - Trivy scanne l'arbre (lockfile bun, Dockerfile) puis l'IMAGE construite.
+#     Le binaire est épinglé et vérifié par SHA-256, et un cache indisponible ne
+#     change pas le verdict (`continue-on-error` sur le cache SEULEMENT) ;
+#   - les empreintes Gradle vivent dans `android/gradle/verification-metadata.xml`
+#     et sont appliquées par le `android-compile` du gate : un artefact inconnu
+#     fait échouer `make check`, pas seulement un job séparé.
+#
+# `--ignore-unfixed` est une décision de POLITIQUE, pas un adoucissement : une
+# CVE sans version corrigée disponible ne peut être réparée par aucune PR. Toute
+# trouvaille HIGH/CRITICAL avec un correctif reste bloquante (`--exit-code 1`).
+#
+# Aucun secret : les jobs lisent le dépôt public et ne commentent pas la PR
+# (`comment-summary-in-pr: never`), donc `contents: read` suffit.
+
+name: security-scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Moindre privilège : les scans lisent le dépôt, ils n'écrivent rien sur GitHub.
+permissions:
+  contents: read
+
+concurrency:
+  group: security-scan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-review:
+    # L'API de revue de dépendances compare une PR à sa base : rien à diffuser
+    # sur un push de `main`, où le graphe est déjà celui qui a été fusionné.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Revue des dépendances
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: never
+
+  trivy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Trivy épinglé
+        run: |
+          set -euo pipefail
+          version=0.76.1
+          archive="trivy_${version}_Linux-64bit.tar.gz"
+          base="https://github.com/aquasecurity/trivy/releases/download/v${version}"
+          mkdir -p "$RUNNER_TEMP/trivy"
+          curl -sSfL -o "$RUNNER_TEMP/$archive" "$base/$archive"
+          # Un binaire substitué rendrait le verdict du scan : l'empreinte est
+          # comparée AVANT l'extraction.
+          printf '%s  %s\n' \
+            'c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0' "$RUNNER_TEMP/$archive" |
+            sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/trivy" trivy
+          "$RUNNER_TEMP/trivy/trivy" --version
+
+      # La base de vulnérabilités est un CACHE, jamais une condition de
+      # verdeur : une panne du service de cache ralentit le run, elle ne le
+      # rougit pas. Une base périmée est mise à jour par Trivy lui-même.
+      - name: Cache Trivy
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        continue-on-error: true
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            trivy-db-${{ runner.os }}-
+
+      # Arbre courant : dépendances bun (production), secrets de l'arbre et
+      # configuration Dockerfile. Une trouvaille HIGH/CRITICAL avec correctif
+      # fait échouer le job.
+      - name: Scan de l'arbre
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/trivy/trivy" fs \
+            --scanners vuln,secret,misconfig \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --exit-code 1 \
+            --no-progress \
+            . | tee "$RUNNER_TEMP/trivy-fs.txt"
+
+      # L'image réellement livrable, pas seulement son Dockerfile. Le build est
+      # fait ici : scanner une image d'un run précédent ne prouverait rien.
+      - name: Image serveur
+        run: |
+          set -euo pipefail
+          docker build -t veryslopnynotes-server:scan -f Dockerfile.server .
+
+      - name: Scan de l'image
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/trivy/trivy" image \
+            --scanners vuln \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --exit-code 1 \
+            --no-progress \
+            veryslopnynotes-server:scan | tee "$RUNNER_TEMP/trivy-image.txt"
+
+      - name: Rapports Trivy
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: trivy-reports
+          path: |
+            ${{ runner.temp }}/trivy-fs.txt
+            ${{ runner.temp }}/trivy-image.txt
+          retention-days: 7
+          if-no-files-found: ignore

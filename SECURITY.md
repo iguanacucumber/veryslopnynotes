@@ -66,6 +66,26 @@ un secret reconnu est alors refusé avant d'entrer dans l'historique ; une
 valeur de test volontaire s'exempte dans `.gitleaks.toml`, pas par un
 `gitleaks:allow` dispersé.
 
+## Dépendances et conteneur
+
+Trois contrôles couvrent la chaîne d'approvisionnement, sur chaque PR et sur
+`main` : [`security-scan.yml`](.github/workflows/security-scan.yml) diffe le
+graphe de dépendances de la PR (`fail-on-severity: high`), puis Trivy scanne
+l'arbre et l'IMAGE serveur construite dans le job. Le binaire Trivy `0.76.1`
+est épinglé et vérifié par SHA-256 ; un cache indisponible ne change pas le
+verdict. Une trouvaille HIGH/CRITICAL **avec correctif** échoue le job.
+`--ignore-unfixed` est une politique explicite : une CVE sans version corrigée
+ne peut être réparée par aucune PR. Les rapports partent en artefact 7 jours.
+
+Les artefacts Gradle sont vérifiés par
+[`android/gradle/verification-metadata.xml`](android/gradle/verification-metadata.xml),
+appliqué par l'étape `android-compile` de `make check` (mode `strict` par
+défaut). Un jar, une AAR ou un module dont l'empreinte SHA-256 n'est pas dans
+ce fichier fait échouer la compilation, localement comme en CI. Après une mise
+à jour de dépendance volontaire, régénérer le fichier avec
+`./gradlew --write-verification-metadata sha256 <tâche>` et relire le diff :
+chaque nouvelle empreinte est une décision de sécurité.
+
 ## Versions prises en charge
 
 Seule la branche `main` est maintenue : les correctifs de sécurité y arrivent.
