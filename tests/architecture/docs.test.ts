@@ -523,7 +523,8 @@ describe("versions épinglées (RELEASE.md)", () => {
 describe("carte de contexte", () => {
   test("CONTEXT.md reste sous son budget de lecture", () => {
     // Une carte qu'on relit à chaque tâche coûte plus qu'elle ne rapporte.
-    expect({ fichier: "docs/CONTEXT.md", sousBudget: CONTEXT.length <= 2_500 }).toEqual({
+    // +110 pour la déclaration d'accessibilité (#981).
+    expect({ fichier: "docs/CONTEXT.md", sousBudget: CONTEXT.length <= 2_650 }).toEqual({
       fichier: "docs/CONTEXT.md",
       sousBudget: true,
     });

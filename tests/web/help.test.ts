@@ -29,6 +29,7 @@ describe("aide et FAQ (#946)", () => {
       ["aide-pin", "Saisir le PIN"],
       ["aide-reseau", "Réseau et mode hors-ligne"],
       ["aide-camera", "Caméra et scan"],
+      ["aide-accessibilite", "Accessibilité"],
       ["aide-sans-ia", "Utiliser l’app sans assistant IA"],
       ["aide-openrouter", "Clé OpenRouter, coût et âge"],
       ["aide-depannage", "Dépannage"],
@@ -42,6 +43,8 @@ describe("aide et FAQ (#946)", () => {
     expect(html).toContain("Sans clé OpenRouter");
     expect(html).toContain("aucun appel");
     expect(html).toContain("hors ligne");
+    expect(html).toContain("docs/ACCESSIBILITY.md");
+    expect(html).toContain("WCAG 2.2 AA");
   });
 
   test("titres hiérarchisés, sans h1 concurrent, et liens nommés", () => {
