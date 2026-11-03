@@ -401,7 +401,8 @@ describe("registre d'invariants", () => {
       // +500 loopback/digest (#921), +900 deep links (SEC-10), +200 démo (#873).
       ["docs/RELEASE.md", 8_600],
       ["docs/HUMAN_INPUTS.md", 4_500],
-      ["docs/PRODUCT.md", 7_500],
+      // +500 pour la suppression totale et le compte élève (#853/#832).
+      ["docs/PRODUCT.md", 8_000],
     ];
     for (const [file, max] of ceilings) {
       expect({ file, sousBudget: read(file).length <= max }).toEqual({ file, sousBudget: true });

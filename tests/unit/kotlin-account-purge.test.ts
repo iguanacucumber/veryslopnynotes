@@ -139,10 +139,13 @@ describe("purge de compte — inventaire (#861)", () => {
       "READ_STATE",
       "WEBVIEW",
       "CACHE",
+      // La suppression TOTALE emporte aussi ces deux stores utilisateur.
+      "LLM_KEY",
+      "SERVER_URL",
     ]) {
       expect({ id, wired: wired.has(id) }).toEqual({ id, wired: true });
     }
-    for (const retained of ["LLM_KEY", "SERVER_URL", "MANUAL_PROMPT", "UI_PREFS"]) {
+    for (const retained of ["MANUAL_PROMPT", "UI_PREFS"]) {
       expect({ retained, wired: wired.has(retained) }).toEqual({ retained, wired: false });
     }
   });
@@ -196,6 +199,17 @@ describe("purge de compte — exécution (#861)", () => {
     expect(out.ok).toBe(true);
     expect(out.purged).not.toContain("session");
     expect(out.purged).not.toContain("accounts");
+    expect(out.calls.at(-1)).toBe("cache");
+  });
+
+  test.skipIf(skip)("suppression totale : la clé et le serveur partent AUSSI, cache EN DERNIER", async () => {
+    const out = await ask({ op: "plan", mode: "DELETE_ALL" });
+    expect(out.ok).toBe(true);
+    expect(out.failed).toEqual([]);
+    expect(out.missing).toEqual([]);
+    for (const id of ["llm_key", "server_url", "session", "cache", "webview", "read_state"]) {
+      expect(out.purged).toContain(id);
+    }
     expect(out.calls.at(-1)).toBe("cache");
   });
 

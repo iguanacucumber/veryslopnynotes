@@ -103,6 +103,9 @@ describe("tests instrumentés (#887) — déclaration", () => {
     expect(byName.get("AccountPurgeInstrumentedTest.kt")).toContain(
       "AccountPurgeMode.LOGOUT",
     );
+    expect(byName.get("AccountPurgeInstrumentedTest.kt")).toContain(
+      "AccountPurgeMode.DELETE_ALL",
+    );
     expect(byName.get("AccountPurgeInstrumentedTest.kt")).toContain("result.purged");
     expect(byName.get("CorruptFileInstrumentedTest.kt")).toContain("LocalDataUnreadable");
     expect(byName.get("CorruptFileInstrumentedTest.kt")).toContain("quarantine");

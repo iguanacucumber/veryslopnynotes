@@ -148,6 +148,9 @@ class ServerChoice(
         if (store.commit(mapOf(KEY_BASE_URL to validated.baseUrl))) WriteResult.Written
         else WriteResult.Failed("serveur non enregistré")
 
+    fun clear(): WriteResult =
+        if (store.clear()) WriteResult.Written else WriteResult.Failed("serveur non effacé")
+
     companion object {
         private const val KEY_BASE_URL = "base_url"
     }

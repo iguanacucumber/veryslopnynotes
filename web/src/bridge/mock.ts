@@ -123,6 +123,21 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
     case "session.logout":
       sessions.state = "no_session";
       return ok({ ok: true }) as Promise<T>;
+    case "privacy.deleteAll":
+      sessions.state = "no_session";
+      settings = {
+        ...settings,
+        llmConfigured: false,
+        serverHost: "",
+        accountCount: 0,
+        manualUrl: "",
+        manualConfigured: false,
+        manualAuto: false,
+        manualReady: false,
+        manualSubjects: [],
+        lessonSubjects: [],
+      };
+      return ok({ ok: true, failed: [] }) as Promise<T>;
     case "session.accounts":
       return ok({ count: settings.accountCount }) as Promise<T>;
     case "pairing.scanQr":

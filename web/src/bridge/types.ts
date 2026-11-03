@@ -20,6 +20,7 @@ export const BRIDGE_METHODS = [
   "session.status",
   "session.restore",
   "session.logout",
+  "privacy.deleteAll",
   "session.accounts",
   "pairing.scanQr",
   "pairing.pair",
@@ -250,6 +251,20 @@ export interface SessionStatus {
    * la session vit en mémoire mais le prochain démarrage peut échouer (#867).
    */
   tokenSaved?: boolean;
+}
+
+/**
+ * Réponse de « Supprimer toutes mes données ».
+ *
+ * `ok:false` = purge PARTIELLE : `failed` nomme les stores encore présents,
+ * jamais leur contenu. L'interface liste ces éléments au lieu de dire que
+ * tout est parti.
+ */
+export interface DeleteAllResult {
+  ok: boolean;
+  /** Identifiants des stores en échec (`session`, `cache`, `llm_key`…). */
+  failed: string[];
+  message?: string;
 }
 
 /** Taille du texte : `SYSTEM` suit le réglage Android, sinon choix explicite. */

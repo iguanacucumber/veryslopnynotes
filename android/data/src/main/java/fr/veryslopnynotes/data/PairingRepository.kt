@@ -470,6 +470,14 @@ class PairingRepository(
         }
 
     /**
+     * « Supprimer toutes mes données » : même verrou que la déconnexion, mais
+     * l'inventaire emporte aussi la clé LLM et le serveur choisi. Le résultat
+     * typé garde la liste des stores en échec pour que l'interface la montre.
+     */
+    fun deleteAllBlocking(): AccountPurgeResult =
+        SessionGate.serialized { purge.purge(AccountPurgeMode.DELETE_ALL, null) }
+
+    /**
      * Erreur d'appairage → cause typée, puis phrase actionnable. Jamais
      * « recommence » quand « rescane » est la réponse, jamais un message brut
      * de la lib (I6) et jamais une classification par un mot du message.

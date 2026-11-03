@@ -22,6 +22,10 @@ la section `0.1.0` le jour du tag.
 - Tests instrumentés sur émulateur : clé chiffrée, Keystore dégradé puis sain,
   purge complète d'un compte, fichier corrompu et `FLAG_SECURE` (non bloquant
   tant que non stable).
+- « Supprimer toutes mes données » : confirmation listant session, cache,
+  artefacts hors-ligne, téléchargements, photos, manuel, comptes, WebView,
+  état de lecture, clé de l'assistant et serveur, puis purge orchestrée avec
+  échec partiel affiché.
 
 ### Modifié
 

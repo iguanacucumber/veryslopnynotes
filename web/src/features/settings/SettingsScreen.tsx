@@ -3,12 +3,13 @@ import { bridge } from "../../bridge/client";
 import type { SettingsSnapshot } from "../../bridge/types";
 import { useApp } from "../../ui/AppContext";
 import { Avatar, ErrorBox, ListRow, Loading, Page, Rows, Section } from "../../ui/components";
-import { IconBook, IconInfo, IconSettings, IconShield, IconSparkles } from "../../ui/icons";
+import { IconBook, IconInfo, IconSettings, IconShield, IconSparkles, IconTrash } from "../../ui/icons";
 import { useViewNavigate } from "../../ui/viewTransition";
 import { parseProfilePayload, type Profile } from "../profile/model";
 import { AdvancedSection, SelfHostingNotice } from "./AdvancedSection";
 import { AppearanceCard } from "./AppearanceCard";
 import { AssistantCards } from "./AssistantCards";
+import { DeleteAllCard } from "./DeleteAllCard";
 import { ManualCard } from "./ManualCard";
 import { ServerCard } from "./ServerCard";
 import { SubjectPrefsCard } from "./SubjectPrefsCard";
@@ -89,6 +90,13 @@ export default function SettingsScreen() {
       tone: "device",
       Icon: IconShield,
     },
+    {
+      target: "reglages-donnees",
+      label: "Données",
+      detail: "Tout supprimer",
+      tone: "device",
+      Icon: IconTrash,
+    },
   ];
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ block: "start", behavior: "auto" });
@@ -164,6 +172,10 @@ export default function SettingsScreen() {
             onClick={() => navigate("/help")}
           />
         </Rows>
+      </Section>
+
+      <Section id="reglages-donnees" title="Données">
+        <DeleteAllCard />
       </Section>
 
       <div className="row" style={{ justifyContent: "center", color: "var(--muted)" }}>

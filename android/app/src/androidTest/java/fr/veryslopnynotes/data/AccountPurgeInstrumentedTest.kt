@@ -2,6 +2,8 @@ package fr.veryslopnynotes.data
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import fr.veryslopnynotes.core.CleartextPolicy
+import fr.veryslopnynotes.core.ServerUrlResult
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -31,6 +33,8 @@ class AccountPurgeInstrumentedTest {
     fun setUp() {
         context.deleteSharedPreferences("accounts")
         context.deleteSharedPreferences("session")
+        context.deleteSharedPreferences("llm_keys")
+        context.deleteSharedPreferences("server")
         root = File(context.cacheDir, "purge-${UUID.randomUUID()}")
         cacheRoot = File(root, "cache-root").apply { mkdirs() }
         cacheDir = File(root, "cache-store").apply { mkdirs() }
@@ -44,6 +48,8 @@ class AccountPurgeInstrumentedTest {
         manualFile.delete()
         context.deleteSharedPreferences("accounts")
         context.deleteSharedPreferences("session")
+        context.deleteSharedPreferences("llm_keys")
+        context.deleteSharedPreferences("server")
     }
 
     @Test
@@ -91,6 +97,8 @@ class AccountPurgeInstrumentedTest {
             lessons = lessons,
             teacherChat = chat,
             prefs = prefs,
+            llmKeys = InMemoryLlmKeyStore(),
+            serverStore = ServerStore(context, CleartextPolicy.FORBID),
             webView = WebViewAccountData(
                 readState = { webCalls.add("read_state"); true },
                 cache = { webCalls.add("webview"); true },
@@ -131,6 +139,66 @@ class AccountPurgeInstrumentedTest {
         assertEquals(0, cacheDir.listFiles().orEmpty().size)
         assertEquals(listOf("read_state", "webview"), webCalls)
         assertTrue(manualNotified)
+    }
+
+    /**
+     * Suppression TOTALE : la clé et le serveur, retenus à la déconnexion,
+     * partent ici. Les stores sont RELUS depuis le disque après la purge —
+     * l'équivalent d'un redémarrage (le force-stop réel est manuel).
+     */
+    @Test
+    fun suppression_totale_efface_cle_serveur_et_session_puis_relit_le_disque() {
+        val sessions = EncryptedSessionStore(context)
+        assertEquals(WriteResult.Written, sessions.save(session()))
+        val accounts = AccountStore(context, sessions)
+        assertEquals(WriteResult.Written, accounts.record("compte-test"))
+
+        val llm = EncryptedLlmKeyStore(context)
+        llm.save("cle-instrumentation")
+        val server = ServerStore(context, CleartextPolicy.FORBID)
+        assertTrue(server.save(url("server.invalid")) is ServerUrlResult.Ok)
+
+        val cache = FileCacheStore(cacheDir)
+        cache.save(CachePolicy.GRADES, "payload-du-compte", System.currentTimeMillis(), "trimestre-1")
+
+        val targets = AccountPurgeTargets(
+            sessions = sessions,
+            accounts = accounts,
+            cacheStore = cache,
+            cacheRoot = cacheRoot,
+            manuals = ManualStore(context),
+            lessons = LessonNotesRepository(FileLessonNotesStore(File(offline, "notes.json"))),
+            teacherChat = FileTeacherChatStore(File(offline, "chat.json")),
+            prefs = SubjectPrefsRepository(FileSubjectPrefsStore(File(offline, "prefs.json"))),
+            llmKeys = llm,
+            serverStore = server,
+            webView = WebViewAccountData(
+                readState = { true },
+                cache = { true },
+            ),
+        )
+
+        val result = AccountPurgeFactory.runner(targets).purge(AccountPurgeMode.DELETE_ALL, null)
+
+        assertTrue("purge incomplète : ${result}", result.ok)
+        for (store in listOf(
+            AccountDataStore.SESSION,
+            AccountDataStore.ACCOUNTS,
+            AccountDataStore.CACHE,
+            AccountDataStore.LLM_KEY,
+            AccountDataStore.SERVER_URL,
+            AccountDataStore.WEBVIEW,
+            AccountDataStore.READ_STATE,
+        )) {
+            assertTrue("store non purgé : $store", result.purged.contains(store))
+        }
+
+        // Relecture disque : aucune valeur ne ressuscite.
+        assertNull(EncryptedSessionStore(context).load())
+        assertNull(EncryptedLlmKeyStore(context).apiKey())
+        val seed = url("seed.invalid")
+        assertEquals(seed, ServerStore(context, CleartextPolicy.FORBID).baseUrl(seed))
+        assertNull(cache.load(CachePolicy.GRADES, "trimestre-1"))
     }
 
     private fun session() = StoredSession(
