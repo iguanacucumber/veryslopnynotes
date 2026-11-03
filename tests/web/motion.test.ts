@@ -169,6 +169,7 @@ describe("web mouvement", () => {
     const files = [
       join(ROOT, "web/src/styles/app.css"),
       join(ROOT, "web/src/styles/liquid-glass.css"),
+      join(ROOT, "web/src/styles/frutiger-aero.css"),
       ...["grades", "home", "settings", "timetable"].map((feature) =>
         join(ROOT, "web/src/features", feature, `${feature}.css`),
       ),

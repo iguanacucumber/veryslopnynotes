@@ -1,6 +1,6 @@
-/** Fond animé de « Liquid Glass » : quatre taches de couleur qui dérivent
- *  lentement derrière les surfaces floutées. Les transformations seules
- *  bougent (la garde globale de `tokens.css` coupe le mouvement). */
+/** Fond animé des palettes à matière (Liquid Glass, Frutiger Aero) : des taches
+ *  qui dérivent ou des bulles qui montent. Seules les transformations bougent
+ *  (la garde globale de `tokens.css` coupe le mouvement). */
 export function GlassBackdrop() {
   return (
     <div className="glass-backdrop" aria-hidden="true">

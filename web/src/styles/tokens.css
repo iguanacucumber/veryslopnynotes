@@ -98,7 +98,7 @@
   --duration: 200ms;
   --gutter: 16px;
   /* Accents FIXES du papier peint, comme le mesh Papillon : ils ne suivent pas
-     les 3 palettes, seule la marque au centre vient de `--brand`. */
+     les 4 palettes, seule la marque au centre vient de `--brand`. */
   --wallpaper-deep: #102c28;
   --wallpaper-mid: #1b1b2b;
   --wallpaper-warm: #2a1120;

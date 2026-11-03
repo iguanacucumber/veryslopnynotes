@@ -64,7 +64,7 @@ describe("web palettes", () => {
   test("ids uniques, deux variantes par palette, libellés non vides", () => {
     const ids = SCHEMES.map((scheme) => scheme.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids).toEqual([DEFAULT_SCHEME_ID, "material", "liquid-glass"]);
+    expect(ids).toEqual([DEFAULT_SCHEME_ID, "material", "liquid-glass", "frutiger-aero"]);
     expect(ids).toContain(DEFAULT_SCHEME_ID);
     for (const scheme of SCHEMES) {
       expect(scheme.id).toMatch(/^[a-z0-9-]+$/);
@@ -91,6 +91,23 @@ describe("web palettes", () => {
     expect(shell).toContain('scheme === "liquid-glass"');
     expect(css).toContain(".glass-backdrop__blob");
     expect(css).toMatch(/@keyframes lg-drift-a/);
+  });
+
+  // Frutiger Aero ajoute une matière WebView-locale. Le test vérifie le
+  // CÂBLAGE (palette → `data-scheme` → feuille importée), pas le rendu.
+  test("la palette Frutiger Aero existe et son vernis est câblé", () => {
+    const scheme = SCHEMES.find((entry) => entry.id === "frutiger-aero");
+    expect(scheme?.label).toBe("Frutiger Aero");
+    const main = readFileSync(join(ROOT, "web/src/main.tsx"), "utf8");
+    expect(main).toContain('import "./styles/frutiger-aero.css";');
+    const css = readFileSync(join(ROOT, "web/src/styles/frutiger-aero.css"), "utf8");
+    expect(css).toContain(':root[data-scheme="frutiger-aero"]');
+    expect(css).toMatch(/:root\[data-scheme="frutiger-aero"\] \.card[^{]*\{[^}]*background-image:\s*var\(--fa-gloss\)/);
+    expect(css).toContain(".glass-backdrop__blob");
+    expect(css).toMatch(/@keyframes fa-bubble-rise/);
+    const shell = readFileSync(join(ROOT, "web/src/ui/AppShell.tsx"), "utf8");
+    expect(shell).toContain("<GlassBackdrop");
+    expect(shell).toContain('scheme === "frutiger-aero"');
   });
 
   test("parseScheme : valeur inconnue = palette par défaut", () => {

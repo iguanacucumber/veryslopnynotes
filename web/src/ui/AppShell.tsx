@@ -152,7 +152,7 @@ export function Shell() {
   return (
     <div className={isHome ? "shell shell--home" : "shell"}>
       {isHome ? <HomeWallpaper /> : null}
-      {scheme === "liquid-glass" ? <GlassBackdrop /> : null}
+      {scheme === "liquid-glass" || scheme === "frutiger-aero" ? <GlassBackdrop /> : null}
       <header className={isHome ? "topbar topbar--home" : "topbar"}>
         <div className="topbar__inner">
           {isHome ? (
