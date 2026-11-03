@@ -1,5 +1,7 @@
 package fr.veryslopnynotes.data
 
+import fr.veryslopnynotes.core.ThreadMessageCache
+
 /**
  * La RÉPARATION d'une session MORTE.
  *
@@ -27,6 +29,10 @@ object SessionRepair {
         // mémoire, puis cache.
         invalidateSession()
         PronoteSession.clear()
+        // Les pages de messages et la liste de fils sont des données du compte :
+        // elles ne survivent pas à la session qui les a lues (I4).
+        ThreadMessageCache.clear()
+        DiscussionListCache.clear()
         // Pas de liste codée en dur : elle dériverait des contrats et
         // laisserait fuiter la donnée d'une ressource ajoutée plus tard.
         return CacheScope.purge(cacheStore)

@@ -155,8 +155,25 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
       return ok({ ok: true }) as Promise<T>;
     case "messages.list":
       return ok({ payload: JSON.stringify(fixtures.discussions) }) as Promise<T>;
-    case "messages.thread":
-      return ok({ payload: JSON.stringify(threads[String(p["id"])] ?? { items: [] }) }) as Promise<T>;
+    case "messages.thread": {
+      const all = (threads[String(p["id"])] ?? { items: [] }) as { items: unknown[] };
+      const before = typeof p["before"] === "number" ? p["before"] : all.items.length;
+      const start = Math.max(0, Math.min(before, all.items.length) - 50);
+      return ok({
+        payload: JSON.stringify({
+          items: all.items.slice(start, Math.max(0, Math.min(before, all.items.length))),
+          total: all.items.length,
+          start,
+        }),
+      }) as Promise<T>;
+    }
+    case "messages.enrich": {
+      const ids = new Set(Array.isArray(p["ids"]) ? (p["ids"] as string[]) : []);
+      const items = (fixtures.discussions as { items: Array<{ id: string; lastMessageAt?: string }> }).items.filter(
+        (d) => ids.has(d.id),
+      );
+      return ok({ payload: JSON.stringify({ discussions: items }) }) as Promise<T>;
+    }
     case "messages.reply":
     case "messages.create":
     case "messages.setRead":

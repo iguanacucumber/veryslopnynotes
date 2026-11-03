@@ -365,6 +365,7 @@ class VsnBridge(
             "assignments.attachment" -> openAttachment(p)
             "messages.list" -> messagesList()
             "messages.thread" -> messagesThread(p)
+            "messages.enrich" -> messagesEnrich(p)
             "messages.reply" -> messagesReply(p)
             "messages.create" -> messagesCreate(p)
             "messages.setRead" -> messagesSetRead(p)

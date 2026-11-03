@@ -4,6 +4,7 @@ import fr.veryslopnynotes.core.AssignmentAttachment
 import fr.veryslopnynotes.core.Capabilities
 import fr.veryslopnynotes.core.CapabilitiesJson
 import fr.veryslopnynotes.core.DiscussionRecipient
+import fr.veryslopnynotes.core.MessagePaging
 import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.DiscussionWriteOutcome
 import fr.veryslopnynotes.data.RefreshOutcome
@@ -198,8 +199,13 @@ internal fun VsnBridge.messagesList(): JSONObject {
 internal fun VsnBridge.messagesThread(p: JSONObject): JSONObject {
     val id = bounded(p.string("id"), 64)
     if (id.isEmpty()) throw BridgeFailure("bad_request", "Fil introuvable.")
+    val before = if (p.has("before") && !p.isNull("before")) {
+        p.optInt("before", 0).coerceIn(0, 1_000_000)
+    } else {
+        null
+    }
     val result = await<Pair<fr.veryslopnynotes.data.DiscussionThread?, String?>> { cb ->
-        discussions.fetchMessages(id) { thread, error -> cb(thread to error) }
+        discussions.fetchMessages(id, before) { thread, error -> cb(thread to error) }
     } ?: throw BridgeFailure("unavailable", "Fil indisponible.")
     val (thread, error) = result
     sessionOrThrow(error)
@@ -231,15 +237,39 @@ internal fun VsnBridge.messagesThread(p: JSONObject): JSONObject {
         )
     }
     val obj = JSONObject()
-        // Les participants voyagent avec le fil ouvert, pas avec la liste.
+        // Les participants voyagent avec la PREMIÈRE page du fil ouvert.
         .put(
             "payload",
             JSONObject()
                 .put("messages", arr)
                 .put("participants", JSONArray(thread.participants))
+                .put("total", thread.total)
+                .put("start", thread.start)
+                .put("hasMore", thread.hasMore)
                 .toString(),
         )
     return obj
+}
+
+internal fun VsnBridge.messagesEnrich(p: JSONObject): JSONObject {
+    val ids = p.optJSONArray("ids") ?: JSONArray()
+    if (ids.length() > MessagePaging.MAX_VISIBLE_ENRICH) {
+        throw BridgeFailure("bad_request", "Trop de fils visibles.")
+    }
+    val wanted = mutableListOf<String>()
+    for (i in 0 until ids.length()) {
+        val id = bounded(ids.optString(i, ""), 64)
+        if (id.isNotEmpty()) wanted.add(id)
+    }
+    if (wanted.isEmpty()) return JSONObject().put("payload", JSONObject().put("discussions", JSONArray()).toString())
+    val result = await<Pair<String?, String?>> { cb ->
+        discussions.fetchEnrichment(wanted) { payload, error -> cb(payload to error) }
+    } ?: throw BridgeFailure("unavailable", "Fils indisponibles.")
+    val (payload, error) = result
+    sessionOrThrow(error)
+    if (error != null) throw BridgeFailure("unavailable", error)
+    if (payload == null) throw BridgeFailure("unavailable", "Fils indisponibles.")
+    return JSONObject().put("payload", payload)
 }
 
 internal fun VsnBridge.messagesReply(p: JSONObject): JSONObject {

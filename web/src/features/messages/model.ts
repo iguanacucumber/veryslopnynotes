@@ -14,8 +14,10 @@ export const MAX_ATTACHMENT_LABEL = 200;
 export const MAX_ATTACHMENT_REF = 200;
 export const UNKNOWN_UNREAD = -1;
 export const RECIPIENT_KINDS = ["student", "teacher", "administration"] as const;
-/** Le pont livre tout l'historique : l'écran n'en rend qu'une fenêtre récente. */
+/** Taille de page du fil (miroir du pager natif) : « charger plus ancien » par 50. */
 export const MESSAGE_WINDOW = 50;
+/** Fils visibles enrichis par lot : borne le nombre de requêtes du pont. */
+export const MAX_VISIBLE_ENRICH = 12;
 
 export interface MessageAttachment {
   id: string;
@@ -130,6 +132,71 @@ export function parseDiscussions(payload: string | null): Discussion[] {
   return out;
 }
 
+/** Métadonnées de fils enrichis à la demande (dates seulement). */
+export interface EnrichedDiscussion {
+  id: string;
+  lastMessageAt: string | null;
+  updatedAt: string | null;
+}
+
+export function parseEnrichedDiscussions(payload: string | null): EnrichedDiscussion[] {
+  const root = payloadRoot(payload);
+  if (!root) return [];
+  const out: EnrichedDiscussion[] = [];
+  for (const raw of arrayOf(root, "discussions")) {
+    const obj = record(raw);
+    if (!obj) continue;
+    const id = text(obj["id"], MAX_ID);
+    if (!id) continue;
+    const lastMessageAt = text(obj["lastMessageAt"], 40) || null;
+    out.push({
+      id,
+      lastMessageAt,
+      updatedAt: text(obj["updatedAt"], 40) || lastMessageAt,
+    });
+  }
+  return out;
+}
+
+/** Fusionne les dates enrichies sans toucher au compteur non lu ni à l'ordre
+ *  d'arrivée ; l'appelant retrie ensuite. */
+export function mergeEnrichedDiscussions(
+  list: readonly Discussion[],
+  enriched: readonly EnrichedDiscussion[],
+): Discussion[] {
+  if (enriched.length === 0) return [...list];
+  const byId = new Map(enriched.map((d) => [d.id, d]));
+  return list.map((d) => {
+    const extra = byId.get(d.id);
+    if (!extra || (!extra.lastMessageAt && !extra.updatedAt)) return d;
+    return {
+      ...d,
+      lastMessageAt: extra.lastMessageAt,
+      updatedAt: extra.updatedAt,
+    };
+  });
+}
+
+/** Identifiants visibles pas encore enrichis, bornés par lot (requêtes bornées). */
+export function nextEnrichBatch(
+  visible: readonly string[],
+  already: ReadonlySet<string>,
+  max = MAX_VISIBLE_ENRICH,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const bound = Math.max(0, Math.floor(max));
+  if (bound === 0) return out;
+  for (const raw of visible) {
+    const id = raw.trim();
+    if (!id || seen.has(id) || already.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+    if (out.length >= bound) break;
+  }
+  return out;
+}
+
 function attachmentValid(a: MessageAttachment): boolean {
   if (!a.id || !a.label || !a.ref) return false;
   if (a.ref.includes("://") || a.ref.startsWith("//") || a.ref.includes("data:") || a.ref.includes("\\\\")) {
@@ -192,6 +259,37 @@ function boundedCount(value: number, max: number): number {
 export function visibleMessages<T>(messages: readonly T[], shown: number): T[] {
   const count = boundedCount(shown, messages.length);
   return messages.slice(messages.length - count);
+}
+
+/** Total du fil annoncé par le pont ; absent (vieux pont) = longueur reçue. */
+export function threadPageTotal(payload: string | null, received: number): number {
+  const root = payloadRoot(payload);
+  const raw = root?.["total"];
+  return typeof raw === "number" && Number.isFinite(raw) && raw >= 0
+    ? Math.floor(raw)
+    : received;
+}
+
+/** Début de la page reçue ; absent = 0 (le pont n'a pas paginé). */
+export function threadPageStart(payload: string | null): number {
+  const root = payloadRoot(payload);
+  const raw = root?.["start"];
+  return typeof raw === "number" && Number.isFinite(raw) && raw >= 0 ? Math.floor(raw) : 0;
+}
+
+/** Page plus ancienne préfixée, dédupliquée par id, ordre conservé. */
+export function mergeOlderMessages(
+  older: readonly DiscussionMessage[],
+  current: readonly DiscussionMessage[],
+): DiscussionMessage[] {
+  const seen = new Set(current.map((m) => m.id));
+  const prefix = older.filter((m) => !seen.has(m.id));
+  return [...prefix, ...current];
+}
+
+/** Nombre restant à charger : jamais négatif. */
+export function remainingMessages(total: number, loaded: number): number {
+  return Math.max(0, boundedCount(total, Number.MAX_SAFE_INTEGER) - boundedCount(loaded, Number.MAX_SAFE_INTEGER));
 }
 
 /** Fenêtre suivante : un pas de plus, sans dépasser le fil. */

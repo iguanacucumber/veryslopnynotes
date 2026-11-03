@@ -9,16 +9,23 @@ import {
 } from "../features/messages/MessagesScreen";
 import {
   isMessagesPayloadReadable,
+  mergeEnrichedDiscussions,
+  mergeOlderMessages,
   messagePreview,
+  nextEnrichBatch,
   parseDiscussions,
+  parseEnrichedDiscussions,
   parseMessages,
   parseParticipants,
   parseRecipients,
   searchDiscussions,
   sortDiscussions,
+  threadPageStart,
+  threadPageTotal,
   type Discussion,
   type DiscussionMessage,
   type DiscussionRecipient,
+  type EnrichedDiscussion,
 } from "../features/messages/model";
 import { createReplyGuard, draftAfterReply } from "../features/messages/reply";
 import { ErrorBox, Loading } from "../ui/components";
@@ -60,6 +67,9 @@ export default function MessagesRoute() {
   const [messages, setMessages] = useState<DiscussionMessage[]>([]);
   const [threadLoading, setThreadLoading] = useState(false);
   const [threadError, setThreadError] = useState<string | null>(null);
+  const [threadTotal, setThreadTotal] = useState(0);
+  const [threadStart, setThreadStart] = useState(0);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -76,7 +86,14 @@ export default function MessagesRoute() {
   // sous l'en-tête du fil B (A répond après B).
   const threadsSeq = useRef(createSeq());
   const threadSeq = useRef(createSeq());
+  const olderSeq = useRef(createSeq());
+  const enrichSeq = useRef(createSeq());
   const loadedThread = useRef<string | null>(null);
+  // Fils déjà enrichis (ou en vol) et dates connues : une ligne ne redemande
+  // jamais son enrichissement tant que la liste vit.
+  const enrichedIds = useRef(new Set<string>());
+  const enrichingIds = useRef(new Set<string>());
+  const enrichedDates = useRef(new Map<string, EnrichedDiscussion>());
 
   // La réponse d'un envoi n'écrit que dans le fil OUVERT à l'envoi : une
   // réponse périmée ne doit ni changer de fil ni effacer le brouillon.
@@ -89,7 +106,21 @@ export default function MessagesRoute() {
     try {
       const result = await bridge.messages();
       if (!threadsSeq.current.isCurrent(seq)) return;
-      setThreads(sortDiscussions(parseDiscussions(result.payload)));
+      const parsed = parseDiscussions(result.payload);
+      // La liste porte déjà les dates de la fenêtre initiale : elles nourrissent
+      // le cache local, puis les fils enrichis au défilement les rejoignent.
+      for (const d of parsed) {
+        if (!d.lastMessageAt && !d.updatedAt) continue;
+        enrichedIds.current.add(d.id);
+        enrichedDates.current.set(d.id, {
+          id: d.id,
+          lastMessageAt: d.lastMessageAt,
+          updatedAt: d.updatedAt,
+        });
+      }
+      setThreads(
+        sortDiscussions(mergeEnrichedDiscussions(parsed, [...enrichedDates.current.values()])),
+      );
       // Un payload illisible n'est pas « aucune discussion » (I14) ; un échec
       // non-session avec cache est signalé par le pont.
       setError(
@@ -116,8 +147,10 @@ export default function MessagesRoute() {
 
   const loadThread = useCallback(async (discussion: Discussion) => {
     const seq = threadSeq.current.next();
+    olderSeq.current.invalidate();
     setThreadLoading(true);
     setThreadError(null);
+    setLoadingOlder(false);
     try {
       const result = await bridge.thread(discussion.id);
       // Réponse PÉRIMÉE : un autre fil a été ouvert entre-temps.
@@ -125,6 +158,8 @@ export default function MessagesRoute() {
       if (result.error) setThreadError(result.error);
       const parsed = parseMessages(result.payload);
       setMessages(parsed);
+      setThreadTotal(threadPageTotal(result.payload, parsed.length));
+      setThreadStart(threadPageStart(result.payload));
       // Un payload ILLISIBLE n'est pas un fil vide : c'est une erreur.
       if (!result.error && !isMessagesPayloadReadable(result.payload)) {
         setThreadError("Fil illisible : la donnée n’a pas pu être lue.");
@@ -151,6 +186,76 @@ export default function MessagesRoute() {
     }
   }, []);
 
+  // « Charger plus ancien » : une page native de plus, jamais tout le fil.
+  const loadOlder = useCallback(async () => {
+    if (!open || threadStart <= 0 || loadingOlder) return;
+    const seq = olderSeq.current.next();
+    const target = open.id;
+    setLoadingOlder(true);
+    try {
+      const result = await bridge.thread(target, threadStart);
+      if (!olderSeq.current.isCurrent(seq) || loadedThread.current !== target) return;
+      if (result.error) {
+        setThreadError(result.error);
+        return;
+      }
+      if (!isMessagesPayloadReadable(result.payload)) {
+        setThreadError("Fil illisible : la donnée n’a pas pu être lue.");
+        return;
+      }
+      const older = parseMessages(result.payload);
+      setMessages((current) => mergeOlderMessages(older, current));
+      setThreadStart(threadPageStart(result.payload));
+      setThreadTotal(threadPageTotal(result.payload, older.length));
+    } catch (e) {
+      if (!olderSeq.current.isCurrent(seq)) return;
+      if (e instanceof BridgeCallError && e.code === "auth_required") {
+        window.dispatchEvent(new Event("vsn:auth"));
+      }
+      setThreadError(errorMessage(e, "fil indisponible"));
+    } finally {
+      if (olderSeq.current.isCurrent(seq)) setLoadingOlder(false);
+    }
+  }, [loadingOlder, open, threadStart]);
+
+  // Enrichissement des seules lignes visibles, par lots bornés (12 max).
+  const handleVisible = useCallback((ids: string[]) => {
+    const done = new Set<string>([...enrichedIds.current, ...enrichingIds.current]);
+    const pending = nextEnrichBatch(ids, done);
+    if (pending.length === 0) return;
+    for (const id of pending) enrichingIds.current.add(id);
+    const seq = enrichSeq.current.next();
+    void (async () => {
+      try {
+        const result = await bridge.enrich(pending);
+        if (!enrichSeq.current.isCurrent(seq)) {
+          for (const id of pending) enrichingIds.current.delete(id);
+          return;
+        }
+        if (result.error || !isMessagesPayloadReadable(result.payload)) {
+          for (const id of pending) enrichingIds.current.delete(id);
+          return;
+        }
+        const rows = parseEnrichedDiscussions(result.payload);
+        for (const id of pending) {
+          enrichingIds.current.delete(id);
+          enrichedIds.current.add(id);
+        }
+        for (const row of rows) enrichedDates.current.set(row.id, row);
+        if (rows.length > 0) {
+          // Pas de tri ici : une ligne enrichie en défilant ne doit pas sauter
+          // sous le doigt. Le tri complet revient au prochain chargement.
+          setThreads((current) => mergeEnrichedDiscussions(current, rows));
+        }
+      } catch (e) {
+        for (const id of pending) enrichingIds.current.delete(id);
+        if (e instanceof BridgeCallError && e.code === "auth_required") {
+          window.dispatchEvent(new Event("vsn:auth"));
+        }
+      }
+    })();
+  }, []);
+
   // Le fil affiché vient de l'URL : un lien direct charge le fil dès que la
   // liste a livré ses métadonnées. Quitter le fil invalide la requête en vol.
   useEffect(() => {
@@ -160,6 +265,9 @@ export default function MessagesRoute() {
     replyGuard.current.setDisplayedThread(open.id);
     setSending(false);
     setMessages([]);
+    setThreadTotal(0);
+    setThreadStart(0);
+    setLoadingOlder(false);
     setDraft("");
     setThreadError(null);
     void loadThread(open);
@@ -169,6 +277,7 @@ export default function MessagesRoute() {
     if (mode === "thread") return;
     loadedThread.current = null;
     threadSeq.current.invalidate();
+    olderSeq.current.invalidate();
     replyGuard.current.setDisplayedThread(null);
     setSending(false);
   }, [mode]);
@@ -183,6 +292,7 @@ export default function MessagesRoute() {
 
   const backToList = useCallback(() => {
     threadSeq.current.invalidate();
+    olderSeq.current.invalidate();
     replyGuard.current.setDisplayedThread(null);
     setSending(false);
     go("/messages", { replace: true });
@@ -368,6 +478,9 @@ export default function MessagesRoute() {
         onToggleRead={() => void setRead(open, open.unreadCount !== 0)}
         onDelete={() => void remove()}
         onRefresh={() => void loadThread(open)}
+        total={threadTotal}
+        loadingOlder={loadingOlder}
+        onLoadOlder={() => void loadOlder()}
       />
     );
   }
@@ -385,6 +498,7 @@ export default function MessagesRoute() {
       onMarkRead={(discussion) => void setRead(discussion, true)}
       onNew={() => void startNew()}
       onRefresh={() => void loadThreads()}
+      onVisible={handleVisible}
     />
   );
 }

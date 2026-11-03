@@ -30,6 +30,7 @@ import {
   nextMessageWindow,
   pickedCountLabel,
   recipientMatches,
+  remainingMessages,
   visibleMessages,
   type Discussion,
   type DiscussionMessage,
@@ -49,6 +50,7 @@ interface ListProps {
   onMarkRead: (discussion: Discussion) => void;
   onNew: () => void;
   onRefresh: () => void;
+  onVisible?: (ids: string[]) => void;
 }
 
 export function ConversationListScreen({
@@ -63,7 +65,36 @@ export function ConversationListScreen({
   onMarkRead,
   onNew,
   onRefresh,
+  onVisible,
 }: ListProps) {
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Enrichissement VISIBLE : seules les lignes qui croisent la fenêtre sont
+  // candidates ; la route borne chaque lot et ne redemande jamais un fil déjà vu.
+  useEffect(() => {
+    if (!onVisible || typeof IntersectionObserver === "undefined") return;
+    const root = listRef.current;
+    if (!root) return;
+    const seen = new Set<string>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        let changed = false;
+        for (const entry of entries) {
+          const id = (entry.target as HTMLElement).dataset.discussionId;
+          if (!id || !entry.isIntersecting || seen.has(id)) continue;
+          seen.add(id);
+          changed = true;
+        }
+        if (changed) onVisible([...seen]);
+      },
+      { rootMargin: "0px 0px 160px 0px" },
+    );
+    for (const row of root.querySelectorAll<HTMLElement>("[data-discussion-id]")) {
+      observer.observe(row);
+    }
+    return () => observer.disconnect();
+  }, [discussions, onVisible]);
+
   return (
     <div className="stack">
       <div className="row row--wrap">
@@ -117,47 +148,49 @@ export function ConversationListScreen({
           />
         )
       ) : (
-        <div className="list">
+        <div className="list" ref={listRef}>
           {discussions.map((discussion) => {
             const unread = Math.max(discussion.unreadCount, 0);
             const date = conversationDateLabel(discussion);
             const preview = previews[discussion.id] || discussion.participants.join(", ");
             return (
-              <Card key={discussion.id} as="article" className="card--flat messages-card">
-                <div className="messages-card__row">
-                  <button
-                    type="button"
-                    className="messages-card__open"
-                    onClick={() => onOpen(discussion)}
-                    aria-label={`Ouvrir la discussion « ${discussion.subject} »`}
-                  >
-                    <Avatar name={discussion.subject} size={40} />
-                    <span className="messages-card__text">
-                      <span
-                        className={`messages-card__name${
-                          unread > 0 ? " messages-card__name--unread" : ""
-                        }`}
-                      >
-                        {discussion.subject}
-                      </span>
-                      {date ? <span className="messages-card__date">{date}</span> : null}
-                      {preview ? <span className="messages-card__preview">{preview}</span> : null}
-                    </span>
-                  </button>
-                  {unread > 0 ? (
+              <div key={discussion.id} data-discussion-id={discussion.id}>
+                <Card as="article" className="card--flat messages-card">
+                  <div className="messages-card__row">
                     <button
                       type="button"
-                      className="chip chip--active messages-card__unread"
-                      aria-label={`${unread} message${unread > 1 ? "s" : ""} non lu${
-                        unread > 1 ? "s" : ""
-                      }, marquer comme lu`}
-                      onClick={() => onMarkRead(discussion)}
+                      className="messages-card__open"
+                      onClick={() => onOpen(discussion)}
+                      aria-label={`Ouvrir la discussion « ${discussion.subject} »`}
                     >
-                      {unread}
+                      <Avatar name={discussion.subject} size={40} />
+                      <span className="messages-card__text">
+                        <span
+                          className={`messages-card__name${
+                            unread > 0 ? " messages-card__name--unread" : ""
+                          }`}
+                        >
+                          {discussion.subject}
+                        </span>
+                        {date ? <span className="messages-card__date">{date}</span> : null}
+                        {preview ? <span className="messages-card__preview">{preview}</span> : null}
+                      </span>
                     </button>
-                  ) : null}
-                </div>
-              </Card>
+                    {unread > 0 ? (
+                      <button
+                        type="button"
+                        className="chip chip--active messages-card__unread"
+                        aria-label={`${unread} message${unread > 1 ? "s" : ""} non lu${
+                          unread > 1 ? "s" : ""
+                        }, marquer comme lu`}
+                        onClick={() => onMarkRead(discussion)}
+                      >
+                        {unread}
+                      </button>
+                    ) : null}
+                  </div>
+                </Card>
+              </div>
             );
           })}
         </div>
@@ -178,6 +211,10 @@ interface ThreadProps {
   onToggleRead: () => void;
   onDelete: () => void;
   onRefresh: () => void;
+  /** Total du fil annoncé par le pont ; absent = fenêtre locale (#966). */
+  total?: number;
+  loadingOlder?: boolean;
+  onLoadOlder?: () => void;
 }
 
 export function ThreadScreen({
@@ -192,6 +229,9 @@ export function ThreadScreen({
   onToggleRead,
   onDelete,
   onRefresh,
+  total,
+  loadingOlder = false,
+  onLoadOlder,
 }: ThreadProps) {
   const titleId = useId();
   const logId = useId();
@@ -202,6 +242,7 @@ export function ThreadScreen({
   const olderEndRef = useRef<HTMLParagraphElement>(null);
   const replyId = useId();
   const read = discussion.unreadCount === 0;
+  const paged = typeof total === "number";
   // Le fil s'ouvre sur le dernier message et reste collé tant que l'élève est
   // en bas ; remonter dans l'historique ne vole pas le scroll.
   const { ref: logRef, onScroll, away, toBottom } = useStickToBottom([
@@ -217,12 +258,18 @@ export function ThreadScreen({
     focusOlderEnd.current = false;
   }, [discussion.id]);
 
-  const visible = visibleMessages(messages, windowLimit);
-  const hiddenCount = messages.length - visible.length;
+  const visible = paged ? messages : visibleMessages(messages, windowLimit);
+  const hiddenCount = paged
+    ? remainingMessages(total ?? messages.length, messages.length)
+    : messages.length - visible.length;
 
   const loadOlder = () => {
     const box = logRef.current;
     if (box) olderAnchor.current = { top: box.scrollTop, height: box.scrollHeight };
+    if (paged) {
+      onLoadOlder?.();
+      return;
+    }
     const next = nextMessageWindow(windowLimit, messages.length);
     focusOlderEnd.current = next >= messages.length;
     setWindowLimit(next);
@@ -237,11 +284,11 @@ export function ThreadScreen({
       box.scrollTop = anchor.top + (box.scrollHeight - anchor.height);
       olderAnchor.current = null;
     }
-    if (focusOlderEnd.current) {
+    if (!paged && focusOlderEnd.current) {
       focusOlderEnd.current = false;
       olderEndRef.current?.focus({ preventScroll: true });
     }
-  }, [windowLimit]);
+  }, [windowLimit, messages.length, paged]);
 
   return (
     <Page className="messages-thread">
@@ -279,12 +326,16 @@ export function ThreadScreen({
               type="button"
               className="btn btn--ghost btn--small"
               aria-controls={logId}
+              aria-busy={loadingOlder}
+              disabled={loadingOlder}
               onClick={loadOlder}
             >
-              Charger les messages plus anciens ({hiddenCount})
+              {loadingOlder
+                ? "Chargement des messages plus anciens…"
+                : `Charger les messages plus anciens (${hiddenCount})`}
             </button>
           </div>
-        ) : messages.length > MESSAGE_WINDOW ? (
+        ) : (total ?? messages.length) > MESSAGE_WINDOW ? (
           <p
             ref={olderEndRef}
             tabIndex={-1}

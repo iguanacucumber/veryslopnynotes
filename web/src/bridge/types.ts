@@ -34,6 +34,7 @@ export const BRIDGE_METHODS = [
   "assignments.attachment",
   "messages.list",
   "messages.thread",
+  "messages.enrich",
   "messages.reply",
   "messages.create",
   "messages.setRead",
