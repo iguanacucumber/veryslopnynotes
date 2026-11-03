@@ -158,8 +158,12 @@ async function main(): Promise<void> {
     forwarde = true;
     await attendreSocketCdp(pid);
 
+    // `noDefaults` est OBLIGATOIRE : le CDP d'une WebView ne gère pas les
+    // contextes de navigateur, et les réglages par défaut de Playwright
+    // (`Browser.setDownloadBehavior`) font échouer la connexion.
     browser = await chromium.connectOverCDP(`http://127.0.0.1:${PORT_CDP}`, {
       timeout: DELAI_CDP_MS,
+      noDefaults: true,
     });
     const pages = browser.contexts().flatMap((context) => context.pages());
     page = pages.find((candidate) => candidate.url().includes("appassets")) ?? pages[0] ?? null;
