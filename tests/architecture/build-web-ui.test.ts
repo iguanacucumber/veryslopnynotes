@@ -7,7 +7,7 @@
 // VRAI Gradle dans `gradle-web-ui.test.ts`, à côté (il exige JDK + SDK, il n'a
 // rien à faire dans la suite unitaire).
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { codeOnly } from "../../agents/runtime/source-guards";
 
@@ -40,24 +40,64 @@ function declaredInputs(block: string): string[] {
   return [...block.matchAll(re)].map((m) => m[1]!);
 }
 
+/**
+ * Ce qui change le bundle. Une entrée absente = Gradle dit UP-TO-DATE et l'APK
+ * garde un bundle périmé.
+ */
+const WEB_INPUTS = [
+  "web/src",
+  "web/index.html",
+  "web/public",
+  "shared",
+  "web/vite.config.ts",
+  "web/tsconfig.json",
+  "package.json",
+  "bun.lock",
+] as const;
+
+/** Entrées attendues absentes de la déclaration : vide = Gradle voit le bundle. */
+function missingInputs(block: string): string[] {
+  const declared = new Set(declaredInputs(block));
+  return WEB_INPUTS.filter((path) => !declared.has(path));
+}
+
+/** Le corps amputé de la ligne qui déclare `path`. */
+function withoutInput(block: string, path: string): string {
+  const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return block.replace(
+    new RegExp(`\\n[ \\t]*inputs\\.(?:file|dir)\\([^\\n]*?"${escaped}"\\)\\)`),
+    "",
+  );
+}
+
 describe("buildWebUi : les entrées de la tâche couvrent le bundle (#426)", () => {
-  test("le lockfile est une entrée de buildWebUi", () => {
+  test("toutes les entrées du bundle sont déclarées", () => {
     const block = taskBlock("buildWebUi");
     expect(block).not.toBe("");
-    const inputs = declaredInputs(block);
     // `bun.lockb` (ancien format binaire) n'est plus le fichier du dépôt.
     expect(block).not.toContain("bun.lockb");
-    for (const attendu of [
-      "web/src",
-      "web/index.html",
-      "web/public",
-      "shared",
-      "web/vite.config.ts",
-      "package.json",
-      "bun.lock",
-    ]) {
-      expect(inputs).toContain(attendu);
+    expect(missingInputs(block)).toEqual([]);
+  });
+
+  test("sabotage : retirer une entrée la rend manquante", () => {
+    const block = taskBlock("buildWebUi");
+    for (const path of WEB_INPUTS) {
+      const amputé = withoutInput(block, path);
+      // Sans ce contrôle, un sabotage qui ne coupe rien passerait pour vert.
+      expect(amputé).not.toBe(block);
+      expect(missingInputs(amputé)).toEqual([path]);
     }
+  });
+
+  test("aucune entrée web de premier niveau n'est oubliée", () => {
+    const declared = declaredInputs(taskBlock("buildWebUi"));
+    // Documentation seule : elle ne change pas le bundle.
+    const horsBuild = new Set(["web/README.md"]);
+    const orphelins = readdirSync(join(ROOT, "web"))
+      .map((name) => `web/${name}`)
+      .filter((path) => !horsBuild.has(path))
+      .filter((path) => !declared.some((input) => path === input || path.startsWith(`${input}/`)));
+    expect(orphelins).toEqual([]);
   });
 
   test("chaque entrée déclarée existe (un chemin faux = build Gradle cassé)", () => {
