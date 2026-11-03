@@ -108,6 +108,29 @@ class NativeWebShell(private val activity: ComponentActivity) {
         webView.destroy()
     }
 
+    /**
+     * L'activité quitte le premier plan : plus de rendu ni de timers JS.
+     * `pauseTimers` est GLOBAL au process, d'où la paire stricte avec [resume].
+     */
+    fun pause() {
+        webView.onPause()
+        webView.pauseTimers()
+    }
+
+    /** Reprend après [pause], dans l'ordre inverse de la mise en pause. */
+    fun resume() {
+        webView.resumeTimers()
+        webView.onResume()
+    }
+
+    /**
+     * Pression mémoire : vide le cache RAM de la WebView. L'historique, les
+     * formulaires et la page restent intacts ; seul le rechargeable part.
+     */
+    fun trimMemory() {
+        webView.clearCache(false)
+    }
+
     private fun urlFor(path: String): String {
         // Origine concaténée : le garde-fou I1 refuse un littéral d'hôte.
         val base = "https" + "://$WEB_ASSET_HOST/index.html"

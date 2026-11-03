@@ -133,6 +133,25 @@ class MainActivity : ComponentActivity() {
         routePath(intent)?.let { webShell?.navigate(it) }
     }
 
+    // La WebView ne tourne pas en arrière-plan : ses timers JS sont coupés ici
+    // et reprennent au retour. La recréation de configuration passe par la
+    // même paire, donc aucun timer ne reste gelé après une rotation.
+    override fun onPause() {
+        webShell?.pause()
+        super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        webShell?.resume()
+    }
+
+    /** Niveau quelconque : le cache RAM est rechargeable, l'état de la page non. */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        webShell?.trimMemory()
+    }
+
     override fun onDestroy() {
         webShell?.destroy()
         webShell = null
