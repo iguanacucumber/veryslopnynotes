@@ -102,17 +102,18 @@ describe("invariants", () => {
     expect(hasDirectFetch(codeOnly("const p = apiProvider;\nawait fetch(apiUrl);"))).toBe(false);
   });
 
-  test("I8 (0.7.0): le serveur ne lit que l'exposition et le jeton public", () => {
+  test("I8 (0.7.0): le serveur ne lit que l'exposition, le jeton public et le proxy d'égression", () => {
     // Aucun credential métier : `PORT`/`HOST`, `ALLOW_PUBLIC`, `SCRAPER_TOKEN`
-    // (mode public seulement) et les chemins TLS sont les seules variables lues,
-    // dans `start()` ; la clé du certificat vit hors du dépôt.
+    // (mode public seulement), les chemins TLS et le proxy d'égression sont les
+    // seules variables lues ; la clé du certificat vit hors du dépôt.
     const allowedRead =
       /envValue\(env,\s*"(PORT|HOST|ALLOW_PUBLIC|SCRAPER_TOKEN|TLS_CERT_FILE|TLS_KEY_FILE)"\)/;
+    const allowedEgress = /process\.env\.SCRAPER_EGRESS_PROXY\b/;
     const hits: string[] = [];
     for (const f of listFiles(join(ROOT, "server"))) {
       for (const line of codeOnly(readFileSync(f, "utf8")).split("\n")) {
         if (!/Bun\.env|process\.env/.test(line)) continue;
-        const allowed = allowedRead.test(line) || /= Bun\.env as Record/.test(line);
+        const allowed = allowedRead.test(line) || allowedEgress.test(line) || /= Bun\.env as Record/.test(line);
         if (!allowed) hits.push(`${f.replace(ROOT, "")}: ${line.trim()}`);
       }
     }
@@ -122,6 +123,7 @@ describe("invariants", () => {
     const sneak = 'const k = process.env["OPENROUTER_API_KEY"] ?? "";';
     expect(sneak).toMatch(/process\.env/);
     expect(allowedRead.test(sneak)).toBe(false);
+    expect(allowedEgress.test(sneak)).toBe(false);
 
     // La clé privée du certificat reste hors du dépôt (lue à l'exécution).
     expect(listFiles(join(ROOT, "server")).filter((f) => /\.(pem|key)$/.test(f))).toEqual([]);

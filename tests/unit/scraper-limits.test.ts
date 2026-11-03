@@ -80,6 +80,8 @@ mock.module("playwright", () => ({
       newContext: async (options?: { acceptDownloads?: boolean }) => {
         state.acceptDownloads = options?.acceptDownloads ?? null;
         return {
+          route: async () => {},
+          on: () => {},
           routeWebSocket: async () => {},
           newPage: async () => ({
             url: () => PUBLIC_URL,

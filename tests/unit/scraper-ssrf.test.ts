@@ -60,6 +60,8 @@ interface FakeOptions {
 interface FakeState {
   launched: number;
   launchHeadless: boolean | null;
+  /** `args` passés au lancement (épinglage DNS). */
+  launchArgs: string[];
   contentCalls: number;
   aborted: string[];
   continued: string[];
@@ -70,6 +72,14 @@ interface FakeState {
   serviceWorkerModes: (string | undefined)[];
   routePattern: string | null;
   wsPattern: string | null;
+  /** Nombre d'appels à `page.route` : doit rester 0 (seul `context.route` garde). */
+  pageRouteCalls: number;
+  /** Handler `context.on("page")` : ferme les popups. */
+  popupHandler: ((page: unknown) => void) | null;
+  /** Page principale factice (ne doit jamais être fermée par le handler popup). */
+  mainPage: unknown;
+  /** Fermetures de la page principale observées par le faux. */
+  mainPageClosed: number;
   concurrentStorage: number;
   maxConcurrentStorage: number;
 }
@@ -81,6 +91,7 @@ let fake: FakeOptions = { finalUrl: PUBLIC_URL };
 const state: FakeState = {
   launched: 0,
   launchHeadless: null,
+  launchArgs: [],
   contentCalls: 0,
   aborted: [],
   continued: [],
@@ -89,6 +100,10 @@ const state: FakeState = {
   serviceWorkerModes: [],
   routePattern: null,
   wsPattern: null,
+  pageRouteCalls: 0,
+  popupHandler: null,
+  mainPage: null,
+  mainPageClosed: 0,
   concurrentStorage: 0,
   maxConcurrentStorage: 0,
 };
@@ -111,6 +126,7 @@ function resetState(): void {
   fake = { finalUrl: PUBLIC_URL };
   state.launched = 0;
   state.launchHeadless = null;
+  state.launchArgs = [];
   state.contentCalls = 0;
   state.aborted = [];
   state.continued = [];
@@ -119,10 +135,15 @@ function resetState(): void {
   state.serviceWorkerModes = [];
   state.routePattern = null;
   state.wsPattern = null;
+  state.pageRouteCalls = 0;
+  state.popupHandler = null;
+  state.mainPage = null;
+  state.mainPageClosed = 0;
   state.concurrentStorage = 0;
   state.maxConcurrentStorage = 0;
   routeHandler = null;
   wsHandler = null;
+  delete process.env.SCRAPER_EGRESS_PROXY;
   stubFetch(() => new Response("ok", { status: 200 })); // pas de redirection
 }
 
@@ -133,48 +154,64 @@ afterEach(() => {
 
 mock.module("playwright", () => ({
   chromium: {
-    launch: async (opts?: { headless?: boolean }) => {
+    launch: async (opts?: { headless?: boolean; args?: string[] }) => {
       state.launched += 1;
       state.launchHeadless = opts?.headless ?? null;
+      state.launchArgs = opts?.args ?? [];
       return {
         newContext: async (opts?: { storageState?: string; serviceWorkers?: string }) => {
           state.serviceWorkerModes.push(opts?.serviceWorkers);
           // Le jar MONTÉ par le navigateur dit quelle session est utilisée.
           if (opts?.storageState) state.mountedStates.push(opts.storageState);
           return {
-            newPage: async () => ({
-              url: () => fake.finalUrl,
-              title: async () => fake.title ?? "Titre factice",
-              // La borne est appliquée DANS le navigateur : le faux rend au plus `max` caractères.
-              evaluate: async (_fn: unknown, max: number) => {
-                state.contentCalls += 1;
-                const html = "<html><body>SECRET-INTERNAL-SERVICE</body></html>";
-                return html.length > max ? html.slice(0, max + 1) : html;
-              },
-              route: async (pattern: string, handler: (r: unknown) => Promise<void>) => {
-                state.routePattern = pattern;
-                routeHandler = handler;
-              },
-              goto: async (url: string) => {
-                const targets = fake.routeSeesRedirect === false ? [url] : [url, fake.finalUrl];
-                for (const target of targets) {
-                  if (!routeHandler) break;
-                  let aborted = false;
-                  await routeHandler({
-                    request: () => ({ url: () => target, resourceType: () => "document" }),
-                    abort: async () => {
-                      aborted = true;
-                      state.aborted.push(target);
-                    },
-                    continue: async () => {
-                      state.continued.push(target);
-                    },
-                  });
-                  if (aborted) throw new Error("net::ERR_BLOCKED_BY_CLIENT");
-                }
-                return { status: () => fake.status ?? 200, ok: () => (fake.status ?? 200) < 400 };
-              },
-            }),
+            // `context.route` garde TOUTES les pages ; `page.route` ne doit
+            // plus être utilisé (une popup y échapperait).
+            route: async (pattern: string, handler: (r: unknown) => Promise<void>) => {
+              state.routePattern = pattern;
+              routeHandler = handler;
+            },
+            on: (event: string, handler: (page: unknown) => void) => {
+              if (event === "page") state.popupHandler = handler;
+            },
+            newPage: async () => {
+              const page = {
+                url: () => fake.finalUrl,
+                title: async () => fake.title ?? "Titre factice",
+                // La borne est appliquée DANS le navigateur : le faux rend au plus `max` caractères.
+                evaluate: async (_fn: unknown, max: number) => {
+                  state.contentCalls += 1;
+                  const html = "<html><body>SECRET-INTERNAL-SERVICE</body></html>";
+                  return html.length > max ? html.slice(0, max + 1) : html;
+                },
+                route: async () => {
+                  state.pageRouteCalls += 1;
+                },
+                close: async () => {
+                  state.mainPageClosed += 1;
+                },
+                goto: async (url: string) => {
+                  const targets = fake.routeSeesRedirect === false ? [url] : [url, fake.finalUrl];
+                  for (const target of targets) {
+                    if (!routeHandler) break;
+                    let aborted = false;
+                    await routeHandler({
+                      request: () => ({ url: () => target, resourceType: () => "document" }),
+                      abort: async () => {
+                        aborted = true;
+                        state.aborted.push(target);
+                      },
+                      continue: async () => {
+                        state.continued.push(target);
+                      },
+                    });
+                    if (aborted) throw new Error("net::ERR_BLOCKED_BY_CLIENT");
+                  }
+                  return { status: () => fake.status ?? 200, ok: () => (fake.status ?? 200) < 400 };
+                },
+              };
+              state.mainPage = page;
+              return page;
+            },
             routeWebSocket: async (pattern: string, handler: (socket: unknown) => Promise<void>) => {
               state.wsPattern = pattern;
               wsHandler = handler;
@@ -725,5 +762,149 @@ describe("#779 — fermetures SSRF et bornes du scrape", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+// #933 : le routeur couvre TOUTES les pages (popups), refuse les schémas
+// non http(s), et épingle l'adresse validée pour la connexion réelle.
+describe("#933 — popups, schémas et épinglage DNS", () => {
+  /** Requête routée synthétique : `abort`/`continue` sont observés. */
+  function fakeRoute(url: string, resourceType = "document") {
+    const calls = { aborted: 0, continued: 0 };
+    return {
+      calls,
+      route: {
+        request: () => ({ url: () => url, resourceType: () => resourceType }),
+        abort: async () => {
+          calls.aborted += 1;
+        },
+        continue: async () => {
+          calls.continued += 1;
+        },
+      },
+    };
+  }
+
+  test("le routeur est posé sur le CONTEXTE (toutes les pages), jamais sur une seule page", async () => {
+    resetState();
+    await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
+    expect(state.routePattern).toBe("**/*");
+    // Une popup n'hérite pas de `page.route` : seul `context.route` la couvre.
+    expect(state.pageRouteCalls).toBe(0);
+  });
+
+  test("une popup est FERMÉE dès sa création, la page principale reste ouverte", async () => {
+    resetState();
+    await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
+    expect(state.popupHandler).not.toBeNull();
+    let popupClosed = 0;
+    state.popupHandler!({
+      close: async () => {
+        popupClosed += 1;
+      },
+    });
+    expect(popupClosed).toBe(1);
+    // La page principale n'est jamais fermée par ce handler.
+    state.popupHandler!(state.mainPage);
+    expect(state.mainPageClosed).toBe(0);
+  });
+
+  test("les schémas non http(s) sont ABORTÉS (file, ftp, data, blob, chrome)", async () => {
+    resetState();
+    await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
+    expect(routeHandler).not.toBeNull();
+    for (const url of [
+      "file:///etc/passwd",
+      "ftp://manuels.example.invalid/x",
+      "data:text/html,<script>x</script>",
+      "blob:https://manuels.example.invalid/1234",
+      "chrome-extension://abc/x",
+      "javascript:alert(1)",
+    ]) {
+      const { route, calls } = fakeRoute(url);
+      await routeHandler!(route);
+      expect({ url, ...calls }).toEqual({ url, aborted: 1, continued: 0 });
+    }
+  });
+
+  test("http(s) public continue : le refus des autres schémas n'est pas un blocage total", async () => {
+    resetState();
+    await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
+    const { route, calls } = fakeRoute("https://manuels.example.invalid/img.png", "image");
+    await routeHandler!(route);
+    expect(calls).toEqual({ aborted: 0, continued: 1 });
+  });
+
+  test("l'adresse validée du document est ÉPINGLÉE dans Chromium (rebinding fermé)", async () => {
+    resetState();
+    await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
+    expect(state.launchArgs).toHaveLength(1);
+    expect(state.launchArgs[0]).toContain("--host-resolver-rules=");
+    expect(state.launchArgs[0]).toContain(`MAP manuels.example.invalid ${PUBLIC_IP}`);
+  });
+
+  test("les hôtes de la chaîne de redirection sont épinglés AUSSI", async () => {
+    resetState();
+    const cdnIp = "8.8.8.8";
+    const resolve = fakeResolver({
+      "manuels.example.invalid": [PUBLIC_IP],
+      "cdn.example.invalid": [cdnIp],
+    });
+    stubFetch((url) =>
+      url === PUBLIC_URL
+        ? new Response(null, { status: 302, headers: { location: "https://cdn.example.invalid/6e" } })
+        : new Response("ok", { status: 200 }),
+    );
+    fake = { finalUrl: "https://cdn.example.invalid/6e", routeSeesRedirect: true };
+    await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: resolve });
+    const rules = state.launchArgs[0] ?? "";
+    expect(rules).toContain(`MAP manuels.example.invalid ${PUBLIC_IP}`);
+    expect(rules).toContain(`MAP cdn.example.invalid ${cdnIp}`);
+  });
+
+  test("rebinding ENTRE vérification et épinglage : refus, navigateur jamais lancé", async () => {
+    resetState();
+    let calls = 0;
+    const resolve: HostResolver = async () => {
+      calls += 1;
+      // 1 = assertion de l'URL, 2 = chaîne, 3 = épinglage.
+      return calls <= 2 ? [PUBLIC_IP] : ["127.0.0.1"];
+    };
+    const err = await refusal(scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: resolve }));
+    expect(err.reason).toBe("private_host");
+    expect(state.launched).toBe(0);
+    expect(state.contentCalls).toBe(0);
+  });
+
+  test("le proxy d'égression est imposé à Chromium, loopback compris", async () => {
+    resetState();
+    process.env.SCRAPER_EGRESS_PROXY = "http://proxy.example.invalid:3128";
+    try {
+      await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
+    } finally {
+      delete process.env.SCRAPER_EGRESS_PROXY;
+    }
+    expect(state.launchArgs).toContain("--proxy-server=http://proxy.example.invalid:3128");
+    expect(state.launchArgs).toContain("--proxy-bypass-list=<-loopback>");
+  });
+
+  test("un proxy d'égression non http(s) REFUSE le scrape (pas de repli direct)", async () => {
+    resetState();
+    process.env.SCRAPER_EGRESS_PROXY = "socks5://proxy.example.invalid:1080";
+    try {
+      await expect(
+        scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER }),
+      ).rejects.toThrow(ScrapeManualsError);
+    } finally {
+      delete process.env.SCRAPER_EGRESS_PROXY;
+    }
+    expect(state.launched).toBe(0);
+  });
+
+  test("épinglage : un littéral public ne produit aucune règle (connexion directe)", async () => {
+    resetState();
+    fake = { finalUrl: "https://93.184.216.34/x", routeSeesRedirect: true };
+    await scrapeManuals(CONFIG, { startUrl: "https://93.184.216.34/x", resolveHost: PUBLIC_RESOLVER });
+    expect(state.launchArgs).toEqual([]);
   });
 });

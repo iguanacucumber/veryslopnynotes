@@ -11,15 +11,14 @@
 // ponytail: `dns.lookup` (résolveur du système, comme Chromium) + un
 // résolveur INJECTABLE (les tests ne touchent jamais le réseau).
 //
-// Fenêtre TOCTOU RÉSIDUELLE : la résolution est vérifiée ICI, mais le
-// navigateur (et le `fetch` de la chaîne de redirections) résout de son côté,
-// au moment de la connexion. Un enregistrement DNS qui change entre les deux
-// peut donc faire partir la connexion vers une IP interne alors que la
-// vérification a vu une IP publique. La fenêtre est réelle, elle est courte,
-// et elle n'est pas fermable sans épingler l'adresse.
-// Upgrade: épingler l'adresse résolue (connecter l'IP en gardant l'en-tête
-// Host, ou des `--host-resolver-rules` pour Chromium) pour fermer cette
-// fenêtre.
+// Fenêtre TOCTOU : l'adresse vérifiée est ÉPINGLÉE pour le document et les
+// hôtes de la chaîne de redirections via `--host-resolver-rules` (cf.
+// `manuals-scrape.ts`), donc Chromium ne peut pas rebinder ces noms. Les
+// sous-ressources, dont l'hôte n'est connu qu'à la requête, restent résolues
+// par le navigateur : leur vérification garde la fenêtre courte, et la
+// politique d'égression (`docs/architecture/SERVER-EGRESS.md`) la ferme au
+// niveau réseau. Upgrade: proxy sortant à liste blanche qui résout et connecte
+// lui-même l'adresse validée pour TOUTES les requêtes.
 import { lookup } from "node:dns/promises";
 import { isBlockedHost, isIpLiteral } from "../../shared/contracts/net";
 
@@ -43,22 +42,37 @@ export type HostVerdict =
   /** Nom introuvable : la navigation n'aboutirait de toute façon pas. */
   | "unresolved";
 
+/** Verdict + adresses : l'appelant peut épingler une adresse déjà validée. */
+export interface HostResolution {
+  readonly verdict: HostVerdict;
+  /** Adresses publiques validées ; vide pour un littéral public ou un refus. */
+  readonly addresses: readonly string[];
+}
+
 /** Un nom est résolu, puis CHAQUE adresse obtenue est testée. */
-export async function checkPublicHost(
+export async function resolvePublicHost(
   host: string,
   resolve: HostResolver = systemResolver,
-): Promise<HostVerdict> {
-  if (isBlockedHost(host)) return "private";
-  if (isIpLiteral(host)) return "public";
+): Promise<HostResolution> {
+  if (isBlockedHost(host)) return { verdict: "private", addresses: [] };
+  if (isIpLiteral(host)) return { verdict: "public", addresses: [] };
   let addresses: readonly string[];
   try {
     addresses = await resolve(host);
   } catch {
-    return "unresolved";
+    return { verdict: "unresolved", addresses: [] };
   }
-  if (addresses.length === 0) return "unresolved";
+  if (addresses.length === 0) return { verdict: "unresolved", addresses: [] };
   for (const address of addresses) {
-    if (isBlockedHost(address)) return "private";
+    if (isBlockedHost(address)) return { verdict: "private", addresses: [] };
   }
-  return "public";
+  return { verdict: "public", addresses };
+}
+
+/** Verdict seul : la garde historique, sans exposer l'adresse. */
+export async function checkPublicHost(
+  host: string,
+  resolve: HostResolver = systemResolver,
+): Promise<HostVerdict> {
+  return (await resolvePublicHost(host, resolve)).verdict;
 }
