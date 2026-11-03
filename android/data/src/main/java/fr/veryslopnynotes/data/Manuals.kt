@@ -12,6 +12,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 // Manuel de l'élève, côté appareil :
@@ -83,17 +84,30 @@ internal fun manualMentionsSubject(docText: String, requested: String): Boolean 
  * et part avec lui (I16) : [clearAccountData].
  */
 class ManualStore(context: Context) {
-    private val prefs: SharedPreferences? = try {
-        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    /**
+     * Données du manuel, dans `offline/` : la purge de compte les efface avec
+     * le cache. `prompt_seen` reste dans les préférences (réglage d'interface,
+     * jamais une donnée du compte).
+     */
+    private val file: File? = try {
+        File(context.applicationContext.filesDir, "offline/manual.json")
     } catch (_: Exception) {
-        // Préfs KO = pas de manuel, aucun crash au démarrage.
         null
     }
 
-    /** Adresse courante revalidée à la lecture (prefs altérées, version passée). */
+    private val prefs: SharedPreferences? = try {
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    } catch (_: Exception) {
+        // Préfs KO = pas de drapeau d'invitation, aucun crash au démarrage.
+        null
+    }
+
+    private val lock = Any()
+
+    /** Adresse courante revalidée à la lecture (fichier altéré, version passée). */
     fun url(): String? {
         val stored = try {
-            prefs?.getString(KEY_URL, null)
+            data().optString(KEY_URL, null)
         } catch (_: Exception) {
             null
         } ?: return null
@@ -123,21 +137,21 @@ class ManualStore(context: Context) {
     fun setEnabled(subject: String, enabled: Boolean): Boolean {
         val key = normalizeSubject(subject)
         if (key.isEmpty() || key.length > MAX_SUBJECT_CHARS) return false
-        val p = prefs ?: return false
-        return try {
-            val next = disabledSubjects().toMutableSet()
+        return update { obj ->
+            val next = disabledSubjects(obj).toMutableSet()
             if (enabled) next.remove(key) else next.add(key)
-            val arr = JSONArray()
-            next.take(MAX_SUBJECTS).forEach { arr.put(it) }
-            p.edit().putString(KEY_DISABLED_SUBJECTS, arr.toString()).apply()
-            true
-        } catch (_: Exception) {
-            false
+            obj.put(KEY_DISABLED_SUBJECTS, jsonArray(next.take(MAX_SUBJECTS)).toString())
         }
     }
 
     private fun disabledSubjects(): Set<String> = try {
-        val raw = prefs?.getString(KEY_DISABLED_SUBJECTS, null)
+        disabledSubjects(data())
+    } catch (_: Exception) {
+        emptySet()
+    }
+
+    private fun disabledSubjects(obj: JSONObject): Set<String> = try {
+        val raw = obj.optString(KEY_DISABLED_SUBJECTS, null)
         if (raw.isNullOrBlank()) emptySet() else {
             val arr = JSONArray(raw)
             val out = LinkedHashSet<String>()
@@ -157,30 +171,31 @@ class ManualStore(context: Context) {
 
     /** Classe lue sur le profil (ex. « TG2 ») au moment de l'enregistrement. */
     fun classLabel(): String = try {
-        prefs?.getString(KEY_CLASS_LABEL, null)?.trim()?.take(64).orEmpty()
+        data().optString(KEY_CLASS_LABEL, "").trim().take(64)
     } catch (_: Exception) {
         ""
     }
 
     /** Matières réellement vues dans les caches (notes, devoirs, EDT). */
     fun subjects(): List<String> {
-        val raw = try {
-            prefs?.getString(KEY_SUBJECTS, null)
-        } catch (_: Exception) {
-            null
-        } ?: return emptyList()
-        return try {
-            val arr = JSONArray(raw)
-            val out = mutableListOf<String>()
-            for (i in 0 until arr.length()) {
-                val s = arr.optString(i).trim()
-                if (s.isNotEmpty()) out.add(s.take(100))
-                if (out.size >= MAX_SUBJECTS) break
+        val out = try {
+            val raw = data().optString(KEY_SUBJECTS, null)
+            if (raw.isNullOrBlank()) {
+                emptyList<String>()
+            } else {
+                val arr = JSONArray(raw)
+                val values = mutableListOf<String>()
+                for (i in 0 until arr.length()) {
+                    val s = arr.optString(i).trim()
+                    if (s.isNotEmpty()) values.add(s.take(100))
+                    if (values.size >= MAX_SUBJECTS) break
+                }
+                values
             }
-            out.distinct()
         } catch (_: Exception) {
             emptyList()
         }
+        return out.distinct()
     }
 
     /**
@@ -190,15 +205,14 @@ class ManualStore(context: Context) {
     fun save(raw: String): ManualUrlResult {
         val validated = ManualUrl.validate(raw)
         if (validated !is ManualUrlResult.Ok) return validated
-        val p = prefs ?: return STORAGE_KO
-        return try {
-            val previous = p.getString(KEY_URL, null)
-            p.edit().putString(KEY_URL, validated.url).putBoolean(KEY_PROMPT_SEEN, true).apply()
-            if (previous != validated.url) clearDocs()
-            validated
-        } catch (_: Exception) {
-            STORAGE_KO
+        val previous = url()
+        val written = update { obj ->
+            obj.put(KEY_URL, validated.url)
+            if (previous != validated.url) obj.remove(KEY_DOCS)
         }
+        if (!written) return STORAGE_KO
+        markPromptSeen()
+        return validated
     }
 
     /** « Plus tard » : l'app ne redemandera plus d'elle-même. */
@@ -212,15 +226,9 @@ class ManualStore(context: Context) {
 
     /** Oublier le manuel (l'invitation reste vue : pas de rappel intempestif). */
     fun clear() {
+        clearAccountData()
         try {
-            prefs?.edit()
-                ?.remove(KEY_URL)
-                ?.remove(KEY_DOCS)
-                ?.remove(KEY_CLASS_LABEL)
-                ?.remove(KEY_SUBJECTS)
-                ?.remove(KEY_DISABLED_SUBJECTS)
-                ?.putBoolean(KEY_PROMPT_SEEN, true)
-                ?.apply()
+            prefs?.edit()?.putBoolean(KEY_PROMPT_SEEN, true)?.apply()
         } catch (_: Exception) {
             // Préfs indisponibles : rien n'était de toute façon lisible.
         }
@@ -228,18 +236,17 @@ class ManualStore(context: Context) {
 
     /**
      * Purge de COMPTE (I16) : déconnexion, session morte, appairage d'un AUTRE
-     * compte. Tout ce qui décrit le compte précédent part — adresse du manuel,
-     * extraits récupérés (qui citent son livre), classe, matières vues et
-     * matières désactivées.
-     *
-     * Sans elle, le compte B recevait le manuel, la classe et les extraits du
-     * compte A dans `aiContextFor` / `manualDocFor`.
+     * compte. La cible, sa sauvegarde et ses copies en quarantaine partent :
+     * aucune version antérieure ne doit rendre le manuel du compte précédent.
      *
      * `prompt_seen` RESTE : c'est un réglage d'interface (une invitation déjà
      * montrée), jamais une donnée du compte — et un rappel intempestif à chaque
      * bascule serait un défaut.
      */
     fun clearAccountData() {
+        file?.let { DurableFile.delete(it) }
+        // Les préférences d'une version antérieure au fichier durable portent
+        // encore les mêmes clés : elles partent aussi (I16).
         try {
             prefs?.edit()
                 ?.remove(KEY_URL)
@@ -261,13 +268,9 @@ class ManualStore(context: Context) {
             .distinct()
             .take(MAX_SUBJECTS)
             .ifEmpty { this.subjects() }
-        try {
-            prefs?.edit()
-                ?.putString(KEY_CLASS_LABEL, label)
-                ?.putString(KEY_SUBJECTS, JSONArray(clean).toString())
-                ?.apply()
-        } catch (_: Exception) {
-            // Le manuel reste utilisable : le choix retombera sur la matière.
+        update { obj ->
+            obj.put(KEY_CLASS_LABEL, label)
+            obj.put(KEY_SUBJECTS, jsonArray(clean).toString())
         }
     }
 
@@ -299,56 +302,118 @@ class ManualStore(context: Context) {
     fun saveDoc(url: String, doc: ManualDoc) {
         val key = url.trim()
         if (key.isEmpty() || !doc.isValid()) return
-        val map = docs()
-        map.put(
-            key,
-            JSONObject()
-                .put("title", doc.title)
-                .put("subject", doc.subject)
-                .put("page", doc.page)
-                .put("excerpt", doc.excerpt)
-                .put("fetchedAt", System.currentTimeMillis()),
-        )
-        // Cache borné : les ouvrages changent peu, 8 matières suffisent.
-        while (map.length() > MAX_DOCS) {
-            var oldestKey: String? = null
-            var oldest = Long.MAX_VALUE
-            val entries = map.keys()
-            while (entries.hasNext()) {
-                val entry = entries.next()
-                val at = map.optJSONObject(entry)?.optLong("fetchedAt", 0) ?: 0
-                if (at < oldest) {
-                    oldest = at
-                    oldestKey = entry
+        update { obj ->
+            val map = docs(obj)
+            map.put(
+                key,
+                JSONObject()
+                    .put("title", doc.title)
+                    .put("subject", doc.subject)
+                    .put("page", doc.page)
+                    .put("excerpt", doc.excerpt)
+                    .put("fetchedAt", System.currentTimeMillis()),
+            )
+            // Cache borné : les ouvrages changent peu, 8 matières suffisent.
+            while (map.length() > MAX_DOCS) {
+                var oldestKey: String? = null
+                var oldest = Long.MAX_VALUE
+                val entries = map.keys()
+                while (entries.hasNext()) {
+                    val entry = entries.next()
+                    val at = map.optJSONObject(entry)?.optLong("fetchedAt", 0) ?: 0
+                    if (at < oldest) {
+                        oldest = at
+                        oldestKey = entry
+                    }
                 }
+                if (oldestKey == null) break
+                map.remove(oldestKey)
             }
-            if (oldestKey == null) break
-            map.remove(oldestKey)
+            obj.put(KEY_DOCS, map.toString())
         }
-        writeDocs(map)
     }
 
     private fun docs(): JSONObject = try {
-        val raw = prefs?.getString(KEY_DOCS, null)
+        docs(data())
+    } catch (_: Exception) {
+        JSONObject()
+    }
+
+    private fun docs(obj: JSONObject): JSONObject = try {
+        val raw = obj.optString(KEY_DOCS, null)
         if (raw.isNullOrBlank()) JSONObject() else JSONObject(raw)
     } catch (_: Exception) {
         JSONObject()
     }
 
-    private fun writeDocs(map: JSONObject) {
-        try {
-            prefs?.edit()?.putString(KEY_DOCS, map.toString())?.apply()
+    private fun data(): JSONObject = try {
+        file?.let { DurableFile.read(it, ::parseObject) } ?: legacyData()
+    } catch (_: Exception) {
+        JSONObject()
+    }
+
+    /**
+     * Reprise des clés écrites dans `SharedPreferences` avant le fichier
+     * durable : une mise à jour de l'app ne doit pas effacer le manuel déjà
+     * choisi. La copie n'est retirée qu'après l'écriture réussie du fichier.
+     */
+    private fun legacyData(): JSONObject {
+        val p = prefs ?: return JSONObject()
+        return try {
+            val obj = JSONObject()
+            p.getString(KEY_URL, null)?.let { obj.put(KEY_URL, it) }
+            p.getString(KEY_DOCS, null)?.let { obj.put(KEY_DOCS, it) }
+            p.getString(KEY_CLASS_LABEL, null)?.let { obj.put(KEY_CLASS_LABEL, it) }
+            p.getString(KEY_SUBJECTS, null)?.let { obj.put(KEY_SUBJECTS, it) }
+            p.getString(KEY_DISABLED_SUBJECTS, null)?.let { obj.put(KEY_DISABLED_SUBJECTS, it) }
+            if (obj.length() == 0) {
+                obj
+            } else {
+                val target = file ?: return obj
+                // Même garde d'époque que le cache : une reprise pendant une
+                // déconnexion ne ressuscite pas le dossier purgé.
+                if (!OfflineArtifacts.writeText(target, obj.toString(), SessionEpoch.current())) {
+                    return JSONObject()
+                }
+                p.edit()
+                    .remove(KEY_URL)
+                    .remove(KEY_DOCS)
+                    .remove(KEY_CLASS_LABEL)
+                    .remove(KEY_SUBJECTS)
+                    .remove(KEY_DISABLED_SUBJECTS)
+                    .apply()
+                obj
+            }
         } catch (_: Exception) {
-            // L'adresse reste enregistrée : l'assistant utilisera le cours seul.
+            JSONObject()
         }
     }
 
-    private fun clearDocs() {
-        try {
-            prefs?.edit()?.remove(KEY_DOCS)?.apply()
-        } catch (_: Exception) {
-            // Rien à purger.
+    private fun parseObject(raw: String): JSONObject? = try {
+        JSONObject(raw)
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun update(block: (JSONObject) -> Unit): Boolean {
+        val target = file ?: return false
+        return synchronized(lock) {
+            try {
+                val obj = data()
+                block(obj)
+                // Garde d'époque partagée avec notes/chat/préfs : une écriture
+                // en vol pendant la purge de compte est REFUSÉE.
+                OfflineArtifacts.writeText(target, obj.toString(), SessionEpoch.current())
+            } catch (_: Exception) {
+                false
+            }
         }
+    }
+
+    private fun jsonArray(values: Collection<String>): JSONArray {
+        val arr = JSONArray()
+        for (value in values) arr.put(value)
+        return arr
     }
 
     companion object {

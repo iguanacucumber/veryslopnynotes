@@ -28,8 +28,13 @@ object OfflineArtifacts {
      * confondre avec un refus d'époque.
      */
     fun writeText(file: File, content: String, epoch: Long): Boolean =
-        writeText(file, content, epoch) { target, bytes -> target.writeBytes(bytes) }
+        SessionEpoch.writeIfCurrent(epoch) {
+            file.parentFile?.let { if (!it.exists()) it.mkdirs() }
+            DurableFile.write(file, content.toByteArray(Charsets.UTF_8))
+            true
+        } ?: false
 
+    /** Variante injectable : panne d'écriture simulée sans toucher au disque. */
     internal fun writeText(
         file: File,
         content: String,
@@ -43,8 +48,13 @@ object OfflineArtifacts {
 
     /** Écrit un fichier binaire sous la garde d'époque (mêmes règles). */
     fun writeBytes(file: File, bytes: ByteArray, epoch: Long): Boolean =
-        writeBytes(file, bytes, epoch) { target, content -> target.writeBytes(content) }
+        SessionEpoch.writeIfCurrent(epoch) {
+            file.parentFile?.let { if (!it.exists()) it.mkdirs() }
+            DurableFile.write(file, bytes)
+            true
+        } ?: false
 
+    /** Variante injectable pour les tests de panne binaire. */
     internal fun writeBytes(
         file: File,
         bytes: ByteArray,

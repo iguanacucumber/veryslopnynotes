@@ -171,6 +171,10 @@ export const PRODUCTION_SOURCES: string[] = [
   // l'enrichissement visible. Fichier PUR : le harnais compile `SessionRepair`
   // qui la purge à la déconnexion.
   join(DATA, "DiscussionListCache.kt"),
+  // #879 : l'écriture durable (temp + fsync + rename, sauvegarde retenue,
+  // quarantaine). Fichier PUR (`java.*` seul) : le harnais EXÉCUTE les pannes
+  // simulées au lieu de relire la forme du code.
+  join(DATA, "DurableFile.kt"),
   join(DATA, "LocalRequestQueue.kt"),
   join(DATA, "OfflineArtifacts.kt"),
   join(DATA, "OfflineCache.kt"),

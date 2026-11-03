@@ -107,7 +107,8 @@ describe("fil local du professeur — offline et purge (#633)", () => {
   });
 
   test("le fil chargé est borné et validé, jamais un JSON arbitraire", () => {
-    expect(STORE).toContain("TeacherChat.trimThread(parseTeacherThreadOrNull(raw) ?: TeacherThread())");
+    expect(STORE).toContain("DurableFile.read(file, ::parseTeacherThreadOrNull) ?: return TeacherThread()");
+    expect(STORE).toContain("TeacherChat.trimThread(thread)");
     expect(STORE).toContain("if (!TeacherChat.isThreadValid(bounded)) return false");
     expect(STORE).toContain("if (message.isValid()) messages.add(message)");
   });

@@ -76,7 +76,7 @@ describe("course notes — executed rules (#586)", () => {
     // Parsing distinguishes "empty list" from "unreadable JSON".
     expect(store).toContain("internal fun parseLessonNotesOrNull(raw: String): List<LessonNote>? = try {");
     // A corrupt/partial new file falls through to intact legacy notes.
-    expect(store).toContain("val current = file.takeIf { it.isFile }?.let { parseLessonNotesOrNull(it.readText()) }");
+    expect(store).toContain("val current = DurableFile.read(file, ::parseLessonNotesOrNull)");
     expect(store).toContain("if (current != null) return current");
     // Pre-rename file is read until the first successful write migrates it.
     expect(store).toContain("return legacyFile?.takeIf { it.isFile }?.let { parseLessonNotesOrNull(it.readText()) } ?: emptyList()");
