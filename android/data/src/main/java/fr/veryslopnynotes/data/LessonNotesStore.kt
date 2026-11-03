@@ -26,6 +26,13 @@ class FileLessonNotesStore(
     override fun load(): List<LessonNote> = read()
 
     @Synchronized
+    override fun clear(): Boolean {
+        val current = DurableFile.delete(file)
+        val legacy = legacyFile?.let { DurableFile.delete(it) } ?: true
+        return current && legacy
+    }
+
+    @Synchronized
     override fun save(notes: List<LessonNote>, epoch: Long): Boolean {
         // Une cible illisible LÈVE : jamais remplacée par une liste partielle
         // ou vide construite sur une lecture qui a échoué (#910).
@@ -58,6 +65,12 @@ class InMemoryLessonNotesStore : LessonNotesLocalStore {
             this.notes = notes.take(LessonNotes.MAX_NOTES)
             true
         } ?: false
+
+    @Synchronized
+    override fun clear(): Boolean {
+        notes = emptyList()
+        return true
+    }
 }
 
 fun lessonNotesJson(notes: List<LessonNote>): String {

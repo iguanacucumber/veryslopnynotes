@@ -38,6 +38,9 @@ interface TeacherChatLocalStore {
     fun save(thread: TeacherThread, epoch: Long): Boolean
 
     fun delete(epoch: Long): TeacherChatDelete
+
+    /** Purge de compte : `true` = plus aucun fil sur cet appareil. */
+    fun clear(): Boolean
 }
 
 class FileTeacherChatStore(private val file: File) : TeacherChatLocalStore {
@@ -64,6 +67,9 @@ class FileTeacherChatStore(private val file: File) : TeacherChatLocalStore {
         } ?: return TeacherChatDelete.REFUSED
         return if (deleted) TeacherChatDelete.DELETED else TeacherChatDelete.FAILED
     }
+
+    @Synchronized
+    override fun clear(): Boolean = DurableFile.delete(file)
 }
 
 class InMemoryTeacherChatStore : TeacherChatLocalStore {
@@ -88,6 +94,12 @@ class InMemoryTeacherChatStore : TeacherChatLocalStore {
             thread = TeacherThread()
             true
         }?.let { TeacherChatDelete.DELETED } ?: TeacherChatDelete.REFUSED
+
+    @Synchronized
+    override fun clear(): Boolean {
+        thread = TeacherThread()
+        return true
+    }
 }
 
 fun teacherThreadJson(thread: TeacherThread): String {

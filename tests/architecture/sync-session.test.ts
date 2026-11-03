@@ -84,7 +84,7 @@ describe("session du job de fond (#406)", () => {
     expect(start).toBeGreaterThan(-1);
     const body = pairing.slice(start, pairing.indexOf("private fun failure(", start));
     expect(body).toContain("SessionGate.serialized");
-    expect(body).toContain("SessionRepair.purge(");
+    expect(body).toContain("AccountPurgeMode.LOGOUT");
     const bridge = readBridgeSource();
     expect(bridge).toContain("pairing.logoutBlocking");
   });

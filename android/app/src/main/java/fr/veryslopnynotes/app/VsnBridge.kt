@@ -21,7 +21,9 @@ import fr.veryslopnynotes.core.RevisionKv
 import fr.veryslopnynotes.core.ServerConfig
 import fr.veryslopnynotes.core.TextScale
 import fr.veryslopnynotes.core.UserProfile
-import fr.veryslopnynotes.data.AccountIdentity
+import fr.veryslopnynotes.data.AccountPurgeFactory
+import fr.veryslopnynotes.data.AccountPurgeRunner
+import fr.veryslopnynotes.data.AccountPurgeTargets
 import fr.veryslopnynotes.data.AccountStore
 import fr.veryslopnynotes.data.AssignmentsRepository
 import fr.veryslopnynotes.data.CachePolicy
@@ -59,12 +61,14 @@ import fr.veryslopnynotes.data.StoreHealth
 import fr.veryslopnynotes.data.SubjectPrefsRepository
 import fr.veryslopnynotes.data.SyncedRepository
 import fr.veryslopnynotes.data.TeacherChatLocalStore
+import fr.veryslopnynotes.data.WebViewAccountData
 import fr.veryslopnynotes.data.parseSchoolQr
 import org.json.JSONObject
 import java.io.File
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * Pont natif de la WebView (#333). Une SEULE interface exposée : [call].
@@ -176,7 +180,8 @@ class VsnBridge(
         DeviceAuth.setOnRejected { onSessionRejected() }
     }
 
-    private val pairing = PairingRepository(sessions, cacheStore, accountRecorder = accounts)
+    // Préférences matière : fichier dans `offline/`, donc la purge de compte
+    // les atteint. Construit AVANT l'orchestrateur, qui les nomme.
     internal val prefsRepo = SubjectPrefsRepository(
         try {
             FileSubjectPrefsStore(File(ctx.filesDir, "offline/subject_prefs.json"))
@@ -184,6 +189,36 @@ class VsnBridge(
             InMemorySubjectPrefsStore()
         },
     )
+
+    /**
+     * UN chemin de purge, partagé par déconnexion, session morte et bascule.
+     * Les étapes sont câblées dans `AccountPurgeFactory` : un store sans étape
+     * rend le plan incomplet, donc rien ne se publie.
+     */
+    private val accountPurge: AccountPurgeRunner by lazy {
+        AccountPurgeFactory.runner(
+            AccountPurgeTargets(
+                sessions = sessions,
+                accounts = accounts,
+                cacheStore = cacheStore,
+                cacheRoot = ctx.cacheDir,
+                manuals = manuals,
+                lessons = lessons,
+                teacherChat = teacherChat,
+                prefs = prefsRepo,
+                webView = WebViewAccountData(
+                    readState = { clearWebViewReadState() },
+                    cache = { clearWebViewCache() },
+                ),
+                // Adresse de manuel déjà tentée : donnée du compte, pas un store.
+                onManualPurged = { manualFailures.clear() },
+            ),
+        )
+    }
+
+    private val pairing =
+        PairingRepository(sessions, cacheStore, accountRecorder = accounts, purge = accountPurge)
+
     internal val revisions: RevisionKv? = try {
         FileRevisionStore(File(File(ctx.filesDir, "offline"), "revisions"))
     } catch (_: Exception) {
@@ -521,19 +556,16 @@ class VsnBridge(
                     // `logged_in`/`info`. Même purge que « morte » et même
                     // renvoi à l'appairage, jamais un état « restauré ».
                     sessionReady = false
-                    purgeManualAccountData()
                     JSONObject().put("state", "dead").put("message", DeviceAuth.REJECTED_MESSAGE)
                         .put("sessionCleared", result.sessionCleared)
                 }
                 is RestoreResult.Dead -> {
-                    // I16 : session morte = donnée de compte purgée.
-                    // `PairingRepository` a déjà purgé le cache ; le manuel
-                    // (adresse, extraits, classe, matières) part ici, sinon il
-                    // resservirait au prochain appairage.
+                    // I16 : la session morte a déjà purgé TOUS les stores par
+                    // l'orchestrateur ; le pont ne double pas la purge.
                     sessionReady = false
-                    purgeManualAccountData()
                     JSONObject().put("state", "dead").put("message", result.message)
                         .put("sessionCleared", result.sessionCleared)
+                        .put("purgeFailed", result.purgeFailed)
                 }
                 RestoreResult.Offline -> {
                     sessionReady = false
@@ -561,11 +593,10 @@ class VsnBridge(
         sessionReady = false
         cachedProfile = null
         qrHandles.clear()
-        val manualsCleared = purgeManualAccountData()
         // Le verrou de session sérialise la purge avec un appairage ou une
         // restauration EN VOL : aucun des deux ne peut republier l'ancien client.
-        val purged = pairing.logoutBlocking { accounts.clear() }
-        if (!purged.ok || !manualsCleared) {
+        val purged = pairing.logoutBlocking()
+        if (!purged.ok) {
             throw BridgeFailure(
                 "unavailable",
                 "Déconnexion incomplète : les données locales n'ont pas pu être effacées. Réessaie.",
@@ -591,45 +622,82 @@ class VsnBridge(
         sessionReady = false
         cachedProfile = null
         qrHandles.clear()
-        purgeManualAccountData()
-        // Échec de purge : pas de canal d'erreur ici (abonné de fond) ;
-        // l'appairage suivant repurge et, s'il échoue, le DIT.
-        pairing.logoutBlocking { accounts.clear() }
+        // Même purge orchestrée que la déconnexion. Échec de purge : pas de
+        // canal d'erreur ici (abonné de fond) ; le prochain appairage repurge
+        // et, s'il échoue, le DIT.
+        val purged = pairing.logoutBlocking()
+        if (!purged.ok) Log.w(TAG, "Purge de session morte incomplète.")
     }
 
     /**
-     * I16 : le manuel (adresse, extraits déjà récupérés, classe, matières) est
-     * la donnée d'UN compte. Il est purgé avec le cache — déconnexion, session
-     * morte, appairage d'un AUTRE compte — sinon le compte B reçoit le manuel
-     * du compte A dans `aiContextFor` / `manualDocFor`.
-     *
-     * `manualFailures` part avec : ses clés sont des adresses de manuel, donc
-     * de la donnée du compte, et une adresse oubliée n'a plus à bloquer un
-     * scrape du nouveau compte.
+     * I16 : la WebView ne conserve que l'identifiant `vsn:news:read` pour le
+     * compte courant. On retire CETTE clé, pas le thème (même origine).
      */
-    private fun purgeManualAccountData(): Boolean {
-        val cleared = manuals.clearAccountData()
-        manualFailures.clear()
-        return cleared
+    private fun clearWebViewReadState(): Boolean {
+        val js = "(function(){try{localStorage.removeItem('vsn:news:read');return 'ok'}catch(e){return 'ko'}})()"
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            // Appel déjà sur l'UI : le callback JS arrivera après ce message ;
+            // bloquer ici deadlockerait.
+            try {
+                webView.evaluateJavascript(js, null)
+                return true
+            } catch (_: Exception) {
+                return false
+            }
+        }
+        val latch = CountDownLatch(1)
+        var ok = false
+        try {
+            activity.runOnUiThread {
+                try {
+                    webView.evaluateJavascript(js) { result ->
+                        ok = result?.trim('"') == "ok"
+                        latch.countDown()
+                    }
+                } catch (_: Exception) {
+                    latch.countDown()
+                }
+            }
+        } catch (_: Exception) {
+            return false
+        }
+        return try {
+            latch.await(2, TimeUnit.SECONDS) && ok
+        } catch (_: InterruptedException) {
+            false
+        }
     }
 
-    /** Identité du compte de la session PERSISTÉE ; `null` = inconnue ou illisible. */
-    private fun storedIdentity(): AccountIdentity? = try {
-        sessions.load()?.let { AccountIdentity.of(it.endpointUrl, it.username) }
-    } catch (_: Exception) {
-        null
-    }
-
-    /**
-     * I16 : le compte a-t-il CHANGÉ ? La purge du manuel suit celle du cache
-     * (`CacheScope.switchAccount` dans `PairingRepository`, qui ne connaît pas
-     * `ManualStore`). Le pont refait donc la MÊME comparaison, avec la même
-     * règle fail-closed : une identité INCONNUE (avant ou après) purge aussi.
-     */
-    private fun purgeManualIfAccountChanged(previous: AccountIdentity?) {
-        val next = storedIdentity()
-        if (previous == null || next == null || !previous.sameAccount(next)) {
-            purgeManualAccountData()
+    /** Cache et formulaires de la coquille ; aucune donnée du compte resservie. */
+    private fun clearWebViewCache(): Boolean {
+        val run = {
+            try {
+                webView.clearCache(true)
+                webView.clearFormData()
+                webView.clearHistory()
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) return run()
+        val latch = CountDownLatch(1)
+        var ok = false
+        try {
+            activity.runOnUiThread {
+                try {
+                    ok = run()
+                } finally {
+                    latch.countDown()
+                }
+            }
+        } catch (_: Exception) {
+            return false
+        }
+        return try {
+            latch.await(2, TimeUnit.SECONDS) && ok
+        } catch (_: InterruptedException) {
+            false
         }
     }
 
@@ -734,9 +802,6 @@ class VsnBridge(
         if (pin.isEmpty()) throw BridgeFailure("bad_request", "PIN requis.")
         val qr = qrHandles.lookup(handle)
             ?: throw BridgeFailure("bad_request", "QR expiré : rescane le code de l'établissement.")
-        // I16 : identité AVANT l'appairage — la purge du manuel (et du cache,
-        // dans `PairingRepository`) ne vise que le compte précédent.
-        val previous = storedIdentity()
         // Même verrou que la restauration : un appairage et un restore
         // concurrents écriraient deux sessions dans le même store.
         val result = synchronized(restoreLock) {
@@ -747,7 +812,8 @@ class VsnBridge(
                 sessionReady = true
                 cachedProfile = null
                 qrHandles.clear()
-                purgeManualIfAccountChanged(previous)
+                // I16 : `PairingRepository` a purgé TOUS les stores du compte
+                // précédent avant de publier le nouveau client.
                 // #397 : le compte appairé est ENREGISTRÉ et devient COURANT
                 // par le dépôt, DANS la section critique de session : un échec
                 // de commit annule l'appairage au lieu de laisser un compte
@@ -774,9 +840,6 @@ class VsnBridge(
      * pourrait nommer l'hôte (I10, #396).
      */
     private fun pairDemo(): JSONObject {
-        // I16 : la démonstration est un AUTRE compte que l'établissement
-        // appairé — la comparaison d'identité décide de la purge du manuel.
-        val previous = storedIdentity()
         val result = synchronized(restoreLock) {
             pairing.pairDemoBlocking()
         }
@@ -784,7 +847,6 @@ class VsnBridge(
             is PairingResult.Ok -> {
                 sessionReady = true
                 cachedProfile = null
-                purgeManualIfAccountChanged(previous)
                 JSONObject().put("ok", true)
             }
             is PairingResult.Err -> JSONObject()

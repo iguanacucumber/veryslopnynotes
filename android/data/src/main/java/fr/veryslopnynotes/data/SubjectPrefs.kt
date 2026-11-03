@@ -113,6 +113,9 @@ interface SubjectPrefsLocalStore {
      * répertoire purgé ne ressuscite pas.
      */
     fun save(prefs: List<SubjectPrefs>, epoch: Long): Boolean
+
+    /** Purge de compte : `true` = plus aucune préférence sur cet appareil. */
+    fun clear(): Boolean
 }
 
 class FileSubjectPrefsStore(private val file: File) : SubjectPrefsLocalStore {
@@ -135,6 +138,9 @@ class FileSubjectPrefsStore(private val file: File) : SubjectPrefsLocalStore {
             epoch,
         )
     }
+
+    @Synchronized
+    override fun clear(): Boolean = DurableFile.delete(file)
 }
 
 class InMemorySubjectPrefsStore : SubjectPrefsLocalStore {
@@ -150,6 +156,12 @@ class InMemorySubjectPrefsStore : SubjectPrefsLocalStore {
             this.prefs = prefs.take(SubjectPrefs.MAX_COUNT)
             true
         } ?: false
+
+    @Synchronized
+    override fun clear(): Boolean {
+        prefs = emptyList()
+        return true
+    }
 }
 
 /**
@@ -183,6 +195,15 @@ class SubjectPrefsRepository(
             throw e
         } catch (_: Exception) {
             emptyList()
+        }
+    }
+
+    /** Purge de compte sous la même serrure que les écritures. */
+    fun clear(): Boolean = update.run {
+        try {
+            local.clear()
+        } catch (_: Exception) {
+            false
         }
     }
 

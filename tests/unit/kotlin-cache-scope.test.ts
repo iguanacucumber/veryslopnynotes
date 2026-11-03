@@ -13,6 +13,7 @@ import { readBridgeSource } from "./fixtures/bridge-source";
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
 const SCOPE = join(DATA, "CacheScope.kt");
 const REPAIR = join(DATA, "SessionRepair.kt");
+const FACTORY = join(DATA, "AccountPurgeFactory.kt");
 const PAIRING = join(DATA, "PairingRepository.kt");
 const WORKER = join(DATA, "PeriodicSyncWorker.kt");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "CacheScopeParityMain.kt");
@@ -40,19 +41,6 @@ async function ask(op: unknown): Promise<any> {
 /** Un compte de test : l'IDENTITÉ suffit, aucun secret (aucun jeton, aucun PIN). */
 const compteA = { endpoint: "https://etab.exemple/pronote", username: "eleve.a" };
 const compteB = { endpoint: "https://etab.exemple/pronote", username: "eleve.b" };
-
-/** Index du caractère qui referme le bloc ouvert à [open] (parens ou accolades). */
-function matching(src: string, open: number, openChar: string, closeChar: string): number {
-  let depth = 0;
-  for (let i = open; i < src.length; i++) {
-    if (src[i] === openChar) depth++;
-    else if (src[i] === closeChar) {
-      depth--;
-      if (depth === 0) return i;
-    }
-  }
-  return -1;
-}
 
 describe("le cache n'est jamais servi à un autre compte (#407)", () => {
   test.skipIf(skip)("appairage d'un AUTRE compte : le cache du compte précédent n'est plus servi", async () => {
@@ -216,20 +204,24 @@ describe("câblage du scopage du cache (#407)", () => {
   const bridge = readBridgeSource();
   const scope = readFileSync(SCOPE, "utf8");
   const repair = readFileSync(REPAIR, "utf8");
+  const factory = readFileSync(FACTORY, "utf8");
 
   test("la purge est UN SEUL endroit, sous la garde d'époque", () => {
     // Invalidation et purge partagent la même section critique : une écriture en vol est abandonnée.
     expect(scope).toMatch(/SessionEpoch\.invalidate \{[\s\S]*?store\.clearAll\(\)/);
     // UN SEUL effacement dans l'objet : purge et bascule passent par la même garde.
     expect(scope.match(/store\.clearAll\(\)/g)?.length).toBe(1);
-    // Déconnexion ET session morte partagent `SessionRepair.purge`.
-    expect(repair).toContain("CacheScope.purge(cacheStore)");
-    expect(pairing).toContain("SessionRepair.purge(");
+    // Déconnexion, session morte ET bascule passent par l'orchestrateur ;
+    // l'étape CACHE est la seule à toucher le store, via `CacheScope`.
+    expect(factory).toContain("CacheScope.purge(targets.cacheStore)");
+    expect(factory).toContain("CacheScope.switchAccount(");
+    expect(repair).not.toContain("CacheScope.purge(cacheStore)");
+    expect(pairing).toContain("purge.purge(");
     expect(pairing).not.toContain("SessionEpoch.invalidate");
   });
 
   test("l'appairage purge le cache du compte précédent AVANT d'enregistrer la session", () => {
-    const iScope = pairing.indexOf("CacheScope.switchAccount(");
+    const iScope = pairing.indexOf("AccountPurgeMode.ACCOUNT_SWITCH");
     const iSave = pairing.indexOf(").switchTo(");
     expect(iScope).toBeGreaterThan(-1);
     expect(iSave).toBeGreaterThan(-1);
@@ -250,28 +242,22 @@ describe("câblage du scopage du cache (#407)", () => {
     expect(end).toBeGreaterThan(start);
     const body = pairing.slice(start, end);
 
-    const iSwitch = body.indexOf("CacheScope.switchAccount(");
-    const iPublish = body.indexOf("PronoteSession.set(client)");
+    const iSwitch = body.indexOf("AccountPurgeMode.ACCOUNT_SWITCH");
+    const iPublish = body.indexOf("PronoteSession.set(client)", iSwitch);
     expect(iSwitch).toBeGreaterThan(-1);
     expect(iPublish).toBeGreaterThan(-1);
-    // La publication est la lambda de la bascule : elle ne peut pas précéder la purge.
-    const openParen = iSwitch + "CacheScope.switchAccount(".length - 1;
-    const closeParen = matching(body, openParen, "(", ")");
-    expect(closeParen).toBeGreaterThan(iSwitch);
-    const after = body.slice(closeParen + 1);
-    const trimmed = after.trimStart();
-    expect(trimmed.startsWith("{")).toBe(true);
-    const openBrace = closeParen + 1 + (after.length - trimmed.length);
-    const closeBrace = matching(body, openBrace, "{", "}");
-    expect(iPublish).toBeGreaterThan(openBrace);
-    expect(iPublish).toBeLessThan(closeBrace);
-    // UNE SEULE publication dans l'appairage.
-    expect(body.split("PronoteSession.set(client)").length - 1).toBe(1);
+    // La publication est la lambda de la bascule : la purge l'exécute APRÈS
+    // l'effacement, dans la même section critique d'époque.
+    expect(body).toContain("AccountSwitch(previous, current) { PronoteSession.set(client) }");
+    expect(iSwitch).toBeLessThan(iPublish);
+    // DEUX publications : le MÊME compte (sans purge) et l'autre compte, dont
+    // la publication est la lambda de `AccountSwitch`, exécutée après l'effacement.
+    expect(body.split("PronoteSession.set(client)").length - 1).toBe(2);
   });
 
   test("la session MORTE purge le cache (store vidé ET cache purgé)", () => {
     const iClear = pairing.indexOf("sessions.clear()");
-    const iDead = pairing.indexOf("CacheScope.onSessionDead(cacheStore)");
+    const iDead = pairing.indexOf("purge.purge(AccountPurgeMode.SESSION_DEAD, null)");
     const iResult = pairing.indexOf("RestoreResult.Dead(");
     expect(iClear).toBeGreaterThan(-1);
     expect(iDead).toBeGreaterThan(-1);
@@ -282,8 +268,8 @@ describe("câblage du scopage du cache (#407)", () => {
 
   test("le pont ET le job de fond passent le store de cache au dépôt d'appairage", () => {
     // Sans store, le job de fond (process neuf) laisserait le cache intact.
-    expect(bridge).toContain("PairingRepository(sessions, cacheStore, accountRecorder = accounts)");
-    expect(worker).toContain("PairingRepository(sessions, cacheStore())");
+    expect(bridge).toContain("PairingRepository(sessions, cacheStore, accountRecorder = accounts, purge = accountPurge)");
+    expect(worker).toContain("PairingRepository(sessions, store, purge = purge(sessions, store))");
     // Le job purge le MÊME dossier que l'app (verrou partagé, purge commune).
     expect(worker).toContain('FileCacheStore(File(applicationContext.filesDir, "offline"))');
   });

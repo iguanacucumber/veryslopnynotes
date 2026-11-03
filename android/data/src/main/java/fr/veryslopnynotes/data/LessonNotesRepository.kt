@@ -25,6 +25,9 @@ interface LessonNotesLocalStore {
 
     /** false = écriture abandonnée (la session a changé depuis [epoch]). */
     fun save(notes: List<LessonNote>, epoch: Long): Boolean
+
+    /** Purge de compte : `true` = plus aucune note sur cet appareil. */
+    fun clear(): Boolean
 }
 
 /**
@@ -52,6 +55,15 @@ class LessonNotesRepository(private val local: LessonNotesLocalStore) {
     fun notesFor(subject: String): List<LessonNote> = LessonNotes.forSubject(notes(), subject)
 
     fun subjects(): List<String> = notes().map { it.subject }.distinct().take(LessonNotes.MAX_NOTES)
+
+    /** Purge de compte sous la serrure de fusion. */
+    fun clear(): Boolean = update.run {
+        try {
+            local.clear()
+        } catch (_: Exception) {
+            false
+        }
+    }
 
     fun find(id: String): LessonNote? = notes().firstOrNull { it.id == id }
 

@@ -5,6 +5,7 @@
 // Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.sessionrepair
 
+import fr.veryslopnynotes.data.CacheScope
 import fr.veryslopnynotes.data.DeviceAuth
 import fr.veryslopnynotes.data.FileCacheStore
 import fr.veryslopnynotes.data.PronoteSession
@@ -38,6 +39,12 @@ private fun ok(vararg pairs: Pair<String, JVal>): JVal.Obj = JVal.Obj(linkedMapO
 /** Un store de cache + son dossier (comme l'app et le job de fond). */
 private class Slot(val id: Int, val dir: File) {
     val store = FileCacheStore(dir)
+}
+
+/** Le chemin exécuté par la production : session puis étape CACHE. */
+private fun purgeSession(slot: Slot, onClear: () -> Unit = {}): Boolean {
+    SessionRepair.clearSession(onClear)
+    return CacheScope.purge(slot.store)
 }
 
 private class Bench {
@@ -114,12 +121,12 @@ private class Driver {
         }
         // Le REJET : c'est ce que fait un dépôt quand le jeton est tourné
         // (`DeviceAuth.reject()`). L'abonné branché est celui de l'app : la
-        // purge de production (`SessionRepair.purge`).
+        // purge de production (`SessionRepair.clearSession` + étape CACHE).
         "reject" -> {
             val slot = bench.slot(op)
             var sessionCleared = false
             DeviceAuth.setOnRejected {
-                SessionRepair.purge({ sessionCleared = true }, slot.store)
+                purgeSession(slot) { sessionCleared = true }
             }
             DeviceAuth.reject()
             ok(
@@ -133,7 +140,7 @@ private class Driver {
             val slot = bench.slot(op)
             var sessionCleared = false
             DeviceAuth.setOnRejected {
-                SessionRepair.purge({ sessionCleared = true }, slot.store)
+                purgeSession(slot) { sessionCleared = true }
             }
             DeviceAuth.reject()
             ok(
@@ -172,7 +179,7 @@ private class Driver {
             }
             var sessionCleared = false
             DeviceAuth.setOnRejected {
-                SessionRepair.purge({ sessionCleared = true }, slot.store)
+                purgeSession(slot) { sessionCleared = true }
             }
             val dead = isSessionFailure(cause)
             if (dead) DeviceAuth.reject()
@@ -206,7 +213,7 @@ private class Driver {
                 logoutStarted.countDown()
                 SessionGate.serialized {
                     logoutRan = true
-                    SessionRepair.purge({}, slot.store)
+                    purgeSession(slot)
                 }
             }
             logout.start()

@@ -1,6 +1,7 @@
 package fr.veryslopnynotes.data
 
 import android.content.Context
+import android.util.Log
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -110,9 +111,10 @@ class PeriodicSyncWorker(
         if (!DeviceAuth.reject()) {
             val sessions = SessionStores.get(applicationContext)
             val store = cacheStore()
-            PairingRepository(sessions, store).logoutBlocking {
-                AccountStore(applicationContext, sessions).clear()
-            }
+            val purged = PairingRepository(sessions, store, purge = purge(sessions, store)).logoutBlocking()
+            // Aucun abonné dans ce process : le journal est le SEUL canal. Il
+            // nomme des stores, jamais une donnée du compte.
+            if (!purged.ok) Log.w(TAG, "Purge de session morte incomplète.")
         }
         return Result.success()
     }
@@ -126,10 +128,36 @@ class PeriodicSyncWorker(
     private fun restoreClient(): Client? {
         PronoteSession.client?.let { return it }
         val sessions = SessionStores.get(applicationContext)
-        // Le dépôt purge le cache si la session est MORTE : même chemin et même
-        // store que le pont, sinon l'app servirait les données d'un compte mort.
-        val restored = PairingRepository(sessions, cacheStore()).restoreBlocking()
+        val store = cacheStore()
+        // Le dépôt purge TOUS les stores si la session est MORTE : même chemin
+        // que le pont, sinon l'app servirait les données d'un compte mort.
+        val restored = PairingRepository(sessions, store, purge = purge(sessions, store)).restoreBlocking()
         return if (restored is RestoreResult.Restored) PronoteSession.client else null
+    }
+
+    /**
+     * Le même inventaire que l'app : les stores fichier du job sont construits
+     * sur les MÊMES chemins (`offline/`, cache, préférences).
+     */
+    private fun purge(sessions: SessionStore, store: CacheStore): AccountPurgeRunner {
+        val offline = File(applicationContext.filesDir, "offline")
+        return AccountPurgeFactory.runner(
+            AccountPurgeTargets(
+                sessions = sessions,
+                accounts = AccountStore(applicationContext, sessions),
+                cacheStore = store,
+                cacheRoot = applicationContext.cacheDir,
+                manuals = ManualStore(applicationContext),
+                lessons = LessonNotesRepository(
+                    FileLessonNotesStore(
+                        File(offline, "course-notes.json"),
+                        legacyFile = File(offline, "cahier.json"),
+                    ),
+                ),
+                teacherChat = FileTeacherChatStore(File(offline, "teacher_chat.json")),
+                prefs = SubjectPrefsRepository(FileSubjectPrefsStore(File(offline, "subject_prefs.json"))),
+            ),
+        )
     }
 
     /**
@@ -175,6 +203,7 @@ class PeriodicSyncWorker(
          * faire tuer en attendant.
          */
         private const val READ_TIMEOUT_MS = 120_000L
+        private const val TAG = "PeriodicSyncWorker"
 
         fun schedule(context: Context) {
             val constraints = Constraints.Builder()

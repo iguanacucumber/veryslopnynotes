@@ -51,6 +51,12 @@ private class DelayStore(private val delayMs: Long) : LessonNotesLocalStore {
         this.notes = notes
         return true
     }
+
+    @Synchronized
+    override fun clear(): Boolean {
+        notes = emptyList()
+        return true
+    }
 }
 
 private class Driver {

@@ -232,15 +232,17 @@ describe("câblage : commit synchrone et issue propagée (#890)", () => {
     expect(pairing).toContain("AccountSessionCommit(sessions, accountRecorder).switchTo(");
     expect(pairing).toContain("if (!written.ok)");
     expect(pairing).toContain("WriteResult.EpochRefused");
-    // Logout : session ET comptes combinés, un échec n'est pas avalé.
+    // Logout : session ET comptes dans le MÊME plan, un échec n'est pas avalé.
     const logout = pairing.slice(
       pairing.indexOf("fun logoutBlocking("),
       pairing.indexOf("private fun failure(", pairing.indexOf("fun logoutBlocking(")),
     );
-    expect(logout).toContain("sessionWrite");
-    expect(logout).toContain("accountsWrite");
-    expect(logout).toContain("!sessionWrite.ok");
-    expect(logout).toContain("!accountsWrite.ok");
+    expect(logout).toContain("AccountPurgeMode.LOGOUT");
+    expect(logout).toContain("if (result.ok)");
+    expect(logout).toContain("AccountPurgeResult.Incomplete");
+    const factory = readFileSync(join(DATA, "AccountPurgeFactory.kt"), "utf8");
+    expect(factory).toContain("AccountDataStore.SESSION");
+    expect(factory).toContain("AccountDataStore.ACCOUNTS");
     // Le pont ne réenregistre plus le compte hors section critique.
     const bridge = readFileSync(
       join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app", "VsnBridge.kt"),
