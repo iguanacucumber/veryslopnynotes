@@ -42,16 +42,11 @@
   padding: 14px;
   border: 0;
   border-radius: 23px;
-  background: color-mix(in srgb, var(--tile-base, var(--brand)) 20%, #fff);
+  background: color-mix(in srgb, var(--tile-base, var(--brand)) 20%, var(--page));
   box-shadow: var(--shadow-card);
-  color: color-mix(in srgb, var(--tile-base, var(--brand)) 80%, #000);
+  color: color-mix(in srgb, var(--tile-base, var(--brand)) 30%, var(--ink));
   text-align: left;
   transition: transform var(--duration) var(--ease), filter var(--duration) var(--ease);
-}
-
-:root[data-theme="dark"] .settings-tile {
-  background: color-mix(in srgb, var(--tile-base, var(--brand)) 20%, #000);
-  color: color-mix(in srgb, var(--tile-base, var(--brand)) 80%, #fff);
 }
 
 .settings-tile--appearance { --tile-base: #17c300; }

@@ -1,7 +1,6 @@
 import { useMemo, useState, type ComponentType, type ReactElement } from "react";
 import { useViewNavigate as useNavigate } from "../../ui/viewTransition";
-import { subjectColor, tint } from "../../lib/format";
-import { subjectEmoji } from "../../lib/subjectVisual";
+import { subjectEmoji, subjectPalette } from "../../lib/subjectVisual";
 import { useApp, useResource } from "../../ui/AppContext";
 import { Card, EmptyState, ErrorBox, Loading, Page, StaleBadge } from "../../ui/components";
 import {
@@ -50,22 +49,6 @@ type IconComponent = ComponentType<{ size?: number }>;
 function useEntrance(openedAt: number): boolean {
   const [animate] = useState(() => shouldAnimateOnMount(openedAt, Date.now()));
   return animate;
-}
-
-interface Palette {
-  base: string;
-  background: string;
-  ink: string;
-}
-
-/** Mêmes pas que `Course.tsx` de Papillon : fond teinté, encre décalée. */
-function paletteFor(subject: string, dark: boolean): Palette {
-  const base = subjectColor(subject);
-  return {
-    base,
-    background: tint(base, dark ? -0.7 : 0.75),
-    ink: tint(base, dark ? 0.1 : -0.15),
-  };
 }
 
 function WidgetHeader({
@@ -159,7 +142,7 @@ export function CourseWidget({
       ) : (
         <div className="home-courses">
           {lessons.map((lesson) => {
-            const palette = paletteFor(lesson.subject, dark);
+            const palette = subjectPalette(lesson.subject, dark);
             const duration = durationLabel(lesson.end - lesson.start);
             const live = lesson.start <= now && now < lesson.end;
             return (
@@ -223,7 +206,7 @@ export function TasksWidget({
       ) : (
         <div className="home-tasks">
           {tasks.map((task) => {
-            const palette = paletteFor(task.subject, dark);
+            const palette = subjectPalette(task.subject, dark);
             return (
               <div className="home-task" key={task.id}>
                 <span className="home-task__emoji" aria-hidden="true">

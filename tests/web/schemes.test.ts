@@ -15,6 +15,7 @@ import {
   type Palette,
 } from "../../web/src/lib/schemes";
 import { readableInk, subjectColor, tint } from "../../web/src/lib/format";
+import { subjectPalette } from "../../web/src/lib/subjectVisual";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const HEX = /^#[0-9A-Fa-f]{6}$/;
@@ -38,6 +39,14 @@ function contrast(fg: string, bg: string): number {
   const a = luminance(fg);
   const b = luminance(bg);
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+/** Mélange opaque de `base` sur `other`, comme `color-mix(in srgb, …)`. */
+function mix(base: string, other: string, weight: number): string {
+  const a = rgb(base);
+  const b = rgb(other);
+  const channels = a.map((channel, index) => Math.round(channel * weight + b[index]! * (1 - weight)));
+  return `#${channels.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 }
 
 /** 72 % d'encre composés sur la surface : la valeur réelle de `--muted`. */
@@ -197,6 +206,92 @@ describe("web palettes", () => {
     const css = readFileSync(join(ROOT, "web/src/features/tasks/tasks.css"), "utf8");
     expect(css).toContain("color: var(--task-ink, var(--on-brand))");
     expect(css).not.toContain("color: #fff;");
+  });
+
+  // L'encre d'une carte matière est choisie sur le FOND COMPOSÉ (teinte +
+  // éclaircissement), pas sur la teinte seule. Elle sert aussi de couleur au
+  // sujet dans la ligne de devoir, donc elle doit tenir sur `surface` aussi.
+  test("cartes matière : encre ≥ 4.5:1 sur le fond composé", () => {
+    const subjects = Array.from({ length: 64 }, (_, index) => `MATIERE ${index}`);
+    expect(new Set(subjects.map(subjectColor)).size).toBe(20);
+    for (const scheme of SCHEMES) {
+      for (const mode of ["light", "dark"] as const) {
+        const palette = scheme[mode];
+        for (const subject of subjects) {
+          const card = subjectPalette(subject, mode === "dark");
+          for (const [support, background] of [
+            ["carte", card.background],
+            ["surface", palette.surface],
+          ] as const) {
+            const ratio = contrast(card.ink, background);
+            expect({
+              scheme: scheme.id,
+              mode,
+              subject,
+              support,
+              ink: card.ink,
+              ok: ratio >= 4.5,
+              ratio: Number(ratio.toFixed(2)),
+            }).toEqual({
+              scheme: scheme.id,
+              mode,
+              subject,
+              support,
+              ink: card.ink,
+              ok: true,
+              ratio: Number(ratio.toFixed(2)),
+            });
+          }
+        }
+      }
+    }
+    const home = readFileSync(join(ROOT, "web/src/features/home/HomeScreen.tsx"), "utf8");
+    const timetable = readFileSync(join(ROOT, "web/src/features/timetable/TimetableScreen.tsx"), "utf8");
+    expect(home).toContain("subjectPalette(");
+    expect(timetable).toContain("subjectPalette(");
+  });
+
+  // Les tuiles de réglages posent leur encre sur une teinte composée avec la
+  // page et l'encre de la palette. L'encre garde 30 % de la base pour la
+  // teinte, sans repasser sous 4.5:1 sur le fond composé.
+  test("tuiles réglages : encre ≥ 4.5:1 sur le fond composé", () => {
+    const css = readFileSync(join(ROOT, "web/src/features/settings/settings.css"), "utf8");
+    const backgroundRule =
+      /background:\s*color-mix\(in srgb, var\(--tile-base, var\(--brand\)\)\s+(\d+)%,\s*var\(--page\)\)/.exec(css);
+    const inkRule =
+      /color:\s*color-mix\(in srgb, var\(--tile-base, var\(--brand\)\)\s+(\d+)%,\s*var\(--ink\)\)/.exec(css);
+    expect(backgroundRule).not.toBeNull();
+    expect(inkRule).not.toBeNull();
+    const backgroundWeight = Number(backgroundRule?.[1]) / 100;
+    const inkWeight = Number(inkRule?.[1]) / 100;
+    const bases = [...css.matchAll(/--tile-base:\s*(#[0-9a-fA-F]{6});/g)].map((match) => match[1]!);
+    expect(bases).toHaveLength(4);
+    for (const scheme of SCHEMES) {
+      for (const mode of ["light", "dark"] as const) {
+        const palette = scheme[mode];
+        // `--brand` est le repli d'une tuile sans modificateur de teinte.
+        for (const base of [...bases, palette.brand]) {
+          const background = mix(base, palette.page, backgroundWeight);
+          const ink = mix(base, palette.ink, inkWeight);
+          const ratio = contrast(ink, background);
+          expect({
+            scheme: scheme.id,
+            mode,
+            base,
+            ink,
+            ok: ratio >= 4.5,
+            ratio: Number(ratio.toFixed(2)),
+          }).toEqual({
+            scheme: scheme.id,
+            mode,
+            base,
+            ink,
+            ok: true,
+            ratio: Number(ratio.toFixed(2)),
+          });
+        }
+      }
+    }
   });
 
   test("cssVarsOf : variables attendues, noms préfixés, valeurs non vides", () => {

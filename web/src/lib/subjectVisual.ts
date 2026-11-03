@@ -1,4 +1,6 @@
-// Emoji de matière : affichage seul, aucune donnée Pronote interprétée.
+// Visuel de matière : emoji et palette dérivée de la couleur, affichage seul,
+// aucune donnée Pronote interprétée.
+import { readableInk, subjectColor, tint } from "./format";
 
 const RULES: ReadonlyArray<readonly [RegExp, string]> = [
   [/MATHEMATIQUES?|MATHS?/, "📐"],
@@ -29,4 +31,21 @@ export function subjectEmoji(subject: string): string {
     if (pattern.test(normalized)) return emoji;
   }
   return "📘";
+}
+
+export interface SubjectPalette {
+  base: string;
+  background: string;
+  ink: string;
+}
+
+/** Fond teinté de la matière et encre lisible sur ce fond composé. */
+export function subjectPalette(subject: string, dark: boolean): SubjectPalette {
+  const base = subjectColor(subject);
+  const background = tint(base, dark ? -0.7 : 0.75);
+  return {
+    base,
+    background,
+    ink: readableInk(background),
+  };
 }
