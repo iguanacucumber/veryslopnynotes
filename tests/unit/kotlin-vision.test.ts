@@ -149,7 +149,17 @@ describe("photo de cours — garde d'image exécutée (#587)", () => {
     expect(prep).toContain("MAX_DIMENSION = 1600");
     expect(prep).toContain("MAX_BYTES = 2_000_000");
     expect(prep).toContain("Bitmap.CompressFormat.JPEG");
-    expect(prep).toContain("ExifInterface");
+    // AndroidX : `android.media.ExifInterface` est déprécié. Seule l'orientation
+    // est LUE ; le JPEG ré-encodé ne recopie aucune métadonnée.
+    expect(prep).toContain("import androidx.exifinterface.media.ExifInterface");
+    expect(prep).not.toContain("import android.media.ExifInterface");
+    expect(prep).not.toContain("saveAttributes");
+    expect(readFileSync(join(ROOT, "android", "app", "build.gradle.kts"), "utf8")).toContain(
+      "libs.exifinterface",
+    );
+    expect(
+      readFileSync(join(ROOT, "android", "gradle", "libs.versions.toml"), "utf8"),
+    ).toContain('exifinterface = "1.4.2"');
     // La photo n'est jamais envoyée depuis la WebView : elle est capturée,
     // préparée et supprimée côté natif.
     const capture = readFileSync(join(APP, "PhotoCapture.kt"), "utf8");

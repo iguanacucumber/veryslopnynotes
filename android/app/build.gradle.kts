@@ -96,6 +96,7 @@ dependencies {
     implementation(project(":data"))
     implementation(libs.core.ktx)
     implementation(libs.activity.ktx)
+    implementation(libs.exifinterface)
     implementation(libs.zxing.android.embedded)
     // ponytail: un seul client HTTP (OkHttp allowlist serveur).
     // Upgrade: cache offline Room.
