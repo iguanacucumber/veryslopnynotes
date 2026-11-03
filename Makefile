@@ -1,4 +1,4 @@
-.PHONY: check check-run check-fast watch lint audit typecheck unit architecture contracts android-compile web web-typecheck web-build web-test web-smoke runServer buildDebugApk buildRelApk updateApkToPhone build shot papillonRef
+.PHONY: check check-run check-fast coverage watch lint audit typecheck unit architecture contracts android-compile web web-typecheck web-build web-test web-smoke runServer buildDebugApk buildRelApk updateApkToPhone build shot papillonRef
 
 # JDK/SDK partagé (borne 17–21).
 ANDROID_ENV = . agents/runtime/android-env.sh
@@ -25,6 +25,21 @@ check: check-run
 
 check-fast:
 	CHECK_HARNESS=1 CHECK_TARGETS="lint typecheck unit architecture contracts web-typecheck web-test" bun run agents/runtime/check.ts
+
+# Couverture (#895) : DEUX mesures, une exécution. Bun lit les lignes touchées
+# par les tests ; JaCoCo instrumente le port de parité Kotlin (les modules
+# Android n'ont pas de `test/` Gradle). Hors `make check` : doubler la suite
+# n'a pas sa place dans le gate. Seuil explicite dans `coverage-baseline.json`.
+coverage:
+	bun run agents/runtime/coverage.ts prepare
+	rm -rf coverage
+	REQUIRE_KOTLIN_TOOLCHAIN=1 \
+	JACOCO_AGENT_JAR="$$(bun run agents/runtime/coverage.ts agent)" \
+	JACOCO_DIR="$(CURDIR)/coverage/jacoco-raw" \
+	$(TEST_OUTPUT) coverage tests/unit tests/web tests/contracts --parallel \
+	  --coverage --coverage-reporter=lcov --coverage-dir "$(CURDIR)/coverage/bun"
+	bun run agents/runtime/coverage.ts report
+	bun run agents/runtime/coverage.ts check
 
 # `T=<fichier>` cible un test ; séquentiel exprès.
 watch:

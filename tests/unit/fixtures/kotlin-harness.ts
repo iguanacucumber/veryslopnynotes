@@ -14,7 +14,9 @@
 // (Le détail du geste des processus — groupes, plafond, sémaphore — est dans
 // `kotlin-harness-build.ts` : c'est la compilation qui tient ces ressources.)
 import { afterAll } from "bun:test";
-import { delimiter } from "node:path";
+import { randomUUID } from "node:crypto";
+import { mkdirSync } from "node:fs";
+import { delimiter, join } from "node:path";
 import { computeSkipReason, ensureJar, ensureParityJars, JVM_FLAGS, resolveJava } from "./kotlin-harness-build";
 import { mainClassOf } from "./parity-sources";
 
@@ -51,6 +53,22 @@ export interface ParityToolchain {
     driverPath: string,
     opts?: { timezone?: string; jvmFlags?: string[] },
   ): Promise<ParityLink>;
+}
+
+/**
+ * Agent JaCoCo pour CE pilote, quand la CI mesure la couverture (#895).
+ * Hors couverture (`JACOCO_AGENT_JAR`/`JACOCO_DIR` absents) : aucun argument,
+ * le harnais garde son comportement et ses durées. `destfile` porte un UUID :
+ * les pilotes tournent en parallèle et `append=false` ; deux JVM qui
+ * partageraient un nom s'écraseraient, et la mesure deviendrait un hasard.
+ */
+function jacocoArg(): string | null {
+  const agent = process.env["JACOCO_AGENT_JAR"];
+  const dir = process.env["JACOCO_DIR"];
+  if (!agent || !dir) return null;
+  mkdirSync(dir, { recursive: true });
+  const destfile = join(dir, `parity-${randomUUID()}.exec`);
+  return `-javaagent:${agent}=destfile=${destfile},append=false`;
 }
 
 function toolchain(): ParityToolchain {
@@ -100,7 +118,8 @@ function toolchain(): ParityToolchain {
     if (opts?.mainClass) args.push("-cp", jars.join(delimiter), opts.mainClass);
     else if (jars.length === 1) args.push("-jar", jars[0]!);
     else throw new Error("un classpath multiple exige la classe principale du pilote");
-    const proc = Bun.spawn([java, ...JVM_FLAGS, ...(opts?.jvmFlags ?? []), ...args], {
+    const jacoco = jacocoArg();
+    const proc = Bun.spawn([java, ...JVM_FLAGS, ...(jacoco ? [jacoco] : []), ...(opts?.jvmFlags ?? []), ...args], {
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe",

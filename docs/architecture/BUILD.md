@@ -62,9 +62,30 @@ reprise automatique en CI ; le gate `check` n'en a AUCUNE. Les captures
 compris en échec. Deux échecs identiques = défaut, pas flake : ne pas relancer
 à la main.
 
+## Couverture (#895)
+
+`make coverage` est HORS du gate : une exécution des tests alimente deux
+mesures — Bun (`coverage/bun/lcov.info`, lignes touchées par `tests/unit` +
+`tests/web` + `tests/contracts`) et JaCoCo sur le port de parité
+(`coverage/kotlin/html/`, `jacoco.xml`), seul Kotlin exécuté en CI (pas de
+source `test/` Gradle). JaCoCo est épinglé par version et sha256
+(`agents/runtime/coverage.ts`). Les tests d'architecture sont exclus : ils
+scannent des déclarations.
+
+`coverage-baseline.json` porte la MESURE (date, machine, périmètre) et
+`headroomPoints = 2` : seuil = `plancher(mesure - 2 points)` (79,59 % → 77,5
+%). La marge absorbe la variation mesurée de Bun (quelques centièmes) sans
+laisser passer une baisse réelle ; une baisse sous le seuil rougit le job.
+Baisser la base exige un **diff explicite** dans la PR ; une hausse de
+couverture remonte la base dans la même PR.
+
+Le job CI `coverage` rejoue `make coverage` et garde `coverage/` 7 jours,
+même en échec. Non requis au ruleset, mais `ship.sh` refuse un check rouge.
+
 ## Autres cibles `make`
 
 - `watch` : `bun test --watch` (unitaires + web, séquentiel).
+- `coverage` : rapports Bun + JaCoCo et seuil (voir ci-dessus), hors gate.
 - `shot` : capture sur téléphone réel via Gradle (`buildDebugApk` d'abord, puis deep link DEBUG, vérification de route). JDK/SDK découverts par `agents/runtime/android-env.sh`.
 - `buildDebugApk` / `buildRelApk` / `updateApkToPhone` : Gradle, JDK/SDK requis, échec bruyant si outillage absent.
 - `runServer` : scraper de manuels HTTPS sur `127.0.0.1:8080` (TLS généré hors dépôt, jamais de repli en clair). `HOST=0.0.0.0` uniquement sur réseau de confiance.
