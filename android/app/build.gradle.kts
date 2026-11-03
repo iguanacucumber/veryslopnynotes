@@ -79,6 +79,9 @@ val buildWebUi = tasks.register<Exec>("buildWebUi") {
     workingDir = rootProject.projectDir.parentFile
     commandLine("bun", "run", "build:web")
     inputs.dir(rootProject.projectDir.parentFile.resolve("web/src"))
+    inputs.file(rootProject.projectDir.parentFile.resolve("web/index.html"))
+    inputs.dir(rootProject.projectDir.parentFile.resolve("web/public"))
+    inputs.dir(rootProject.projectDir.parentFile.resolve("shared"))
     inputs.file(rootProject.projectDir.parentFile.resolve("web/vite.config.ts"))
     inputs.file(rootProject.projectDir.parentFile.resolve("package.json"))
     // Le lockfile décide des versions RÉSOLUES : sans cette entrée, Gradle dit

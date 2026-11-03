@@ -47,7 +47,15 @@ describe("buildWebUi : les entrées de la tâche couvrent le bundle (#426)", () 
     const inputs = declaredInputs(block);
     // `bun.lockb` (ancien format binaire) n'est plus le fichier du dépôt.
     expect(block).not.toContain("bun.lockb");
-    for (const attendu of ["web/src", "web/vite.config.ts", "package.json", "bun.lock"]) {
+    for (const attendu of [
+      "web/src",
+      "web/index.html",
+      "web/public",
+      "shared",
+      "web/vite.config.ts",
+      "package.json",
+      "bun.lock",
+    ]) {
       expect(inputs).toContain(attendu);
     }
   });
