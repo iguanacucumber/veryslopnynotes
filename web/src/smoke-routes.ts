@@ -10,6 +10,7 @@ export const SMOKE_ROUTES: readonly SmokeRoute[] = [
   ["tasks", "/tasks"],
   ["profile", "/profile"],
   ["settings", "/settings"],
+  ["help", "/help"],
   ["messages", "/messages"],
   ["messages-new", "/messages/new"],
   ["messages-thread", "/messages/d1"],

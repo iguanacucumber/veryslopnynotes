@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { bridge } from "../../bridge/client";
 import type { SettingsSnapshot } from "../../bridge/types";
 import { useApp } from "../../ui/AppContext";
-import { Avatar, ErrorBox, Loading, Page, Section } from "../../ui/components";
-import { IconBook, IconSettings, IconShield, IconSparkles } from "../../ui/icons";
+import { Avatar, ErrorBox, ListRow, Loading, Page, Rows, Section } from "../../ui/components";
+import { IconBook, IconInfo, IconSettings, IconShield, IconSparkles } from "../../ui/icons";
+import { useViewNavigate } from "../../ui/viewTransition";
 import { parseProfilePayload, type Profile } from "../profile/model";
 import { AppearanceCard } from "./AppearanceCard";
 import { AssistantCards } from "./AssistantCards";
@@ -16,6 +17,7 @@ import "./settings.css";
 /** Une lecture d'instantané, puis chaque carte tient son propre état de formulaire. */
 export default function SettingsScreen() {
   const { refreshTick } = useApp();
+  const navigate = useViewNavigate();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [snapshot, setSnapshot] = useState<SettingsSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -148,6 +150,17 @@ export default function SettingsScreen() {
 
       <Section id="reglages-appareil" title="Appareil">
         <ServerCard snapshot={snapshot} loading={loading} />
+      </Section>
+
+      <Section title="Aide">
+        <Rows>
+          <ListRow
+            title="Aide et FAQ"
+            subtitle="QR, PIN, réseau, caméra, assistant, dépannage"
+            leading={<IconInfo size={22} />}
+            onClick={() => navigate("/help")}
+          />
+        </Rows>
       </Section>
 
       <div className="row" style={{ justifyContent: "center", color: "var(--muted)" }}>

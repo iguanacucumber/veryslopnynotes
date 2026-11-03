@@ -17,7 +17,7 @@ const val ROUTE_STATE_KEY = "fr.veryslopnynotes.app.route"
  * d'où le tri ici et non dans l'appelant.
  */
 val WEB_ROUTES: Set<String> = setOf(
-    "/", "/calendar", "/grades", "/tasks", "/profile", "/settings",
+    "/", "/calendar", "/grades", "/tasks", "/profile", "/settings", "/help",
     "/pairing", "/messages", "/attendance", "/sanctions", "/news",
     "/canteen", "/alerts", "/revision-sheets", "/course-notes", "/prof",
     // Aliases kept so a saved route or old deep link still resolves.
