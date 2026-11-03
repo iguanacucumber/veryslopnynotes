@@ -370,21 +370,42 @@ class HttpSession(
         try {
             val response = request("GET", url, opts, dest, maxBytes)
             if (!response.ok) {
-                if (response.status == 429) {
-                    throw RateLimitedError(
-                        "Too many requests (http status: 429)",
-                        pronoteErrorCode = null,
-                        httpStatus = 429,
-                        retryAfterMs = retryAfterMs(response.headers),
-                    )
-                }
-                throw PronoteAPIError("Bad request (http status: ${response.status})", httpStatus = response.status)
+                throw downloadFailure(response.status, response.headers)
             }
+            if (dest.length() == 0L) throw AttachmentRefused("piece jointe vide")
             return dest.length()
         } catch (e: Exception) {
             dest.delete()
             throw e
         }
+    }
+
+    /** Refus HTTP TYPÉ : statut dans `httpStatus`, jamais un mot du corps. */
+    private fun downloadFailure(status: Int, headers: Map<String, List<String>>): Exception =
+        if (status == 429) {
+            RateLimitedError(
+                "Too many requests (http status: 429)",
+                pronoteErrorCode = null,
+                httpStatus = 429,
+                retryAfterMs = retryAfterMs(headers),
+            )
+        } else {
+            AttachmentHttpError("Bad request (http status: $status)", status)
+        }
+
+    /**
+     * Un téléchargement n'accepte qu'un CORPS DE FICHIER : une page HTML ou un
+     * JSON d'erreur servi en 200 est un échec, jamais une pièce jointe. La
+     * longueur annoncée est comparée au plafond AVANT lecture quand elle ment.
+     */
+    private fun checkDownloadHeaders(header: (String) -> List<String>, maxBytes: Int) {
+        val type = header("content-type").firstOrNull()
+            ?.substringBefore(';')?.trim()?.lowercase(java.util.Locale.ROOT)
+        if (type == "text/html" || type == "application/xhtml+xml" || type == "application/json") {
+            throw AttachmentRefused("corps non fichier")
+        }
+        val declared = header("content-length").firstOrNull()?.trim()?.toLongOrNull()
+        if (declared != null && declared > maxBytes) throw java.io.IOException("Reponse trop volumineuse")
     }
 
     /**
@@ -522,6 +543,12 @@ class HttpSession(
                     conn.disconnect()
                     continue
                 }
+                // Statut non 2xx d'un téléchargement : le corps d'erreur n'est
+                // ni ouvert, ni lu, ni écrit.
+                if (downloadTo != null && status !in 200..299) {
+                    try { conn.disconnect() } catch (_: Exception) {}
+                    throw downloadFailure(status, received)
+                }
                 // Pas de `disconnect()` : le corps est lu jusqu'au bout, le socket
                 // retourne au cache keep-alive et le POST suivant réutilise la
                 // MÊME connexion (pas de handshake TCP+TLS).
@@ -536,7 +563,8 @@ class HttpSession(
                 val gzipped = header("content-encoding").any { it.trim().equals("gzip", ignoreCase = true) }
                 // Téléchargement : le corps ne passe JAMAIS par un tampon
                 // mémoire, même une pièce jointe de plusieurs Mio.
-                if (downloadTo != null && status in 200..299) {
+                if (downloadTo != null) {
+                    checkDownloadHeaders({ name -> header(name) }, maxBytes)
                     if (stream == null) {
                         java.io.FileOutputStream(downloadTo).close()
                     } else {

@@ -5,6 +5,8 @@
 // Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.pronoteparity
 
+import fr.veryslopnynotes.pronote.Attachment
+import fr.veryslopnynotes.pronote.AttachmentUrl
 import fr.veryslopnynotes.pronote.Communication
 import fr.veryslopnynotes.pronote.CookieJar
 import fr.veryslopnynotes.pronote.DecryptionChange
@@ -15,7 +17,9 @@ import fr.veryslopnynotes.pronote.JVal
 import fr.veryslopnynotes.pronote.Json
 import fr.veryslopnynotes.pronote.KeepAlive
 import fr.veryslopnynotes.pronote.MAX_RESPONSE_BYTES
+import fr.veryslopnynotes.pronote.Period
 import fr.veryslopnynotes.pronote.PronoteAPIError
+import fr.veryslopnynotes.pronote.PronoteClientLike
 import fr.veryslopnynotes.pronote.RequestCancellation
 import fr.veryslopnynotes.pronote.RequestOpts
 import fr.veryslopnynotes.pronote.enBytes
@@ -56,6 +60,22 @@ private fun ok(vararg pairs: Pair<String, JVal>): JVal.Obj = JVal.Obj(linkedMapO
  */
 private fun numberText(op: JVal.Obj, key: String = "value"): Double =
     (op.str(key) ?: "0").toDouble()
+
+/** Client minimal : une pièce jointe n'a besoin que du site et de la session. */
+private class AttachmentClient(override val communication: Communication) : PronoteClientLike {
+    override fun post(functionName: String, onglet: Double?, data: Map<String, JVal>?): JVal =
+        throw UnsupportedOperationException("pilote: post interdit")
+
+    override val attributes: Map<String, String> = emptyMap()
+
+    override val funcOptions: JVal = JVal.Null
+
+    override val periods: List<Period> = emptyList()
+
+    override val infoId: String? = null
+
+    override fun getWeek(date: java.time.LocalDateTime): Int = 0
+}
 
 private class Driver {
     private var nextId = 1
@@ -209,6 +229,11 @@ private class Driver {
                 val jar = jars[(op.num("sid") ?: 0.0).toInt()] ?: throw IllegalArgumentException("pilote: sid inconnu")
                 ok("value" to JVal.Str(jar.getCookieString(op.str("url") ?: "")))
             }
+            "httpCookieSet" -> {
+                val session = sessions[(op.num("sid") ?: 0.0).toInt()] ?: throw IllegalArgumentException("pilote: sid inconnu")
+                session.jar.setCookie(op.str("header") ?: "", op.str("url") ?: "")
+                ok("ok" to JVal.Bool(true))
+            }
             "httpNew" -> {
                 val sid = alloc()
                 val headers = op.obj("headers")?.fields?.mapValues { (_, v) -> (v as JVal.Str).value } ?: emptyMap()
@@ -279,6 +304,41 @@ private class Driver {
                     ok(
                         "ok" to JVal.Bool(false),
                         "error" to JVal.Str(e.javaClass.simpleName),
+                        "message" to JVal.Str(e.message ?: ""),
+                        "httpStatus" to JVal.Num((e as? PronoteAPIError)?.httpStatus?.toDouble() ?: -1.0),
+                        "exists" to JVal.Bool(dest.exists()),
+                    )
+                }
+            }
+            "attachmentUrl" -> {
+                val url = AttachmentUrl.fetchable(
+                    op.str("site") ?: throw IllegalArgumentException("pilote: site absent"),
+                    op.num("type") ?: 0.0,
+                    op.str("ref") ?: "",
+                )
+                ok("url" to JVal.Str(url))
+            }
+            "attachmentFetch" -> {
+                // Vraie `Attachment` (garde d'origine + téléchargement réel) :
+                // le pilote prouve le refus AVANT réseau, pas seulement la garde.
+                val comm = Communication(op.str("site") ?: throw IllegalArgumentException("pilote: site absent"), null, false)
+                val payload = Json.parse(op.str("json") ?: "{}")
+                val attachment = Attachment(AttachmentClient(comm), payload)
+                val dest = java.io.File(op.str("path") ?: throw IllegalArgumentException("pilote: path absent"))
+                val maxBytes = op.num("maxBytes")?.toInt() ?: MAX_RESPONSE_BYTES
+                try {
+                    val size = attachment.download(dest, maxBytes = maxBytes)
+                    ok(
+                        "ok" to JVal.Bool(true),
+                        "size" to JVal.Num(size.toDouble()),
+                        "exists" to JVal.Bool(dest.exists()),
+                    )
+                } catch (e: Exception) {
+                    ok(
+                        "ok" to JVal.Bool(false),
+                        "error" to JVal.Str(e.javaClass.simpleName),
+                        "message" to JVal.Str(e.message ?: ""),
+                        "httpStatus" to JVal.Num((e as? PronoteAPIError)?.httpStatus?.toDouble() ?: -1.0),
                         "exists" to JVal.Bool(dest.exists()),
                     )
                 }

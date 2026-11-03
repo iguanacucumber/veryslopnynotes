@@ -156,7 +156,7 @@ describe("cooldown persistant et `Retry-After` (#889)", () => {
     const client = codeOnly(
       readFileSync(join(ROOT, "android/pronote/src/main/java/fr/veryslopnynotes/pronote/Client.kt"), "utf8"),
     );
-    expect(http).toContain("retryAfterMs(response.headers)");
+    expect(http).toContain("retryAfterMs(headers)");
     expect(comm).toContain("retryAfterMs(res.headers)");
     expect(comm).toContain("retryAfterMs(response.headers)");
     expect(client).toContain("rateLimitGate.trip(e.retryAfterMs)");
