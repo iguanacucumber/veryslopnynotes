@@ -47,10 +47,15 @@
                 android:resource="@xml/file_paths" />
         </provider>
         <!-- `adjustResize` : l'inset IME appliqué au conteneur retire le clavier
-             (en edge-to-edge la fenêtre ne se redimensionne plus). -->
+             (en edge-to-edge la fenêtre ne se redimensionne plus).
+             `resizeableActivity` explicite : téléphones pliables, fenêtres libres
+             et grands écrans redimensionnent l'activité ; les insets sont relus à
+             chaque changement de taille (MainActivity). Aucune orientation
+             verrouillée hors de l'activité de scan. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:resizeableActivity="true"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

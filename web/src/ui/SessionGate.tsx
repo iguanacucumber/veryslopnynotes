@@ -8,7 +8,7 @@ export function SessionGate({ status, children }: { status: SessionStatus | null
   if (!sessionKnown(status)) {
     return (
       <div className="shell">
-        <main id="main" tabIndex={-1} className="main">
+        <main id="main" tabIndex={-1} className="main main--bare">
           <div className="card card--flat" role="status" aria-live="polite" aria-busy="true">
             <p className="t-body-m" style={{ margin: 0 }}>
               Vérification…

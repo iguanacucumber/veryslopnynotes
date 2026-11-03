@@ -25,6 +25,12 @@ import java.net.URLDecoder
 /** Origine servie par `shouldInterceptRequest` ; jamais résolue par le réseau. */
 const val WEB_ASSET_HOST = "appassets.androidplatform.net"
 
+/**
+ * Zones sûres (px) que le web applique autour de son contenu. L'IME n'en fait
+ * pas partie : il rétrécit le conteneur, pas la zone de sécurité.
+ */
+internal data class SafeArea(val left: Int, val top: Int, val right: Int, val bottom: Int)
+
 private const val WEB_INDEX = "web/index.html"
 
 // Le JS est seul juge du retour : dialogues, puis routes, puis accueil.
@@ -41,6 +47,8 @@ class NativeWebShell(private val activity: ComponentActivity) {
     private val splashColor: Int = windowBackground(activity)
 
     private var pageLoaded = false
+
+    private var safeArea = SafeArea(0, 0, 0, 0)
 
     private val webView: WebView = WebView(activity).apply {
         // Identifiant STABLE (`res/values/ids.xml`) : l'état d'une vue est
@@ -116,6 +124,27 @@ class NativeWebShell(private val activity: ComponentActivity) {
         }
     }
 
+    /**
+     * Le web ne voit pas `WindowInsets` : le natif publie les zones sûres en
+     * variables CSS. La dernière valeur est rejouée après chaque chargement,
+     * sinon un rechargement (écran de secours) perdrait les encoches.
+     */
+    internal fun publishSafeArea(area: SafeArea) {
+        safeArea = area
+        if (pageLoaded) applySafeArea()
+    }
+
+    private fun applySafeArea() {
+        // Valeurs entières d'insets, jamais du texte externe.
+        val js = "(function(r){" +
+            "r.style.setProperty('--native-safe-left','${safeArea.left}px');" +
+            "r.style.setProperty('--native-safe-top','${safeArea.top}px');" +
+            "r.style.setProperty('--native-safe-right','${safeArea.right}px');" +
+            "r.style.setProperty('--native-safe-bottom','${safeArea.bottom}px');" +
+            "})(document.documentElement)"
+        webView.evaluateJavascript(js, null)
+    }
+
     /** Le JS n'a rien consommé : la pile système reprend la main et termine. */
     private fun exitThroughSystemBack() {
         backCallback.isEnabled = false
@@ -162,6 +191,7 @@ class NativeWebShell(private val activity: ComponentActivity) {
     private fun onFirstPaint() {
         if (pageLoaded) return
         pageLoaded = true
+        applySafeArea()
         webView.animate().alpha(1f).setDuration(180L).start()
         webView.evaluateJavascript("window.__vsnReady && window.__vsnReady()", null)
     }
@@ -221,6 +251,9 @@ class NativeWebShell(private val activity: ComponentActivity) {
 
         override fun onPageFinished(view: WebView, url: String?) {
             super.onPageFinished(view, url)
+            // Un rechargement repart d'un document neuf : les variables CSS du
+            // natif n'y existent pas encore.
+            applySafeArea()
             onFirstPaint()
         }
 

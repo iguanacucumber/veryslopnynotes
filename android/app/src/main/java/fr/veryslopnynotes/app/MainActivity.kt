@@ -36,6 +36,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Edge-to-edge : `enableEdgeToEdge` pose aussi le mode découpe (API 28+),
+        // donc le fond occupe l'encoche et le contenu est décalé par l'inset.
         enableEdgeToEdge()
         hideSystemBars()
         requestLocalNetworkPermission()
@@ -71,7 +73,7 @@ class MainActivity : ComponentActivity() {
             )
         }
         setContentView(container)
-        applyImeInsets(container)
+        applyWindowInsets(container)
         // La route sauvée prime TOUJOURS sur le deep link : l'intention est
         // périmée (c'est elle qui renvoyait l'utilisateur sur l'ancien écran).
         shell.open(savedRoute(savedInstanceState) ?: routePath(intent))
@@ -108,17 +110,36 @@ class MainActivity : ComponentActivity() {
         routePathFromState(savedInstanceState?.getString(ROUTE_STATE_KEY))
 
     /**
-     * L'activité est edge-to-edge et immersive : la fenêtre ne se redimensionne
-     * PAS quand le clavier s'ouvre, d'où l'inset IME en padding bas.
-     * `Type.ime()` et non `systemBars()` : l'inset clavier vaut 0 clavier fermé.
+     * Deux chemins distincts, sans double comptage :
+     * — le clavier est une contrainte de LAYOUT : la fenêtre ne se redimensionne
+     *   pas en edge-to-edge, donc l'inset IME devient le padding bas du
+     *   conteneur (`Type.ime()` vaut 0 clavier fermé) ;
+     * — découpe, barres visibles et gestes sont des zones de SÉCURITÉ : le natif
+     *   les publie au CSS (`--native-safe-*`), qui les applique une seule fois.
+     *   Padding natif + `env(safe-area-inset-*)` compteraient deux fois.
      */
-    private fun applyImeInsets(container: View) {
+    private fun applyWindowInsets(container: View) {
         ViewCompat.setOnApplyWindowInsetsListener(container) { view, insets ->
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
             view.updatePadding(bottom = ime.bottom)
+            webShell?.publishSafeArea(safeArea(insets))
             insets
         }
         ViewCompat.requestApplyInsets(container)
+    }
+
+    /** Maximum par côté : une zone sûre ne s'additionne jamais à une autre. */
+    private fun safeArea(insets: WindowInsetsCompat): SafeArea {
+        val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
+        val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+        val gestures = insets.getInsets(WindowInsetsCompat.Type.systemGestures())
+        return SafeArea(
+            left = maxOf(cutout.left, bars.left),
+            top = maxOf(cutout.top, bars.top),
+            right = maxOf(cutout.right, bars.right),
+            // Le geste d'accueil occupe le bas même barres masquées.
+            bottom = maxOf(cutout.bottom, bars.bottom, gestures.bottom),
+        )
     }
 
     /**
