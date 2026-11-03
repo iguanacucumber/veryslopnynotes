@@ -109,6 +109,48 @@ export const MAX_NATIVE_WAIT_MS =
 /** Timeout JS par défaut : au-dessus du plafond natif, sinon réponse perdue. */
 export const DEFAULT_TIMEOUT_MS = 120_000;
 
+/** Budget total d'une requête scolaire (miroir de `DEFAULT_REQUEST_DEADLINE_MS`). */
+export const REQUEST_DEADLINE_MS = 15_000;
+
+/** Nombre de requêtes HTTP qu'une lecture peut enchaîner (une par tranche). */
+export const MAX_RESOURCE_REQUESTS = 6;
+
+/** Plafond d'une lecture multi-requêtes, toujours sous le timeout JS. */
+export const MAX_RESOURCE_DEADLINE_MS = MAX_RESOURCE_REQUESTS * REQUEST_DEADLINE_MS;
+
+/**
+ * Échéance native d'une lecture, par ressource (miroir exact du Kotlin :
+ * `BridgeTimeouts.resourceDeadlineMs`). Une lecture qui enchaîne une requête
+ * par tranche ne tient pas dans le délai d'un seul appel.
+ */
+export const RESOURCE_DEADLINE_MS: Record<ResourceKey, number> = {
+  // Balayage local, aucun réseau.
+  alerts: 10_000,
+  // Deux requêtes : tranches puis informations.
+  capabilities: 30_000,
+  // Une requête par semaine de cours rattachée.
+  timetable: 60_000,
+  assignments: 60_000,
+  // Une requête par tranche, plus l'enrichissement borné des fils.
+  grades: MAX_RESOURCE_DEADLINE_MS,
+  attendance: MAX_RESOURCE_DEADLINE_MS,
+  punishments: MAX_RESOURCE_DEADLINE_MS,
+  discussions: MAX_RESOURCE_DEADLINE_MS,
+  // Profil, actualités, menus, tranches : une seule requête.
+  news: NATIVE_WAIT_MS.default,
+  canteen: NATIVE_WAIT_MS.default,
+  profile: NATIVE_WAIT_MS.default,
+  periods: NATIVE_WAIT_MS.default,
+};
+
+/** Marge du JS sur l'échéance native : la réponse native part avant l'abandon. */
+export const RESOURCE_TIMEOUT_MARGIN_MS = 5_000;
+
+/** Budget JS d'une lecture : toujours STRICTEMENT au-dessus de son échéance native. */
+export function resourceTimeoutMs(key: ResourceKey): number {
+  return RESOURCE_DEADLINE_MS[key] + RESOURCE_TIMEOUT_MARGIN_MS;
+}
+
 /**
  * Lectures simultanées autorisées côté JS (#393).
  *

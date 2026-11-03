@@ -11,8 +11,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 
-internal fun VsnBridge.profileMe(): JSONObject {
-    val result = await<MeResult> { cb -> profileRepo.fetchMe(cb) }
+internal fun VsnBridge.profileMe(timeoutMs: Long = BridgeTimeouts.AWAIT_DEFAULT_MS): JSONObject {
+    val result = await<MeResult>(timeoutMs) { cb -> profileRepo.fetchMe(cb) }
         ?: throw BridgeFailure("unavailable", "Profil indisponible.")
     return when (result) {
         is MeResult.Ok -> {

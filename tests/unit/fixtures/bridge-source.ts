@@ -33,6 +33,7 @@ const ATTENDUS = [
   "VsnBridgeTeacher.kt",
   "VsnBridgeRevision.kt",
   "VsnBridgeProfile.kt",
+  "VsnBridgeTimeouts.kt",
 ];
 
 export const BRIDGE_FILES: string[] = readdirSync(APP)

@@ -3,6 +3,7 @@ import {
   BridgeCallError,
   DEFAULT_TIMEOUT_MS,
   MAX_PARALLEL_READS,
+  resourceTimeoutMs,
   type AiContextSourceMeta,
   type BridgeError,
   type BridgeMethod,
@@ -293,7 +294,7 @@ export const bridge = {
   // requête AFFICHÉE.
   cached: (key: ResourceParams["key"], query = "") => call<ResourceResult>("resources.cached", { key, query }),
   load: (params: ResourceParams, signal?: AbortSignal) =>
-    call<ResourceResult>("resources.load", params, undefined, signal),
+    call<ResourceResult>("resources.load", params, resourceTimeoutMs(params.key), signal),
   invalidate: (key: ResourceParams["key"]) => call<{ ok: true }>("resources.invalidate", { key }),
   sync: () => call<ResourceResult>("resources.sync"),
   capabilities: () => call<{ tabs: string[] }>("capabilities.load"),

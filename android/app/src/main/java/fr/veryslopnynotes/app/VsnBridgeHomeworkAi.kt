@@ -36,9 +36,9 @@ import fr.veryslopnynotes.data.SessionEpoch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import fr.veryslopnynotes.app.VsnBridge.Companion.AWAIT_LLM_MS
-import fr.veryslopnynotes.app.VsnBridge.Companion.ATTACHMENT_BUDGET_MS
-import fr.veryslopnynotes.app.VsnBridge.Companion.HOMEWORK_LLM_TIMEOUT_MS
+import fr.veryslopnynotes.app.BridgeTimeouts.AWAIT_LLM_MS
+import fr.veryslopnynotes.app.BridgeTimeouts.ATTACHMENT_BUDGET_MS
+import fr.veryslopnynotes.app.BridgeTimeouts.HOMEWORK_LLM_TIMEOUT_MS
 
 // --- LLM -------------------------------------------------------------------
 

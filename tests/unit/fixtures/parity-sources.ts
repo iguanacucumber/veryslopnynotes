@@ -248,6 +248,10 @@ export const PRODUCTION_SOURCES: string[] = [
   // Fichier PUR : le harnais l'EXÉCUTE, donc chaque sortie précoce répond
   // exactement une fois (aucun parseur d'accolades dans le gate).
   join(APP, "BridgeCall.kt"),
+  // #905 : les budgets du pont (une source) et l'attente annulable du fil.
+  // Fichiers PURS : le harnais EXÉCUTE les constantes et l'abandon.
+  join(APP, "BridgeWait.kt"),
+  join(APP, "VsnBridgeTimeouts.kt"),
   // `app` — les EXÉCUTEURS du pont (#393) : un fil par appel et une file LLM
   // à part. Logique pure (`java.util.concurrent` seul) : le harnais les
   // EXÉCUTE, donc le test porte sur du code de production, pas sur un miroir.

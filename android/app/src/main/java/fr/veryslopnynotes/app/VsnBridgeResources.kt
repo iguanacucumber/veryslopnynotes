@@ -30,12 +30,23 @@ internal fun VsnBridge.resourceCached(p: JSONObject, epoch: Long): JSONObject {
         .put("error", JSONObject.NULL)
 }
 
-internal fun VsnBridge.emptyCached(): JSONObject = JSONObject()
+internal fun VsnBridge.emptyCached(error: String? = null): JSONObject = JSONObject()
     .put("payload", JSONObject.NULL)
     .put("fetchedAt", 0L)
     .put("stale", false)
     .put("partial", false)
-    .put("error", JSONObject.NULL)
+    .put("error", error ?: JSONObject.NULL)
+
+/**
+ * Échéance d'une lecture dépassée : le cache de la MÊME requête est rendu,
+ * marqué périmé, avec la cause. L'écran garde ses données au lieu de tomber
+ * sur une promesse rejetée, et le travail réseau a déjà été annulé.
+ */
+internal fun VsnBridge.deadlineOutcome(resource: String?, query: String, message: String): JSONObject {
+    if (resource == null) return emptyCached(message).put("stale", true)
+    val cached = repo.cached(resource, query)
+    return resultJson(RefreshOutcome.Failed(message, cached?.payload), resource, query)
+}
 
 /** Le drapeau vit DANS le payload ; le pont le remonte pour que l'écran le voie. */
 internal fun payloadPartial(payload: String?): Boolean {
@@ -49,22 +60,30 @@ internal fun payloadPartial(payload: String?): Boolean {
 
 internal fun VsnBridge.resourceLoad(p: JSONObject): JSONObject {
     val key = p.string("key")
+    val deadline = BridgeTimeouts.resourceDeadlineMs(key)
     if (key == "profile") {
-        return profileMe()
-            .put("fetchedAt", System.currentTimeMillis())
-            .put("stale", false)
+        return try {
+            profileMe(deadline)
+                .put("fetchedAt", System.currentTimeMillis())
+                .put("stale", false)
+        } catch (e: BridgeFailure) {
+            // Un profil est une lecture réseau : l'échéance rend un résultat
+            // typé vide, jamais une promesse sans données.
+            if (e.code != "unavailable") throw e
+            emptyCached(e.message).put("stale", true)
+        }
     }
     if (key == "periods") {
-        val outcome = await<RefreshOutcome> { cb ->
+        val outcome = await<RefreshOutcome>(deadline) { cb ->
             repo.fetchPeriods(currentBaseUrl(), cb)
-        } ?: throw BridgeFailure("unavailable", "Tranches indisponibles.")
+        } ?: return deadlineOutcome(null, "", "Délai dépassé : tranches indisponibles.")
         return resultJson(outcome, null)
     }
     val resource = cacheKey(key) ?: throw BridgeFailure("bad_request", "Ressource inconnue.")
     val query = bounded(p.string("query"), 200)
-    val outcome = await<RefreshOutcome> { cb ->
+    val outcome = await<RefreshOutcome>(deadline) { cb ->
         repo.refreshAsync(resource, currentBaseUrl(), query, p.optBoolean("force", false), cb)
-    } ?: throw BridgeFailure("unavailable", "Lecture indisponible.")
+    } ?: return deadlineOutcome(resource, query, "Délai dépassé : lecture partielle.")
     return resultJson(outcome, resource, query)
 }
 
@@ -76,9 +95,9 @@ internal fun VsnBridge.resourceInvalidate(p: JSONObject): JSONObject {
 }
 
 internal fun VsnBridge.resourceSync(): JSONObject {
-    val outcome = await<RefreshOutcome> { cb ->
+    val outcome = await<RefreshOutcome>(BridgeTimeouts.resourceDeadlineMs("sync")) { cb ->
         repo.requestSyncRefresh(currentBaseUrl(), accounts.current().orEmpty(), cb)
-    } ?: throw BridgeFailure("unavailable", "Relecture indisponible.")
+    } ?: return deadlineOutcome(null, "", "Délai dépassé : relecture indisponible.")
     return resultJson(outcome, null)
 }
 
