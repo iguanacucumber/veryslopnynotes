@@ -40,8 +40,9 @@ production ne l'embarque pas, et un pont natif absent y est un échec bruyant
 - `src/ui/AppContext.tsx` : thème, palette, rafraîchissement global, notices, ressources.
 - `src/ui/components.tsx` : cartes, états vides, erreurs, avatar.
 - `src/styles/tokens.css` : jetons de la palette par défaut (repli si le JS échoue).
-- `src/lib/schemes.ts` : les 3 palettes (claire + sombre), posées en variables CSS sur `<html>`.
+- `src/lib/schemes.ts` : les 4 palettes (claire + sombre), posées en variables CSS sur `<html>`.
 - `src/styles/liquid-glass.css` : matière « Liquid Glass » (barres floutées, cartes translucides, fond ambiant animé), active seulement avec la palette `liquid-glass`.
+- `src/styles/frutiger-aero.css` : matière « Frutiger Aero » (surfaces vernies, papier peint ciel/aqua, bulles), active seulement avec la palette `frutiger-aero`.
 - `src/routes/*.tsx` : un écran par route.
 - `src/features/*` : logique/parsers par écran.
 
@@ -61,5 +62,5 @@ schéma par écran.
   (`src/ui/viewTransition.ts`, repli en navigation simple si l'API manque), et
   animations CSS en `transform`/`opacité` uniquement (testé).
 - Couleurs : tout passe par les variables de `src/styles/tokens.css`, posées par
-  `src/lib/schemes.ts` (3 palettes × clair/sombre). Aucune couleur en dur dans
+  `src/lib/schemes.ts` (4 palettes × clair/sombre). Aucune couleur en dur dans
   un écran : une palette retirée retombe sur la palette par défaut.

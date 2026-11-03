@@ -7,6 +7,7 @@ import "./styles/tokens.css";
 import "./styles/app.css";
 import "./styles/ai.css";
 import "./styles/liquid-glass.css";
+import "./styles/frutiger-aero.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("root absent");

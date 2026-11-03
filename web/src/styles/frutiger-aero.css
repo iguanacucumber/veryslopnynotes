@@ -1,0 +1,292 @@
+/* Skin « Frutiger Aero » : surfaces vernies, ciel aqua et bulles. Tout est
+   scopé sur `:root[data-scheme="frutiger-aero"]` ; les autres palettes gardent
+   leurs surfaces plates. Le relief vient des dégradés et des liserés, jamais
+   d'un `backdrop-filter` : aucun repli de transparence à maintenir. */
+
+:root[data-scheme="frutiger-aero"] {
+  --fa-gloss: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.9) 0%,
+    rgba(255, 255, 255, 0.28) 38%,
+    rgba(255, 255, 255, 0) 68%
+  );
+  --fa-gloss-soft: linear-gradient(180deg, rgba(255, 255, 255, 0.52), transparent 54%);
+  --fa-edge:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 0 0 1px rgba(0, 92, 138, 0.12);
+  --fa-edge-strong:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(0, 70, 105, 0.22),
+    inset 0 0 0 1px rgba(0, 92, 138, 0.2);
+  --fa-shadow: 0 1px 2px rgba(6, 64, 96, 0.08), 0 14px 30px -22px rgba(0, 96, 140, 0.45);
+
+  --fa-bar: linear-gradient(180deg, #FDFEFF 0%, #ECF8FF 58%, #DDF2FF 100%);
+  --fa-button: linear-gradient(180deg, #0077B8 0%, #006EA8 48%, #005F98 100%);
+  --fa-button-hover: linear-gradient(180deg, #0070AC 0%, #00659D 52%, #00578C 100%);
+  --fa-tab: linear-gradient(180deg, #E1F7FF 0%, #C6EFFF 45%, #A9E2FF 100%);
+
+  /* Teinte aqua des surfaces partagées : les écrans suivent sans règle locale. */
+  --item: color-mix(in srgb, var(--brand-light) 14%, var(--surface));
+  --panel: color-mix(in srgb, var(--brand-light) 7%, var(--surface));
+  --panel-tint: color-mix(in srgb, var(--brand-light) 20%, var(--surface));
+  --paper: var(--surface);
+  --paper-deep: var(--surface-variant);
+
+  --wallpaper-deep: #0E5E96;
+  --wallpaper-mid: #2E9FD8;
+  --wallpaper-warm: #CFF6E2;
+  --wallpaper-pink: #FFE27A;
+  --wallpaper-blue: #59C6F2;
+  --wallpaper-amber: #FFD166;
+  --wallpaper-violet: #39C99A;
+}
+
+:root[data-scheme="frutiger-aero"][data-theme="dark"] {
+  --fa-gloss: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.2) 0%,
+    rgba(255, 255, 255, 0.06) 38%,
+    rgba(255, 255, 255, 0) 68%
+  );
+  --fa-gloss-soft: linear-gradient(180deg, rgba(255, 255, 255, 0.16), transparent 54%);
+  --fa-edge:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 0 0 1px rgba(111, 216, 255, 0.12);
+  --fa-edge-strong:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(111, 216, 255, 0.2);
+  --fa-shadow: 0 1px 2px rgba(0, 0, 0, 0.55), 0 16px 34px -24px rgba(0, 0, 0, 0.9);
+
+  --fa-bar: linear-gradient(180deg, #0D2839 0%, #0A2030 58%, #081B29 100%);
+  --fa-button: linear-gradient(180deg, #8BE4FF 0%, #3FC6FF 52%, #1FA8E0 100%);
+  --fa-button-hover: linear-gradient(180deg, #A5EDFF 0%, #5BD2FF 52%, #2DB8EE 100%);
+  --fa-tab: linear-gradient(180deg, #1B5A78 0%, #11405A 52%, #0B3048 100%);
+
+  --wallpaper-deep: #021A2C;
+  --wallpaper-mid: #06344F;
+  --wallpaper-warm: #0A4A57;
+  --wallpaper-pink: #FFC94A;
+  --wallpaper-blue: #1C86C0;
+  --wallpaper-amber: #E8A93C;
+  --wallpaper-violet: #159B7A;
+}
+
+/* Pile humaniste de l'époque Aero ; SN Pro reste le repli si aucune n'existe. */
+:root[data-scheme="frutiger-aero"] body {
+  font-family: "Segoe UI", Frutiger, Candara, Tahoma, "SN Pro", system-ui, sans-serif;
+  background: linear-gradient(
+    180deg,
+    var(--page) 0%,
+    color-mix(in srgb, var(--page) 82%, var(--brand)) 100%
+  );
+}
+
+:root[data-scheme="frutiger-aero"] .topbar:not(.topbar--home) {
+  background: var(--fa-bar);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--brand) 20%, transparent);
+}
+
+:root[data-scheme="frutiger-aero"] .card:not(.card--brand):not(.card--danger):not(.grades-hero) {
+  background-image: var(--fa-gloss);
+  box-shadow: var(--fa-shadow), var(--fa-edge);
+}
+
+:root[data-scheme="frutiger-aero"] .list-row {
+  background-image: var(--fa-gloss-soft);
+  box-shadow: var(--fa-edge);
+}
+
+:root[data-scheme="frutiger-aero"] .settings-tile {
+  background-image: var(--fa-gloss-soft);
+  box-shadow: var(--fa-shadow), var(--fa-edge);
+}
+
+:root[data-scheme="frutiger-aero"] .chip,
+:root[data-scheme="frutiger-aero"] .field,
+:root[data-scheme="frutiger-aero"] .search-field,
+:root[data-scheme="frutiger-aero"] .grades-menu {
+  background-image: var(--fa-gloss-soft);
+  box-shadow: var(--fa-edge);
+}
+
+:root[data-scheme="frutiger-aero"] .chip--active {
+  background: var(--fa-button);
+  color: var(--on-brand);
+}
+
+:root[data-scheme="frutiger-aero"] .chip--danger {
+  background: var(--danger-solid);
+  color: var(--on-danger);
+}
+
+:root[data-scheme="frutiger-aero"] .search-field:focus-within {
+  box-shadow: var(--fa-edge), 0 0 0 2px var(--brand-deep);
+}
+
+:root[data-scheme="frutiger-aero"] .grades-menu:focus-within {
+  box-shadow: var(--fa-edge), 0 0 0 2px var(--brand-deep);
+}
+
+:root[data-scheme="frutiger-aero"] .btn {
+  background: var(--fa-button);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -2px 6px rgba(0, 60, 90, 0.35),
+    0 10px 22px -14px rgba(0, 100, 150, 0.7);
+}
+
+:root[data-scheme="frutiger-aero"] .btn:hover {
+  background: var(--fa-button-hover);
+}
+
+:root[data-scheme="frutiger-aero"] .btn--ghost {
+  background: var(--item);
+  color: var(--brand-deep);
+  box-shadow: var(--fa-edge);
+}
+
+:root[data-scheme="frutiger-aero"] .btn--ghost:hover {
+  background: var(--panel-tint);
+  color: var(--brand-deep);
+}
+
+:root[data-scheme="frutiger-aero"] .btn--danger {
+  background: var(--danger-solid);
+  color: var(--on-danger);
+}
+
+:root[data-scheme="frutiger-aero"] .btn--danger:hover {
+  background: color-mix(in srgb, var(--danger-solid) 88%, var(--ink));
+  color: var(--on-danger);
+}
+
+:root[data-scheme="frutiger-aero"] .tabbar {
+  background: var(--fa-bar);
+  border-color: color-mix(in srgb, var(--brand-light) 30%, var(--surface));
+  box-shadow:
+    var(--fa-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -3px 8px rgba(0, 100, 150, 0.16);
+}
+
+:root[data-scheme="frutiger-aero"] .tab[aria-current="page"],
+:root[data-scheme="frutiger-aero"] .tab[aria-current="page"]:hover,
+:root[data-scheme="frutiger-aero"] .tab[aria-current="page"]:active {
+  background: var(--fa-tab);
+  color: var(--brand-deep);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -2px 6px rgba(0, 90, 130, 0.22);
+}
+
+:root[data-scheme="frutiger-aero"] .tab[aria-current="page"] svg {
+  color: var(--brand-deep);
+}
+
+:root[data-scheme="frutiger-aero"] .dialog {
+  background-image: var(--fa-gloss);
+  box-shadow: var(--fa-shadow), var(--fa-edge-strong);
+}
+
+/* Bulles : de vrais cercles translucides, pas les taches floutées de Liquid
+   Glass. Les transformations seules bougent, la garde globale coupe le reste. */
+:root[data-scheme="frutiger-aero"] .glass-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+:root[data-scheme="frutiger-aero"] .glass-backdrop__blob {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  will-change: transform;
+  animation: fa-bubble-rise 22s linear infinite;
+  background:
+    radial-gradient(
+      circle at 32% 28%,
+      rgba(255, 255, 255, 0.95) 0 5%,
+      rgba(255, 255, 255, 0.5) 12%,
+      rgba(180, 235, 255, 0.2) 38%,
+      rgba(120, 205, 250, 0.06) 62%,
+      transparent 70%
+    );
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.9),
+    inset 0 -8px 18px rgba(70, 170, 220, 0.18),
+    0 8px 24px rgba(0, 100, 150, 0.1);
+}
+
+:root[data-scheme="frutiger-aero"] .glass-backdrop__blob--a {
+  left: -6vmax;
+  bottom: -26vmax;
+  width: 26vmax;
+  height: 26vmax;
+  animation-duration: 30s;
+  animation-delay: -4s;
+}
+
+:root[data-scheme="frutiger-aero"] .glass-backdrop__blob--b {
+  right: 4%;
+  bottom: -20vmax;
+  width: 14vmax;
+  height: 14vmax;
+  animation-duration: 22s;
+  animation-delay: -13s;
+}
+
+:root[data-scheme="frutiger-aero"] .glass-backdrop__blob--c {
+  left: 44%;
+  bottom: -14vmax;
+  width: 8vmax;
+  height: 8vmax;
+  animation-duration: 18s;
+  animation-delay: -8s;
+}
+
+:root[data-scheme="frutiger-aero"] .glass-backdrop__blob--d {
+  right: -10vmax;
+  bottom: -34vmax;
+  width: 22vmax;
+  height: 22vmax;
+  animation-duration: 34s;
+  animation-delay: -21s;
+}
+
+:root[data-scheme="frutiger-aero"] .glass-backdrop__blob--e {
+  left: 18%;
+  bottom: -30vmax;
+  width: 11vmax;
+  height: 11vmax;
+  animation-duration: 26s;
+  animation-delay: -16s;
+}
+
+:root[data-scheme="frutiger-aero"][data-theme="dark"] .glass-backdrop__blob {
+  border-color: rgba(139, 228, 255, 0.35);
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.35),
+    inset 0 -8px 18px rgba(20, 120, 170, 0.24),
+    0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+@keyframes fa-bubble-rise {
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.92);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.7;
+  }
+  88% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: translate3d(2vmax, -140vh, 0) scale(1.08);
+    opacity: 0;
+  }
+}

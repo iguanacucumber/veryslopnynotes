@@ -88,8 +88,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [palette, dark]);
 
-  // Publiée en `data-scheme` : la matière (`styles/liquid-glass.css`) cible
-  // `:root[data-scheme="liquid-glass"]`, les autres palettes ne voient rien.
+  // Publiée en `data-scheme` : chaque matière (`styles/liquid-glass.css`,
+  // `styles/frutiger-aero.css`) cible sa valeur, les autres palettes ne voient rien.
   useEffect(() => {
     document.documentElement.dataset["scheme"] = scheme;
   }, [scheme]);
