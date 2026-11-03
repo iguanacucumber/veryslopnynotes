@@ -62,6 +62,27 @@ reprise automatique en CI ; le gate `check` n'en a AUCUNE. Les captures
 compris en échec. Deux échecs identiques = défaut, pas flake : ne pas relancer
 à la main.
 
+## Smoke émulateur (#891)
+
+Le job CI `emulator-smoke` installe l'APK **debug** sur un émulateur épinglé
+(`ReactiveCircus/android-emulator-runner` par SHA, API 35, `google_apis`,
+`x86_64`), clique « Connexion démo » — le compte **public** de l'éditeur, aucun
+identifiant saisi — puis exige l'accueil (route `#/`, titre `Accueil`, barre de
+navigation). Il ne lit ni `.env`, ni secret, ni corpus scolaire.
+
+`agents/runtime/emulator-smoke.ts` pilote l'app par le CDP de la WebView
+(débogage activé en debug). Il borne chaque attente par une échéance nommée
+(boot, installation, socket CDP, bouton, accueil) et n'a **aucune reprise** :
+deux échecs identiques sont un défaut (#924). Les captures d'appairage et
+d'accueil, le DOM observé et le logcat de l'application partent en artefact
+`emulator-smoke` 7 jours, y compris en échec.
+
+Le job est **non bloquant** (`continue-on-error: true`) : l'émulateur et l'hôte
+de démonstration sont hors du dépôt. Il n'est donc pas requis au ruleset et ne
+bloque pas un merge. Sa promotion (retirer `continue-on-error`, puis ajouter le
+check requis) se décide sur des **runs réels** — une série verte sans reprise —
+jamais dans la PR qui l'introduit.
+
 ## Couverture (#895)
 
 `make coverage` est HORS du gate : une exécution des tests alimente deux

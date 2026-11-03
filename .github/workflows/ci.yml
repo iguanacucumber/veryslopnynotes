@@ -27,6 +27,12 @@
 # corpus Pronote (celui-ci est gitignoré : la parité sur données réelles est
 # donc SKIPpée, bruyamment, comme sur le poste).
 #
+# #891 : un troisième job installe l'APK debug sur un émulateur ÉPINGLÉ, clique
+# « Connexion démo » (compte public de l'éditeur), vérifie que l'accueil se
+# monte et garde captures + DOM + logcat. Il est NON BLOQUANT (`continue-on-error`
+# au niveau job) : l'émulateur et l'hôte de démonstration sont hors du dépôt,
+# donc son verdict est un AVIS jusqu'à stabilité prouvée. Voir BUILD.md.
+#
 # Les logs complets par étape (`node_modules/.cache/gate-logs/`, écrits
 # par `agents/runtime/output.ts`) partent en artefact 7 jours, et la sortie de
 # `check.ts` — quelques lignes — est recopiée dans le RÉSUMÉ d'étape : un agent
@@ -437,5 +443,98 @@ jobs:
         with:
           name: web-smoke-shots
           path: ${{ runner.temp }}/web-smoke-shots
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # #891 : smoke de l'APK debug sur émulateur. Il installe l'APK, appuie sur
+  # « Connexion démo » (compte PUBLIC de l'éditeur, aucun identifiant saisi),
+  # exige l'accueil, puis garde captures, DOM et logcat. Le script borne chaque
+  # attente (agents/runtime/emulator-smoke.ts) et n'a AUCUNE reprise : deux
+  # échecs identiques sont un défaut, pas un flake (#924).
+  #
+  # NON BLOQUANT : l'émulateur et l'hôte de démonstration ne sont pas dans le
+  # dépôt ; tant que le job n'a pas une série verte, il reste un AVIS et ne doit
+  # pas être requis au ruleset. La promotion (retirer `continue-on-error`, ajouter
+  # le check requis) se décide sur des runs réels, pas sur cette PR.
+  emulator-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    continue-on-error: true
+    steps:
+      - name: Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.4"
+
+      - name: JDK 17
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # L'émulateur exige /dev/kvm. La règle udev est celle documentée par
+      # l'action : sans elle, l'accélération est refusée et le boot traîne.
+      - name: KVM
+        run: |
+          set -euo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules >/dev/null
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # Le SDK du runner ne porte pas forcément la plateforme 37 du module app
+      # (même version que `compileSdk`/`buildToolsVersion`). `sdkmanager` est
+      # l'outil déjà présent dans l'image : aucune action tierce sur ce chemin,
+      # et aucune archive non vérifiée n'est exécutée.
+      - name: SDK Android (compilation)
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          [ -n "$sdk" ] || { echo "ANDROID_SDK_ROOT absent" >&2; exit 1; }
+          sdkmanager="$sdk/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$sdkmanager" ] || sdkmanager="$(command -v sdkmanager)"
+          [ -x "$sdkmanager" ] || { echo "sdkmanager absent" >&2; exit 1; }
+          yes | "$sdkmanager" --licenses >/dev/null 2>&1 || true
+          "$sdkmanager" --install "platforms;android-37.0" "build-tools;36.0.0" "platform-tools"
+          echo "$sdk/platform-tools" >> "$GITHUB_PATH"
+
+      - name: Dépendances
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile --silent || bun install --frozen-lockfile
+
+      - name: APK debug
+        run: make buildDebugApk
+
+      # Action ÉPINGLÉE par SHA (v2.38.0) : un tag peut être déplacé. Le profil
+      # et l'image système sont figés par `api-level`/`target`/`arch`.
+      - name: Smoke émulateur
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        timeout-minutes: 25
+        env:
+          EMULATOR_SMOKE_DIR: ${{ runner.temp }}/emulator-smoke
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          force-avd-creation: true
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bun run agents/runtime/emulator-smoke.ts
+
+      # La PREUVE du smoke : captures d'appairage/accueil, DOM observé et logcat
+      # de l'application, y compris (surtout) quand le job est rouge.
+      - name: Preuves du smoke émulateur
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: emulator-smoke
+          path: ${{ runner.temp }}/emulator-smoke
           retention-days: 7
           if-no-files-found: ignore
