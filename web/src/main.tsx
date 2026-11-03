@@ -6,7 +6,6 @@ import { watchViewport } from "./lib/viewport";
 import "./styles/tokens.css";
 import "./styles/app.css";
 import "./styles/ai.css";
-import "./styles/madoka.css";
 import "./styles/liquid-glass.css";
 
 const root = document.getElementById("root");

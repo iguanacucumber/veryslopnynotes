@@ -104,7 +104,7 @@ describe("web invariants", () => {
 
   test("aucune couleur en dur dans les composants UI (#564)", () => {
     // Les couleurs vivent dans `styles/tokens.css` et les palettes : une couleur
-    // en dur contourne le thème sombre et les 22 palettes.
+    // en dur contourne le thème sombre et les 3 palettes.
     const tsx = ["features", "routes", "ui"]
       .flatMap((dir) => list(join(WEB, "src", dir)))
       .filter((file) => file.endsWith(".tsx"));

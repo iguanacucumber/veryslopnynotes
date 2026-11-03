@@ -22,7 +22,7 @@
 | `/prof` | Professeur | Discussion par matière avec l'assistant (fil local) et exercices tirés du manuel ou du cahier, corrigés pas à pas. |
 | `/alerts` | Alertes | Contenus hostiles détectés puis neutralisés, affichés en texte brut, avec l'état de la dernière vérification. |
 | `/profile` | Profil | Compte actif, comptes liés publiés par l'établissement, changement d'appairage et déconnexion qui purge session et caches. |
-| `/settings` | Réglages | Thème clair / sombre / système, 22 palettes, matières personnalisées (couleur, emoji, libellé), adresse du scraper, adresse du manuel, clé de l'assistant. |
+| `/settings` | Réglages | Thème clair / sombre / système, 3 palettes, matières personnalisées (couleur, emoji, libellé), adresse du scraper, adresse du manuel, clé de l'assistant. |
 
 Les anciennes routes `/fiches` et `/cahier` restent des alias.
 
