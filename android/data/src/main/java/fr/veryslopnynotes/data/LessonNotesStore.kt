@@ -50,9 +50,9 @@ class FileLessonNotesStore(
     }
 
     private fun read(): List<LessonNote> {
-        // A truncated new file (writeText is truncate-then-write) must not
-        // shadow intact legacy notes: parse failure falls through to it.
-        val current = file.takeIf { it.isFile }?.let { parseLessonNotesOrNull(it.readText()) }
+        // Un fichier tronqué ou corrompu est mis en quarantaine : la sauvegarde
+        // précédente est relue avant de retomber sur l'ancien `cahier.json`.
+        val current = DurableFile.read(file, ::parseLessonNotesOrNull)
         if (current != null) return current
         // Read the pre-rename file until the next successful write moves it.
         return legacyFile?.takeIf { it.isFile }?.let { parseLessonNotesOrNull(it.readText()) } ?: emptyList()

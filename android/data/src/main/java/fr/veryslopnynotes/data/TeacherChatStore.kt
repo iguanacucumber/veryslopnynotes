@@ -34,18 +34,17 @@ interface TeacherChatLocalStore {
 class FileTeacherChatStore(private val file: File) : TeacherChatLocalStore {
     @Synchronized
     override fun load(): TeacherThread {
-        val raw = try {
-            file.takeIf { it.isFile }?.readText()
-        } catch (_: Exception) {
-            null
-        } ?: return TeacherThread()
-        return TeacherChat.trimThread(parseTeacherThreadOrNull(raw) ?: TeacherThread())
+        val thread = DurableFile.read(file, ::parseTeacherThreadOrNull) ?: return TeacherThread()
+        return TeacherChat.trimThread(thread)
     }
 
     @Synchronized
     override fun save(thread: TeacherThread, epoch: Long): Boolean {
         val bounded = TeacherChat.trimThread(thread)
         if (!TeacherChat.isThreadValid(bounded)) return false
+        // Une cible corrompue part en quarantaine AVANT le remplacement, et la
+        // sauvegarde précédente est restaurée : rien n'est écrasé en silence.
+        load()
         return OfflineArtifacts.writeText(file, teacherThreadJson(bounded), epoch)
     }
 

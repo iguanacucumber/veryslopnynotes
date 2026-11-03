@@ -50,24 +50,15 @@ const manual = codeOnly(readFileSync(join(DATA, "Manuals.kt"), "utf8"));
 const bridge = codeOnly(readFileSync(BRIDGE, "utf8"));
 
 describe("manuel — purge de compte (I16)", () => {
-  test("clearAccountData retire TOUTE clé du compte, pas le drapeau d'invitation", () => {
-    // Les clés de compte : celles que le companion déclare, sauf `prompt_seen`
-    // (un réglage d'interface, jamais une donnée du compte).
-    const keys = [...manual.matchAll(/private const val (KEY_[A-Z_]+) = "[a-z_]+"/g)]
-      .map((m) => m[1]!)
-      .filter((key) => key !== "KEY_PROMPT_SEEN");
-    // Adresse, extraits, classe, matières vues, matières désactivées.
-    expect(keys).toEqual([
-      "KEY_URL",
-      "KEY_DOCS",
-      "KEY_CLASS_LABEL",
-      "KEY_SUBJECTS",
-      "KEY_DISABLED_SUBJECTS",
-    ]);
+  test("clearAccountData efface le fichier durable, sa sauvegarde et sa quarantaine", () => {
+    // Le manuel est un fichier JSON dans `offline/` : la purge de compte
+    // supprime la cible, `.bak` ET les copies `quarantine/` — une version
+    // antérieure ne doit pas rendre le manuel du compte précédent.
     const purge = bodyOf(manual, "fun clearAccountData()");
     expect(purge.length).toBeGreaterThan(0);
-    for (const key of keys) expect(purge).toContain(`.remove(${key})`);
-    // Un rappel intempestif à chaque bascule serait un défaut : le drapeau reste.
+    expect(purge).toContain("DurableFile.delete(it)");
+    // Un rappel intempestif à chaque bascule serait un défaut : le drapeau
+    // d'invitation reste dans les préférences, hors de ce fichier.
     expect(purge).not.toContain("KEY_PROMPT_SEEN");
   });
 

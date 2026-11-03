@@ -53,7 +53,10 @@ data class SubjectPrefs(
             null
         }
 
-        fun listFromJson(raw: String): List<SubjectPrefs> = try {
+        fun listFromJson(raw: String): List<SubjectPrefs> = listFromJsonOrNull(raw) ?: emptyList()
+
+        /** `null` = JSON illisible (à distinguer d'une liste vide valide). */
+        fun listFromJsonOrNull(raw: String): List<SubjectPrefs>? = try {
             val arr = JSONArray(raw)
             val out = mutableListOf<SubjectPrefs>()
             for (i in 0 until arr.length()) {
@@ -64,7 +67,7 @@ data class SubjectPrefs(
             }
             out
         } catch (_: Exception) {
-            emptyList()
+            null
         }
     }
 }
@@ -115,9 +118,10 @@ interface SubjectPrefsLocalStore {
 class FileSubjectPrefsStore(private val file: File) : SubjectPrefsLocalStore {
     @Synchronized
     override fun load(): List<SubjectPrefs> = try {
-        if (file.exists()) SubjectPrefs.listFromJson(file.readText()) else emptyList()
+        // Un fichier corrompu part en quarantaine ; la version précédente est
+        // relue au lieu de perdre toutes les préférences en silence.
+        DurableFile.read(file, SubjectPrefs::listFromJsonOrNull) ?: emptyList()
     } catch (_: Exception) {
-        // ponytail: cache preferences = best-effort, pas de donnée critique.
         emptyList()
     }
 
