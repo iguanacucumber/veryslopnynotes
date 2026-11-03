@@ -50,6 +50,16 @@ Sans `android-compile` ni `audit` (réseau), mais la parité TS ↔ Kotlin tourn
 si `kotlinc`/`java` sont là et `architecture` teste `buildWebUi` sur vrai
 Gradle : durée variable, jamais une preuve avant PR.
 
+## Politique anti-flake (#924)
+
+Le smoke navigateur n'a ni sleep fixe ni `waitForTimeout` : chaque attente est
+un ÉVÉNEMENT (serveur qui répond, DOM stable) borné par un délai explicite, et
+chaque job porte un `timeout-minutes`. Seul le job `web-smoke` a droit à UNE
+reprise automatique en CI ; le gate `check` n'en a AUCUNE. Les captures
+(`web-smoke-shots`) et les logs (`gate-logs`) partent en artefact 7 jours, y
+compris en échec. Deux échecs identiques = défaut, pas flake : ne pas relancer
+à la main.
+
 ## Autres cibles `make`
 
 - `watch` : `bun test --watch` (unitaires + web, séquentiel).

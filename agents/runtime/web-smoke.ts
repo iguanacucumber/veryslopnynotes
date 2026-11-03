@@ -3,7 +3,7 @@
 //
 // Le bundle de PRODUCTION n'embarque pas le pont factice : le smoke le fournit
 // lui-même en exécutant le MÊME module `web/src/bridge/mock.ts` côté Node.
-import { chromium } from "playwright";
+import { chromium, type Page } from "playwright";
 import { mkdirSync } from "node:fs";
 import { mockCall } from "../../web/src/bridge/mock";
 import { SMOKE_ROUTES } from "../../web/src/smoke-routes";
@@ -12,7 +12,17 @@ import { bound } from "./output";
 const ROOT = new URL("../..", import.meta.url).pathname;
 const PORT = 4173;
 const URL_BASE = `http://127.0.0.1:${PORT}/`;
-const SHOTS = "/tmp/opencode/web-shots";
+const SHOTS = process.env["WEB_SMOKE_SHOTS"] ?? "/tmp/opencode/web-shots";
+
+// Bornes EXPLICITES : aucune attente ne peut durer indéfiniment, et aucune
+// n'est une durée fixe déguisée (politique anti-flake, #924).
+const DELAI_SERVEUR_MS = 15_000;
+const DELAI_NAVIGATION_MS = 15_000;
+const DELAI_UI_MS = 5_000;
+const DELAI_QUIESCENCE_MS = 2_000;
+const QUIESCENCE_RENDU_MS = 120;
+const QUIESCENCE_FLUX_MS = 250;
+const INTERVALLE_SONDE_MS = 50;
 
 /** Liste bornée : le reste part dans le log complet. */
 function afficherErreurs(titre: string, step: string, messages: readonly string[]): void {
@@ -46,23 +56,63 @@ const preview = Bun.spawn(["bunx", "vite", "preview", "--config", "web/vite.conf
 });
 
 async function waitForServer(): Promise<void> {
-  for (let i = 0; i < 60; i++) {
+  const echeance = Date.now() + DELAI_SERVEUR_MS;
+  for (;;) {
     try {
-      const res = await fetch(URL_BASE);
-      if (res.ok) return;
+      if ((await fetch(URL_BASE)).ok) return;
     } catch {
       // pas encore prêt
     }
-    await Bun.sleep(250);
+    if (Date.now() >= echeance) {
+      throw new Error(`vite preview ne répond pas après ${DELAI_SERVEUR_MS} ms`);
+    }
+    await Bun.sleep(INTERVALLE_SONDE_MS);
   }
-  throw new Error("vite preview ne répond pas");
+}
+
+/**
+ * Attend le SILENCE du DOM (aucune mutation pendant `quietMs`), borné par
+ * `timeoutMs`. Un garde-fou de session rebondit APRÈS le rendu : on attend son
+ * silence plutôt que de deviner une durée fixe.
+ */
+async function attendreQuiescence(
+  page: Page,
+  timeoutMs = DELAI_QUIESCENCE_MS,
+  quietMs = QUIESCENCE_FLUX_MS,
+): Promise<void> {
+  await page.evaluate(
+    ({ quietMs, timeoutMs }: { quietMs: number; timeoutMs: number }) =>
+      new Promise<void>((resolve) => {
+        let veille = 0;
+        let plafond = 0;
+        const fini = () => {
+          window.clearTimeout(veille);
+          window.clearTimeout(plafond);
+          observateur.disconnect();
+          resolve();
+        };
+        const observateur = new MutationObserver(() => {
+          window.clearTimeout(veille);
+          veille = window.setTimeout(fini, quietMs);
+        });
+        observateur.observe(document.documentElement, {
+          subtree: true,
+          childList: true,
+          attributes: true,
+          characterData: true,
+        });
+        veille = window.setTimeout(fini, quietMs);
+        plafond = window.setTimeout(fini, timeoutMs);
+      }),
+    { quietMs, timeoutMs },
+  );
 }
 
 let code = 0;
 try {
   mkdirSync(SHOTS, { recursive: true });
   await waitForServer();
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ timeout: DELAI_NAVIGATION_MS });
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
   await page.exposeFunction("__vsnMock", (method: string, params: unknown) => mockCall(method, params));
   await page.addInitScript(BRIDGE_FACTICE);
@@ -73,13 +123,17 @@ try {
   page.on("pageerror", (err) => errors.push(err.message));
 
   for (const [name, route] of SMOKE_ROUTES) {
-    await page.goto(`${URL_BASE}#${route}`, { waitUntil: "networkidle" });
-    await page.locator("h1, h2, strong").first().waitFor();
+    await page.goto(`${URL_BASE}#${route}`, {
+      waitUntil: "networkidle",
+      timeout: DELAI_NAVIGATION_MS,
+    });
+    await page.locator("h1, h2, strong").first().waitFor({ timeout: DELAI_UI_MS });
     // Attendre la fin des spinners, sinon la preuve montre un état transitoire.
     await page
-      .waitForFunction(() => !document.querySelector(".spinner"), null, { timeout: 5000 })
+      .waitForFunction(() => !document.querySelector(".spinner"), null, { timeout: DELAI_UI_MS })
       .catch(() => undefined);
-    await page.waitForTimeout(120);
+    // Le layout post-spinner se pose : attendre le silence du DOM, pas 120 ms.
+    await attendreQuiescence(page, DELAI_UI_MS, QUIESCENCE_RENDU_MS);
     // Accessibilité : une seule cible `main`, langue déclarée.
     const mainCount = await page.locator("main").count();
     const mainTarget =
@@ -238,21 +292,31 @@ try {
         },
       };
     }, scenario.expired);
-    await flow.goto(`${URL_BASE}#/`, { waitUntil: "networkidle" });
-    await flow.waitForURL(/#\/pairing$/, { timeout: 5000 }).catch(() => undefined);
+    await flow.goto(`${URL_BASE}#/`, {
+      waitUntil: "networkidle",
+      timeout: DELAI_NAVIGATION_MS,
+    });
+    await flow.waitForURL(/#\/pairing$/, { timeout: DELAI_UI_MS }).catch(() => undefined);
     if (!flow.url().endsWith("#/pairing")) {
       console.error(`web-smoke : ${scenario.name} n'atterrit pas sur l'appairage (${flow.url()})`);
       code = 1;
     }
     await flow.getByRole("button", { name: "Scanner le QR" }).click();
     // Le scan lit le QR PUIS vide le PIN : on attend le QR avant de saisir.
-    await flow.getByRole("button", { name: "Rescanner le QR" }).waitFor({ timeout: 5000 });
+    await flow.getByRole("button", { name: "Rescanner le QR" }).waitFor({ timeout: DELAI_UI_MS });
     await flow.locator("#pairing-pin").fill("1234");
     await flow.getByRole("button", { name: "Ouvrir la session" }).click();
-    await flow.waitForURL(/#\/$/, { timeout: 5000 }).catch(() => undefined);
+    await flow.waitForURL(/#\/$/, { timeout: DELAI_UI_MS }).catch(() => undefined);
     // Le garde-fou « pas de session » renverrait vers /pairing quelques
-    // millisecondes plus tard : laisser l'app se stabiliser avant de conclure.
-    await flow.waitForTimeout(800);
+    // millisecondes plus tard : attendre le silence du DOM avant de conclure.
+    await flow
+      .waitForFunction(
+        () => location.hash === "#/" && document.querySelectorAll(".tabbar .tab").length >= 4,
+        null,
+        { timeout: DELAI_UI_MS },
+      )
+      .catch(() => undefined);
+    await attendreQuiescence(flow);
     const tabs = await flow.locator(".tabbar .tab").count();
     if (!flow.url().endsWith("#/") || tabs < 4) {
       console.error(
@@ -286,10 +350,12 @@ try {
           const resolve = (value: unknown) =>
             setTimeout(() => g.__vsnResolve?.(requestId, JSON.stringify(value)), 10);
           const reject = (delay: number) =>
-            setTimeout(
-              () => g.__vsnReject?.(requestId, JSON.stringify({ code: "auth_required", message: "session expirée" })),
-              delay,
-            );
+            setTimeout(() => {
+              // Événement observable par le smoke : il attend le 401 tardif,
+              // pas une durée fixe de 2 s.
+              (globalThis as unknown as { __vsnLateReject?: boolean }).__vsnLateReject = true;
+              g.__vsnReject?.(requestId, JSON.stringify({ code: "auth_required", message: "session expirée" }));
+            }, delay);
           let key = "";
           try {
             key = String((JSON.parse(paramsJson ?? "{}") as { key?: string }).key ?? "");
@@ -323,17 +389,17 @@ try {
         },
       };
     });
-    await flow.goto(URL_BASE, { waitUntil: "networkidle" });
+    await flow.goto(URL_BASE, { waitUntil: "networkidle", timeout: DELAI_NAVIGATION_MS });
     // On entre par l'app (comme l'utilisateur) : le « Retour » de
     // l'appairage doit rester dans l'app, pas sortir vers une page vide.
     await flow.getByRole("button", { name: "Profil" }).click();
-    await flow.waitForURL(/#\/profile$/, { timeout: 5000 }).catch(() => undefined);
+    await flow.waitForURL(/#\/profile$/, { timeout: DELAI_UI_MS }).catch(() => undefined);
     const logoutTrigger = flow.getByRole("button", { name: "Se déconnecter" }).first();
     await logoutTrigger.click();
     // Clavier : Échap ferme le dialogue ET rend le focus au déclencheur ; on
     // rouvre ensuite pour jouer la déconnexion.
     const logoutDialog = flow.getByRole("alertdialog");
-    await logoutDialog.waitFor({ timeout: 5000 });
+    await logoutDialog.waitFor({ timeout: DELAI_UI_MS });
     // Accessibilité (#930) : la racine est inerte et masquée, le dialogue est
     // portalé hors d'elle, et le focus reste dedans — l'équivalent des règles
     // axe « aria-hidden-focus », « aria-dialog-name » et du piège à Tab.
@@ -380,7 +446,7 @@ try {
     }
     await flow.keyboard.press("Escape");
     const dialogClosed = await logoutDialog
-      .waitFor({ state: "detached", timeout: 3000 })
+      .waitFor({ state: "detached", timeout: DELAI_UI_MS })
       .then(() => true)
       .catch(() => false);
     const focusReturned = dialogClosed
@@ -395,7 +461,7 @@ try {
               );
             },
             null,
-            { timeout: 2000 },
+            { timeout: DELAI_UI_MS },
           )
           .then(() => true)
           .catch(() => false)
@@ -419,7 +485,7 @@ try {
     }
     await logoutTrigger.click();
     await flow.getByRole("alertdialog").getByRole("button", { name: "Se déconnecter" }).click();
-    await flow.waitForURL(/#\/pairing$/, { timeout: 5000 }).catch(() => undefined);
+    await flow.waitForURL(/#\/pairing$/, { timeout: DELAI_UI_MS }).catch(() => undefined);
     if (!flow.url().endsWith("#/pairing")) {
       console.error(`web-smoke : la déconnexion ne mène pas à l'appairage (${flow.url()})`);
       code = 1;
@@ -429,16 +495,32 @@ try {
     // vers l'appairage).
     const pairBack = flow.getByRole("button", { name: "Retour" });
     if ((await pairBack.count()) > 0) {
-      await pairBack.click();
-      await flow.waitForTimeout(600);
+      // Le garde-fou peut retirer le bouton entre `count` et `click` : on
+      // clique s'il est encore là, sinon il n'y a rien à rouvrir.
+      await pairBack.click({ timeout: DELAI_UI_MS }).catch(() => undefined);
+      await attendreQuiescence(flow);
     }
     const tabs = await flow.locator(".tabbar .tab").count();
     if (!flow.url().endsWith("#/pairing") || tabs > 0) {
       console.error(`web-smoke : l'accueil d'un compte déconnecté reste accessible (${flow.url()}, ${tabs} onglets)`);
       code = 1;
     }
-    // Le 401 tardif ne doit pas être annoncé « session expirée ».
-    await flow.waitForTimeout(2000);
+    // Le 401 tardif ne doit pas être annoncé « session expirée » : attendre
+    // l'ÉVÉNEMENT (rejet marqué dans le pont), puis le silence du DOM. S'il
+    // n'est pas émis, il n'y a rien à annoncer — le dire, sans faux échec.
+    const tardifArrive = await flow
+      .waitForFunction(
+        () => (globalThis as { __vsnLateReject?: boolean }).__vsnLateReject === true,
+        null,
+        { timeout: DELAI_QUIESCENCE_MS },
+      )
+      .then(() => true)
+      .catch(() => false);
+    if (tardifArrive) {
+      await attendreQuiescence(flow);
+    } else {
+      console.log("web-smoke : aucun 401 tardif observé — rien à annoncer");
+    }
     const text = await flow.locator("body").innerText();
     if (text.includes("Session expirée")) {
       console.error("web-smoke : une déconnexion annoncée comme « session expirée »");
