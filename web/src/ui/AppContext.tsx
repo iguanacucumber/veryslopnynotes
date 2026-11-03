@@ -14,6 +14,7 @@ import { bridge } from "../bridge/client";
 import { BridgeCallError, type ResourceKey, type SessionStatus, type TextSizeChoice } from "../bridge/types";
 import { beginBusy, isBusy, subscribeBusy } from "../lib/busy";
 import { clearNewsReadIds } from "../features/news/readState";
+import { failureCause, isFreshnessCause, isOnline, type FreshnessCause } from "../lib/freshness";
 import { forceReload, type LoadSignature } from "../lib/refresh";
 import { beginLoad, canUseCached, invalidateOnRequestChange, requestId, visibleResource, type ResourceStatus } from "../lib/resource";
 import { cssVarsOf, paletteOf, parseScheme } from "../lib/schemes";
@@ -21,6 +22,25 @@ import { isLargeText, parseTextSize } from "../lib/textScale";
 
 type Theme = "SYSTEM" | "LIGHT" | "DARK";
 type NoticeKind = "info" | "error";
+
+/** Une réponse native peut porter sa cause ; sinon le réseau de l'appareil
+ *  tranche entre hors-ligne et établissement injoignable. */
+function resultCause(result: {
+  error: string | null;
+  cause?: "network" | "offline" | "other";
+}): FreshnessCause | null {
+  return failureCause(result.error, undefined, isFreshnessCause(result.cause) ? result.cause : null);
+}
+
+function thrownCause(error: unknown): FreshnessCause {
+  if (
+    error instanceof BridgeCallError &&
+    (error.code === "auth_required" || error.code === "bad_request" || error.code === "unknown")
+  ) {
+    return "other";
+  }
+  return isOnline() ? "network" : "offline";
+}
 
 interface AppContextValue {
   theme: Theme;
@@ -310,6 +330,7 @@ export interface ResourceState {
   fetchedAt: number;
   stale: boolean;
   error: string | null;
+  cause: FreshnessCause | null;
   loading: boolean;
   refresh: () => void;
 }
@@ -328,6 +349,7 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
     stale: false,
     partial: false,
     error: null,
+    cause: null,
     loading: true,
   });
   const [manual, setManual] = useState(0);
@@ -386,6 +408,7 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
               stale: cached.stale,
               partial: cached.partial ?? false,
               error: null,
+              cause: null,
               loading: false,
             });
             // Cache frais : le natif rendrait la même donnée, on ne relit pas.
@@ -405,6 +428,7 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
             stale: result.stale,
             partial: result.partial ?? false,
             error: result.error,
+            cause: resultCause(result),
             loading: false,
           });
         } catch (e) {
@@ -418,6 +442,7 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
             ...invalidateOnRequestChange(s, request),
             loading: false,
             error: e instanceof Error ? e.message : "lecture indisponible",
+            cause: thrownCause(e),
           }));
         }
       } finally {

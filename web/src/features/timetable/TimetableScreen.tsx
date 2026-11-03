@@ -31,7 +31,7 @@ import {
   timeRange,
   type Lesson,
 } from "../home/parse";
-import { useNow } from "../home/useNow";
+import { useNow } from "../../lib/useNow";
 import {
   currentLesson,
   groupDays,
@@ -200,8 +200,13 @@ function WeekView({
 
       {loaded && (resource.stale || resource.error) ? (
         <div className="tt-status" role="status">
-          <StaleBadge fetchedAt={resource.fetchedAt} />
-          {resource.error ? (
+          <StaleBadge
+            fetchedAt={resource.fetchedAt}
+            cause={resource.cause}
+            now={now}
+            onRetry={resource.refresh}
+          />
+          {resource.error && resource.cause === "other" ? (
             <span className="tiny muted">Affichage du cache · {resource.error}</span>
           ) : null}
         </div>

@@ -54,7 +54,7 @@ import {
   type Assignment,
   type AssignmentAttachment,
 } from "./assignments";
-import { useNow } from "../home/useNow";
+import { useNow } from "../../lib/useNow";
 import { cardActionFlags } from "./actions";
 import { HomeworkChat, type HomeworkChatState, type HomeworkTurn } from "./HomeworkChat";
 import { AiCostReminder, aiFailureNotice } from "../assistant/notices";
@@ -529,7 +529,12 @@ function TasksWeek({ week }: { week: string }) {
     <Page>
       {resource.stale ? (
         <div className="tasks-status" role="status">
-          <StaleBadge fetchedAt={resource.fetchedAt} />
+          <StaleBadge
+            fetchedAt={resource.fetchedAt}
+            cause={resource.cause}
+            now={now}
+            onRetry={resource.refresh}
+          />
           <span className="tiny muted">
             {week === currentWeek ? "Semaine en cours" : "Semaine sélectionnée"}
           </span>

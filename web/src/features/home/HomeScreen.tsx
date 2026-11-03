@@ -39,7 +39,7 @@ import {
   type Lesson,
   type Assignment,
 } from "./parse";
-import { useNow } from "./useNow";
+import { useNow } from "../../lib/useNow";
 import { ManualPrompt } from "../settings/ManualPrompt";
 
 type IconComponent = ComponentType<{ size?: number }>;
@@ -320,6 +320,7 @@ export default function HomeScreen() {
   const loading = !resources.some((resource) => resource.payload) && resources.some((r) => r.loading);
   const error = dataResources.map((resource) => resource.error).find(Boolean) ?? null;
   const stale = dataResources.some((resource) => resource.stale);
+  const cause = dataResources.map((resource) => resource.cause).find(Boolean) ?? null;
   const stamps = dataResources
     .filter((resource) => resource.payload && resource.fetchedAt > 0)
     .map((resource) => resource.fetchedAt);
@@ -341,8 +342,10 @@ export default function HomeScreen() {
       <ManualPrompt />
       {(hasData || quietRows) && (stale || error) ? (
         <div className="home-status" role="status">
-          <StaleBadge fetchedAt={oldest} />
-          {error ? <span className="tiny muted">Affichage du cache · {error}</span> : null}
+          <StaleBadge fetchedAt={oldest} cause={cause} now={now} onRetry={refreshAll} />
+          {error && cause === "other" ? (
+            <span className="tiny muted">Affichage du cache · {error}</span>
+          ) : null}
         </div>
       ) : null}
 

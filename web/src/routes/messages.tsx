@@ -31,6 +31,7 @@ import { createReplyGuard, draftAfterReply } from "../features/messages/reply";
 import { ErrorBox, Loading } from "../ui/components";
 import { useApp } from "../ui/AppContext";
 import { useViewNavigate } from "../ui/viewTransition";
+import { failureCause, type FreshnessCause } from "../lib/freshness";
 import { createSeq } from "../lib/seq";
 import "../features/messages/messages.css";
 
@@ -61,6 +62,8 @@ export default function MessagesRoute() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
+  const [fetchedAt, setFetchedAt] = useState(0);
+  const [cause, setCause] = useState<FreshnessCause | null>(null);
   const [query, setQuery] = useState("");
   const [previews, setPreviews] = useState<Record<string, string>>({});
 
@@ -128,14 +131,20 @@ export default function MessagesRoute() {
           ? (result.error ?? null)
           : "Discussions illisibles : la donnée n’a pas pu être lue.",
       );
-      setStale(Boolean(result.error));
+      const reported = result.error ?? null;
+      setStale(result.stale ?? Boolean(reported));
+      setFetchedAt(result.fetchedAt ?? 0);
+      setCause(failureCause(reported, undefined, result.cause ?? null));
     } catch (e) {
       if (!threadsSeq.current.isCurrent(seq)) return;
       if (e instanceof BridgeCallError && e.code === "auth_required") {
         window.dispatchEvent(new Event("vsn:auth"));
       }
-      setError(errorMessage(e, "messagerie indisponible"));
+      const message = errorMessage(e, "messagerie indisponible");
+      setError(message);
       setStale(true);
+      setFetchedAt(0);
+      setCause(failureCause(message, undefined, null));
     } finally {
       if (threadsSeq.current.isCurrent(seq)) setLoading(false);
     }
@@ -492,6 +501,8 @@ export default function MessagesRoute() {
       loading={loading}
       error={error}
       stale={stale}
+      fetchedAt={fetchedAt}
+      cause={cause}
       previews={previews}
       onQueryChange={setQuery}
       onOpen={openThread}

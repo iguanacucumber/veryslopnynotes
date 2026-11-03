@@ -217,6 +217,8 @@ export interface ResourceResult {
   /** Au moins une section du payload a été écartée (lecture partielle). */
   partial: boolean;
   error: string | null;
+  /** Cause stable du natif : `network`, `offline` ou `other`. */
+  cause?: "network" | "offline" | "other";
 }
 
 export interface BridgeError {

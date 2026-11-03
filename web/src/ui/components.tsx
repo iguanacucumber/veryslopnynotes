@@ -1,5 +1,7 @@
 import { useId, type CSSProperties, type ReactNode } from "react";
-import { relativeFr, subjectColor, tint, weekStatusFr } from "../lib/format";
+import { freshnessLabel, type FreshnessCause } from "../lib/freshness";
+import { subjectColor, tint, weekStatusFr } from "../lib/format";
+import { useNow } from "../lib/useNow";
 import { subjectEmoji } from "../lib/subjectVisual";
 import { IconChevronLeft, IconChevronRight, IconClose, IconSearch, IconWarning } from "./icons";
 
@@ -251,19 +253,45 @@ export function Loading({ label = "Chargement…" }: { label?: string }) {
   );
 }
 
-/** État hors-ligne : une seule phrase, avec la date quand le cache en porte une. */
+/** État d'un cache : la cause quand elle est connue, puis l'âge RÉEL de la
+ *  donnée. Le libellé « hors-ligne » n'apparaît plus pour un simple TTL
+ *  dépassé : le réseau de l'appareil ne prouve pas que l'établissement a
+ *  répondu. `onRetry` recharge la même requête, cache affiché pendant l'essai. */
 export function StaleBadge({
   fetchedAt,
-  label = "hors-ligne",
+  cause = null,
+  label,
+  now,
+  onRetry,
 }: {
   fetchedAt?: number;
+  cause?: FreshnessCause | null;
   label?: string;
+  now?: number;
+  onRetry?: () => void;
 }) {
-  const text =
-    fetchedAt !== undefined && Number.isFinite(fetchedAt) && fetchedAt > 0
-      ? `hors-ligne · mis à jour ${relativeFr(new Date(fetchedAt).toISOString())}`
-      : label;
-  return <span className="stale">{text}</span>;
+  const tick = useNow();
+  const text = freshnessLabel({
+    fetchedAt,
+    cause,
+    now: now ?? tick,
+    fallback: label ?? "fraîcheur inconnue",
+  });
+  return (
+    <>
+      <span className="stale">{text}</span>
+      {onRetry ? (
+        <button
+          type="button"
+          className="btn btn--ghost btn--small"
+          aria-label="Actualiser les données"
+          onClick={onRetry}
+        >
+          Actualiser
+        </button>
+      ) : null}
+    </>
+  );
 }
 
 export function ErrorBox({ message, children }: { message: string; children?: ReactNode }) {

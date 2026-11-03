@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useResource } from "../ui/AppContext";
 import { Card, EmptyState, ErrorBox, Loading, Page, PageHeading, StaleBadge } from "../ui/components";
 import { IconFood } from "../ui/icons";
+import { useNow } from "../lib/useNow";
 import {
   CANTEEN_UNREADABLE,
   canteenDayLabel,
@@ -44,7 +45,7 @@ export default function CanteenRoute() {
   const days = week.days;
   // Une seule horloge pour toutes les cartes : au passage de minuit, une
   // moitié de la liste ne peut pas basculer avant l’autre.
-  const now = Date.now();
+  const now = useNow();
   // `null` = pas encore de donnée ; illisible = erreur (I14).
   const error =
     resource.error ??
@@ -54,10 +55,19 @@ export default function CanteenRoute() {
     <Page>
       <PageHeading
         title="Menus de la semaine"
-        action={resource.stale ? <StaleBadge fetchedAt={resource.fetchedAt} /> : null}
+        action={
+          resource.stale ? (
+            <StaleBadge
+              fetchedAt={resource.fetchedAt}
+              cause={resource.cause}
+              now={now}
+              onRetry={resource.refresh}
+            />
+          ) : null
+        }
       />
 
-      {error && days.length > 0 ? (
+      {error && days.length > 0 && (resource.cause === null || resource.cause === "other") ? (
         <p className="tiny" role="status" style={{ margin: 0, color: "var(--danger-ink)" }}>
           {error}
         </p>

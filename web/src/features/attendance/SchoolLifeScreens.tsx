@@ -1,5 +1,6 @@
 import { useId } from "react";
 import { Link } from "react-router-dom";
+import type { FreshnessCause } from "../../lib/freshness";
 import { Card, EmptyState, ErrorBox, Loading, PageHeading, StaleBadge } from "../../ui/components";
 import { IconCheck, IconShield, IconWarning } from "../../ui/icons";
 import {
@@ -30,6 +31,7 @@ interface AttendanceProps {
   error: string | null;
   stale: boolean;
   fetchedAt: number;
+  cause?: FreshnessCause | null;
   onlyPending: boolean;
   canSeeSanctions: boolean;
   onOnlyPendingChange: (value: boolean) => void;
@@ -54,6 +56,7 @@ export function AttendanceScreen({
   error,
   stale,
   fetchedAt,
+  cause = null,
   onlyPending,
   canSeeSanctions,
   onOnlyPendingChange,
@@ -102,7 +105,14 @@ export function AttendanceScreen({
 
   return (
     <div className="stack">
-      <PageHeading title="Absences et retards" action={stale ? <StaleBadge fetchedAt={fetchedAt} /> : null} />
+      <PageHeading
+        title="Absences et retards"
+        action={
+          stale ? (
+            <StaleBadge fetchedAt={fetchedAt} cause={cause} onRetry={onRefresh} />
+          ) : null
+        }
+      />
 
       {error ? (
         <ErrorBox message={error}>
@@ -274,10 +284,20 @@ interface SanctionsProps {
   error: string | null;
   stale: boolean;
   fetchedAt: number;
+  cause?: FreshnessCause | null;
   onRefresh: () => void;
 }
 
-export function SanctionsScreen({ rows, payload, loading, error, stale, fetchedAt, onRefresh }: SanctionsProps) {
+export function SanctionsScreen({
+  rows,
+  payload,
+  loading,
+  error,
+  stale,
+  fetchedAt,
+  cause = null,
+  onRefresh,
+}: SanctionsProps) {
   const emptyContent = loading ? (
     <Loading label="Chargement des sanctions…" />
   ) : error ? (
@@ -317,7 +337,9 @@ export function SanctionsScreen({ rows, payload, loading, error, stale, fetchedA
         title="Sanctions déclarées"
         action={
           <>
-            {stale ? <StaleBadge fetchedAt={fetchedAt} /> : null}
+            {stale ? (
+              <StaleBadge fetchedAt={fetchedAt} cause={cause} onRetry={onRefresh} />
+            ) : null}
             <span className="chip">{rows.length}</span>
           </>
         }

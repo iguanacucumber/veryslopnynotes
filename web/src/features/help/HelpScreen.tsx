@@ -159,9 +159,10 @@ export default function HelpScreen() {
 
           <h3 className="help-question">Les écrans ne se mettent pas à jour</h3>
           <p className="help-paragraph">
-            Vérifie la connexion et touche « Actualiser ». Si le badge hors-ligne
-            reste affiché, l’app montre le dernier cache connu, pas une donnée
-            fraîche.
+            Vérifie la connexion et touche « Actualiser ». Si le badge
+            « hors-ligne », « réseau indisponible » ou « erreur de lecture »
+            reste affiché, l’app montre le dernier cache connu, avec son âge,
+            pas une donnée fraîche.
           </p>
 
           <h3 className="help-question">L’assistant reste inactif</h3>

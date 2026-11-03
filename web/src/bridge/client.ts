@@ -305,7 +305,14 @@ export const bridge = {
     call<{ ok: boolean; error?: string }>("assignments.toggle", { id, done, weekStart }),
   openAttachment: (homeworkId: string, attachmentId: string, weekStart: string) =>
     call<{ ok: boolean; error?: string }>("assignments.attachment", { homeworkId, attachmentId, weekStart }),
-  messages: () => call<{ payload: string | null; error?: string }>("messages.list"),
+  messages: () =>
+    call<{
+      payload: string | null;
+      error?: string;
+      fetchedAt?: number;
+      stale?: boolean;
+      cause?: "network" | "offline" | "other";
+    }>("messages.list"),
   thread: (id: string, before?: number) =>
     call<{ payload: string | null; error?: string }>(
       "messages.thread",

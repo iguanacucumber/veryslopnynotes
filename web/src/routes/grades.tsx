@@ -28,6 +28,7 @@ export default function GradesRoute() {
       error={gradesResource.error}
       stale={gradesResource.stale}
       fetchedAt={gradesResource.fetchedAt}
+      cause={gradesResource.cause}
       periodsError={periodsResource.error}
       algorithm={algorithm}
       periodId={periodId}
