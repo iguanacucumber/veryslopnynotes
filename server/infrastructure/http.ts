@@ -1,4 +1,4 @@
-// Scraper Playwright minimal : GET /v1/health,
+// Scraper Playwright minimal : GET /v1/health, GET /v1/ready,
 // POST /v1/manuals/scrape, POST /v1/web/scrape ; tout le reste = 404.
 // Loopback = sans auth ; hors loopback = opt-in ALLOW_PUBLIC=1 + jeton Bearer
 // obligatoire (I8), jamais un service public muet.
@@ -9,7 +9,8 @@
 // re-vérifiées.
 // I8 : PORT/HOST, chemins TLS et jeton public = seules variables lues, dans start().
 import { createHash, timingSafeEqual } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { accessSync, constants, existsSync, readFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { CONTRACTS_VERSION } from "../../shared/contracts/models";
 import {
   MANUALS_SCRAPE_MAX_BODY_CHARS,
@@ -81,11 +82,58 @@ export interface ScraperDeps {
    * loopback sans jeton reste ouvert ; le mode public l'impose dans start().
    */
   readonly token?: string;
+  /**
+   * Sonde de disponibilité RÉELLE (`/v1/ready`) : chaque contrôle vrai = prêt.
+   * Défaut = jar inscriptible + Chromium installé ; les tests injectent une
+   * sonde déterministe (aucun fichier, aucun navigateur).
+   */
+  readonly readiness?: () => Readonly<Record<string, boolean>> | Promise<Readonly<Record<string, boolean>>>;
 }
 
 export interface App {
   readonly handler: (req: Request) => Promise<Response>;
   readonly inFlightScrapes: () => number;
+  /** Retire l'instance du trafic AVANT l'arrêt : `/v1/ready` répond 503. */
+  readonly markDraining: () => void;
+}
+
+const HEALTH_PATH = "/v1/health";
+const READY_PATH = "/v1/ready";
+
+/** Le drain laisse finir un scrape de 30 s, avec une marge de 5 s. */
+export const DRAIN_TIMEOUT_MS = 35_000;
+
+type Closable = { readonly stop: (closeActiveConnections?: boolean) => Promise<void> | void };
+
+/**
+ * Sonde réelle, sans lancer Chromium : le binaire doit exister et le
+ * répertoire du jar être inscriptible. Un scrape qui échouerait pour l'un ou
+ * l'autre ne doit pas recevoir de trafic.
+ */
+async function defaultReadiness(authFile: string): Promise<Record<string, boolean>> {
+  return {
+    jar: jarWritable(authFile),
+    browser: await browserInstalled(),
+  };
+}
+
+function jarWritable(authFile: string): boolean {
+  try {
+    accessSync(dirname(authFile), constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function browserInstalled(): Promise<boolean> {
+  try {
+    const pw = (await import("playwright")) as { chromium: { executablePath: () => string } };
+    const executable = pw.chromium.executablePath();
+    return Boolean(executable) && existsSync(executable);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -114,9 +162,11 @@ export function createApp(deps: ScraperDeps = {}): App {
   const defaultJar = deps.authFile ?? DEFAULT_AUTH_FILE;
   const timeoutMs = deps.timeoutMs ?? SCRAPE_TIMEOUT_MS;
   const token = deps.token?.trim() ?? "";
+  const readiness = deps.readiness ?? (() => defaultReadiness(defaultJar));
   // Compteur PAR APP : un test qui laisse un scrape en vol n'empoisonne pas
   // les suivants (le serveur réel n'a qu'une instance).
   const state: ScrapeState = { inFlight: 0 };
+  let draining = false;
 
   return {
     handler: async (req: Request): Promise<Response> => {
@@ -126,9 +176,12 @@ export function createApp(deps: ScraperDeps = {}): App {
       try {
         const url = new URL(req.url);
         const path = url.pathname;
-        if (path === "/v1/health" && (req.method === "GET" || req.method === "HEAD")) {
+        if (path === HEALTH_PATH && (req.method === "GET" || req.method === "HEAD")) {
           const res = Response.json({ status: "ok", version: CONTRACTS_VERSION });
           return req.method === "HEAD" ? new Response(null, { status: res.status, headers: res.headers }) : res;
+        }
+        if (path === READY_PATH && (req.method === "GET" || req.method === "HEAD")) {
+          return await readyResponse(req.method, readiness, draining);
         }
         if (path === MANUALS_SCRAPE_PATH && req.method === "POST") {
           return await handleScrape(req, runScrape, defaultJar, log, state, timeoutMs, deps.resolveHost);
@@ -136,9 +189,9 @@ export function createApp(deps: ScraperDeps = {}): App {
         if (path === WEB_SCRAPE_PATH && req.method === "POST") {
           return await handleWebScrape(req, runWebScrape, log, state, timeoutMs, deps.resolveHost);
         }
-        if (path === "/v1/health" || path === MANUALS_SCRAPE_PATH || path === WEB_SCRAPE_PATH) {
+        if (path === HEALTH_PATH || path === READY_PATH || path === MANUALS_SCRAPE_PATH || path === WEB_SCRAPE_PATH) {
           return error("method_not_allowed", 405, `${req.method} not allowed on ${path}`, {
-            allow: path === "/v1/health" ? "GET" : "POST",
+            allow: path === HEALTH_PATH || path === READY_PATH ? "GET" : "POST",
           });
         }
         return error("not_found", 404, `unknown path ${path}`);
@@ -147,7 +200,34 @@ export function createApp(deps: ScraperDeps = {}): App {
       }
     },
     inFlightScrapes: () => state.inFlight,
+    markDraining: () => {
+      draining = true;
+    },
   };
+}
+
+/**
+ * `/v1/health` = vivacité (le process répond) ; `/v1/ready` = disponibilité
+ * RÉELLE (jar, navigateur, pas en drain). Une sonde qui lève n'est jamais un
+ * 500 : elle est indisponible, pas en panne.
+ */
+async function readyResponse(
+  method: string,
+  readiness: () => Readonly<Record<string, boolean>> | Promise<Readonly<Record<string, boolean>>>,
+  draining: boolean,
+): Promise<Response> {
+  let checks: Record<string, boolean>;
+  try {
+    checks = { ...(await readiness()), accepting: !draining };
+  } catch {
+    checks = { probe: false, accepting: !draining };
+  }
+  const ready = Object.values(checks).every(Boolean);
+  const res = Response.json(
+    { status: ready ? "ready" : "not_ready", checks },
+    { status: ready ? 200 : 503, headers: { "cache-control": "no-store" } },
+  );
+  return method === "HEAD" ? new Response(null, { status: res.status, headers: res.headers }) : res;
 }
 
 function timeoutError(ms: number): Error {
@@ -628,6 +708,38 @@ function readPem(path: string, variable: string): string {
 }
 
 /**
+ * Drain gracieux : la sonde passe 503, le serveur cesse d'accepter, les
+ * requêtes en cours (un scrape va jusqu'à 30 s) finissent. Au-delà du délai,
+ * arrêt forcé pour ne pas bloquer un redéploiement.
+ */
+export function createShutdown(
+  app: App,
+  server: Closable,
+  log: (message: string) => void,
+  timeoutMs = DRAIN_TIMEOUT_MS,
+): (signal: string) => Promise<void> {
+  let started = false;
+  return async (signal: string): Promise<void> => {
+    if (started) return;
+    started = true;
+    app.markDraining();
+    log(`${signal} -> drain (${timeoutMs} ms max)`);
+    const timer = setTimeout(() => {
+      log(`drain depasse ${timeoutMs} ms -> arret force`);
+      void Promise.resolve(server.stop(true)).catch(() => {});
+    }, timeoutMs);
+    timer.unref?.();
+    try {
+      await server.stop();
+    } catch {
+      await Promise.resolve(server.stop(true)).catch(() => {});
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+}
+
+/**
  * Démarre le scraper (CLI). `HOST` explicite hors loopback exige
  * `ALLOW_PUBLIC=1` et `SCRAPER_TOKEN` ; tout refus arrive avant le bind.
  */
@@ -659,20 +771,9 @@ export function start(
     error: () => Response.json({ error: { code: "bad_request", message: "invalid body" } }, { status: 413 }),
   });
   console.log(`[server] scraper (manuels + pages web) sur ${tls ? "https" : "http"}://${binding.hostname}:${server.port}`);
-  const shutdown = (signal: string) => {
-    console.log(`[server] ${signal} -> arret`);
-    try {
-      server.stop(true);
-    } catch {
-      try {
-        server.stop();
-      } catch {
-        /* noop */
-      }
-    }
-  };
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
-  process.on("SIGINT", () => shutdown("SIGINT"));
+  const shutdown = createShutdown(app, server, (message) => console.log(`[server] ${message}`));
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
   return server;
 }
 

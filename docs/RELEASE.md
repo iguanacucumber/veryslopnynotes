@@ -75,6 +75,8 @@ make build   # check-secrets + docker build (skip si daemon absent)
   la commande de `server/README.md` publie `127.0.0.1:3000` et exige un proxy
   authentifié au-delà ; hors loopback, `ALLOW_PUBLIC=1` + jeton Bearer. `HOST`
   non forcé.
+- Sonde `HEALTHCHECK` sur `/v1/ready`, drain `SIGTERM` (35 s) et limites
+  cgroup documentées : `server/README.md`.
 - Contexte minimal (`server/`, `shared/` + manifests) ; `.dockerignore`
   exclut `.env*`, clés (`*.pem/*.key/*.keystore/*.jks`), `secrets/`,
   données (`data/`, `*.db`), `android/`, `tests/`, `agents/`, `docs/`.

@@ -1,9 +1,13 @@
 # server/ — scraper de manuels
 
 L'app parle directement à Pronote et à OpenRouter ; ce serveur ne participe pas
-à ces flux (ADR-003). Il ne sert que trois routes :
+à ces flux (ADR-003). Il ne sert que quatre routes :
 
-- `GET /v1/health` pour la sonde.
+- `GET /v1/health` pour la vivacité : le process répond, même en drain.
+- `GET /v1/ready` pour la disponibilité RÉELLE : 200 seulement si le jar est
+  inscriptible, Chromium installé et l'instance pas en drain ; sinon 503 avec
+  le détail `checks` (`jar`, `browser`, `accepting`). Sonde le trafic avec
+  `/v1/ready`, pas `/v1/health`.
 - `POST /v1/manuals/scrape` pour extraire une page de manuel.
 - `POST /v1/web/scrape` pour extraire une page web publique choisie par
   l'élève (#634). Même moteur et même garde SSRF, mais AUCUN cookie jar :
@@ -35,6 +39,7 @@ un volume nommé. Le couple TLS vient de la préparation locale
 docker run --rm -p 127.0.0.1:3000:3000 \
   --read-only --cap-drop=ALL --security-opt no-new-privileges \
   --security-opt seccomp=./server/chromium-seccomp.json \
+  --memory=1g --memory-swap=1g --cpus=1 --pids-limit=256 --stop-timeout=40 \
   --tmpfs /tmp --tmpfs /home/vsn:rw,nosuid,nodev,size=64m,mode=1777 \
   -v veryslopnynotes-jar:/app/playwright/.auth \
   -e HOST=0.0.0.0 -e ALLOW_PUBLIC=1 -e SCRAPER_TOKEN="$SCRAPER_TOKEN" \
@@ -42,6 +47,29 @@ docker run --rm -p 127.0.0.1:3000:3000 \
   -v ~/.cache/veryslopnynotes/tls:/tls:ro \
   veryslopnynotes-server:local
 ```
+
+L'image déclare `HEALTHCHECK` sur `/v1/ready` (toutes les 30 s, 20 s de
+démarrage, 3 échecs) ; elle est `unhealthy` si le jar ou Chromium manque, pas
+seulement si le process est mort. Docker n'arrête pas un conteneur `unhealthy`
+tout seul : un orchestrateur ou `--restart` doit le faire.
+
+**Cgroup.** Les quatre plafonds ci-dessus sont des limites DURES, pas des
+conseils : 1 Gio de RAM (swap compris), 1 CPU, 256 PID. Chromium coûte ~300 Mo
+par scrape, deux scrapes simultanés plus le runtime dépassent 1 Gio : garder
+1 Gio pour un usage séquentiel, monter à 2 Gio si le plafond est atteint.
+Dépassement mémoire = OOM-kill du conteneur (le scrape en cours meurt), pas un
+ralentissement ; un `pids-limit` trop bas donne des `fork` refusés dans
+Chromium. Vérifier sur cgroup v2 (`/sys/fs/cgroup/memory.max`,
+`cpu.max`, `pids.max`) et augmenter la mémoire plutôt que retirer la limite.
+Sous Compose : `mem_limit`, `memswap_limit`, `cpus`, `pids_limit`,
+`stop_grace_period: 40s`.
+
+**Arrêt gracieux.** `STOPSIGNAL SIGTERM` : au signal, `/v1/ready` passe 503,
+le serveur cesse d'accepter, laisse finir les scrapes en cours puis s'arrête
+(35 s au plus, au-delà arrêt forcé). `docker stop` n'attend que 10 s par
+défaut : utiliser `--stop-timeout=40` (ci-dessus) ou `stop_grace_period`.
+`/v1/health` continue de répondre 200 pendant le drain ; c'est voulu, la
+vivacité n'est pas la disponibilité.
 
 Le profil seccomp est le profil par défaut de Docker (moby/profiles,
 Apache-2.0) plus trois règles : `clone` pour les namespaces user/PID/net,
@@ -64,6 +92,39 @@ usage détourné) ; uniquement derrière un proxy qui injecte
 Sans couple TLS, le conteneur ne démarre pas : un point d'entrée qui monte la
 session du serveur ne se sert pas en clair. Hors image, un lancement local sans
 couple TLS sert en clair et le dit (`[server] ATTENTION : service en CLAIR`).
+
+**CA réelle et HSTS.** Un certificat auto-signé ne convient qu'à la boucle
+locale. Pour un accès public, deux montages valides :
+
+- terminaison au proxy (RECOMMANDÉ) : le conteneur reste sur `127.0.0.1`, le
+  proxy porte le certificat d'une AC publique (ACME/Let's Encrypt, `fullchain`
+  + clé renouvelés hors dépôt) ou d'une AC interne de confiance, et injecte le
+  jeton Bearer. Le client ne parle qu'au proxy ;
+- TLS direct dans le conteneur : monter `fullchain.pem` et `privkey.pem` d'une
+  AC réelle en lecture seule, renouveler puis redémarrer le conteneur. Le
+  certificat doit couvrir le nom servi ; `127.0.0.1` n'est pas un nom public.
+
+HSTS appartient au terminateur TLS, pas à l'application : ne l'émettre
+qu'après avoir vérifié HTTPS et tous les sous-domaines, jamais sur
+`localhost`. `includeSubDomains` et `preload` engagent le domaine entier.
+
+```nginx
+server {
+  listen 443 ssl http2;
+  server_name scraper.<votre-domaine>;
+  ssl_certificate     /etc/letsencrypt/live/scraper.<votre-domaine>/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/scraper.<votre-domaine>/privkey.pem;
+  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+  location / {
+    proxy_pass https://127.0.0.1:3000;
+    proxy_set_header Authorization "Bearer <jeton-hors-dépôt>";
+    proxy_ssl_verify off; # boucle locale uniquement
+  }
+}
+```
+
+Le jeton reste hors du dépôt (gestionnaire de secrets du proxy) ; un jeton
+commité se rotate immédiatement.
 
 Garde-fous côté serveur (#362, #779) : seuls des hôtes publics sont visités
 (IP privée refusée, IPv4-mapped comprise), la chaîne de redirections est
