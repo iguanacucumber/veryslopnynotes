@@ -1,11 +1,19 @@
 import type { TeacherMessage, TeacherMode, TeacherThread, TeacherTurnResult } from "../../bridge/types";
+import { MODEL_UNAVAILABLE_MESSAGE } from "../assistant/notices";
 import { parseAiContext } from "../tasks/assignments";
 
 // Modèle PUR de l'écran Prof. Aucun réseau ici : les bornes protègent le pont
 // (le natif revalide tout) et le rendu (jamais une bulle vide, jamais une source
 // inventée).
 
-export type TeacherErrorKind = "key" | "quota" | "timeout" | "empty" | "refused" | "unavailable";
+export type TeacherErrorKind =
+  | "model"
+  | "key"
+  | "quota"
+  | "timeout"
+  | "empty"
+  | "refused"
+  | "unavailable";
 
 export interface TeacherTurnError {
   kind: TeacherErrorKind;
@@ -199,6 +207,9 @@ export function classifyTeacherFailure(result: TeacherTurnResult): TeacherTurnEr
   const code = (result.code ?? "").toLowerCase();
   const message = result.message || "";
   const lower = message.toLowerCase();
+  if (code === "model" || /modèle llm (indisponible|introuvable|non autorisé)/.test(lower)) {
+    return { kind: "model", message: message || MODEL_UNAVAILABLE_MESSAGE };
+  }
   if (code === "key" || lower.includes("clé llm") || lower.includes("clé absente")) {
     return { kind: "key", message: message || "Clé LLM absente : renseigne-la dans Réglages." };
   }

@@ -28,6 +28,13 @@ fun isAllowedModel(model: String): Boolean = model in LLM_ALLOWED_MODELS
 /** Refus d'un modèle hors allowlist : configuration refusée, aucun repli. */
 const val MODEL_REFUSED_MESSAGE = "Modèle LLM non autorisé : configuration refusée."
 
+/**
+ * Modèle épinglé absent du catalogue du fournisseur : l'appel s'arrête. Aucun
+ * repli vers un modèle gratuit (le choix, donc le coût, changerait sans accord).
+ */
+const val MODEL_UNAVAILABLE_MESSAGE =
+    "Modèle LLM indisponible : le fournisseur l'a retiré. Mets à jour l'application."
+
 /** Annulation explicite par l'appelant : aucun envoi, aucune reprise. */
 const val CANCELLED_MESSAGE = "Appel LLM annulé."
 

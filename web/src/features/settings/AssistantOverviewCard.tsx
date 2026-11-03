@@ -2,6 +2,7 @@ import { useApp } from "../../ui/AppContext";
 import { Card, Divider } from "../../ui/components";
 import { IconBook, IconChevronRight, IconSparkles } from "../../ui/icons";
 import { useViewNavigate } from "../../ui/viewTransition";
+import { AiCostReminder } from "../assistant/notices";
 import { assistantStatus } from "./model";
 
 export function AssistantOverviewCard({
@@ -24,6 +25,9 @@ export function AssistantOverviewCard({
         <div className="grow">
           <strong className="assistant-overview__status">{status.title}</strong>
           <p className="assistant-overview__body">{status.body}</p>
+          <p className="assistant-overview__body">
+            <AiCostReminder />
+          </p>
         </div>
       </div>
 

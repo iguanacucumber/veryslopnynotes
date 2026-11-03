@@ -81,6 +81,10 @@
   margin-top: 8px;
 }
 
+.tasks-assistant__cost {
+  margin: 0 2px;
+}
+
 /* Carte Papillon : 20 px de rayon, 14 × 16 de padding, blanc en clair. */
 .card.task-card {
   display: flex;

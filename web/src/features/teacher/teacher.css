@@ -488,6 +488,10 @@
   color: var(--page);
 }
 
+.teacher-foot__cost {
+  margin: 0;
+}
+
 .teacher-thinking {
   padding: 2px 0;
 }

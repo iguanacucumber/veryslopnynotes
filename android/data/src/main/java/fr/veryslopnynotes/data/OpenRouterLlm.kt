@@ -50,6 +50,11 @@ class LlmError(message: String, val status: Int? = null) : Exception(boundedMess
     // Message pour l'UI : borné, jamais le corps de réponse brut du fournisseur.
     val userMessage: String = boundedMessage(message)
 
+    // Cause MODÈLE seule : refus local de l'allowlist ou 404 du fournisseur. Le
+    // pont peut ainsi nommer « modèle indisponible » sans deviner le message.
+    val isModelUnavailable: Boolean =
+        status == 404 || boundedMessage(message) == MODEL_REFUSED_MESSAGE
+
     companion object {
         // Une CAUSE par message : 401 clé refusée, 402 crédits, 404 modèle absent
         // du catalogue, 429 quota, sinon HTTP générique. Jamais la clé, jamais
@@ -59,7 +64,7 @@ class LlmError(message: String, val status: Int? = null) : Exception(boundedMess
         fun messageForStatus(status: Int): String = when (status) {
             401 -> "Clé LLM refusée (401) : vérifie-la dans Réglages."
             402 -> "Crédits LLM insuffisants (402) : recharges ton compte."
-            404 -> "Modèle LLM introuvable (404) : le catalogue du fournisseur a changé."
+            404 -> MODEL_UNAVAILABLE_MESSAGE
             429 -> "Quota LLM dépassé (429) : réessaie dans quelques minutes."
             else -> "Erreur du fournisseur LLM (HTTP $status) : réessaie dans un instant."
         }

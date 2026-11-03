@@ -311,16 +311,13 @@ internal fun VsnBridge.teacherTurn(p: JSONObject): JSONObject {
 internal fun VsnBridge.teacherFailureCode(e: Throwable): String = when (e) {
     is SecretDetectedException -> "secret"
     is OutputTooLongException -> "format"
-    is LlmError -> when (e.status) {
-        401, 403 -> "key"
-        402, 429 -> "quota"
-        else -> if (e.userMessage.contains("timeout", ignoreCase = true) ||
-            e.userMessage.contains("délai", ignoreCase = true)
-        ) {
-            "timeout"
-        } else {
-            "network"
-        }
+    is LlmError -> when {
+        e.isModelUnavailable -> "model"
+        e.status == 401 || e.status == 403 -> "key"
+        e.status == 402 || e.status == 429 -> "quota"
+        e.userMessage.contains("timeout", ignoreCase = true) ||
+            e.userMessage.contains("délai", ignoreCase = true) -> "timeout"
+        else -> "network"
     }
     is AiError -> if (e.message?.contains("vide", ignoreCase = true) == true) "empty" else "format"
     else -> "network"

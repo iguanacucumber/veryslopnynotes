@@ -16,6 +16,7 @@ import {
   IconWarning,
 } from "../../ui/icons";
 import { subjectColor } from "../../lib/format";
+import { AiCostReminder } from "../assistant/notices";
 import { MarkdownBody } from "../revisions/MarkdownBody";
 import {
   teacherActionLabel,
@@ -493,6 +494,9 @@ export function TeacherView({
                   <IconArrowUp size={20} />
                 </button>
               </form>
+              <p className="teacher-foot__cost">
+                <AiCostReminder short />
+              </p>
               <details className="teacher-footnote">
                 <summary>Fil local et confidentialité</summary>
                 <p className="tiny muted">

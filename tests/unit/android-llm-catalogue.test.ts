@@ -32,11 +32,16 @@ const KNOWN_MODELS = [
   "google/gemini-2.5-flash",
 ];
 
-/** Messages du `when (status)` de `LlmError.messageForStatus`, lus dans le Kotlin. */
-function statusMessages(kotlin: string): Map<string, string> {
+/** Messages du `when (status)` de `LlmError.messageForStatus`, lus dans le Kotlin.
+ *  Une constante de `LlmPolicy.kt` (404) est résolue, jamais recopiée dans le test. */
+function statusMessages(kotlin: string, policy = ""): Map<string, string> {
+  const constants = new Map<string, string>();
+  for (const m of policy.matchAll(/const val (\w+)\s*=\s*"([^"]*)"/g)) constants.set(m[1]!, m[2]!);
   const block = /fun messageForStatus[\s\S]*?when \(status\) \{([\s\S]*?)\n\s*\}/.exec(kotlin)?.[1] ?? "";
   const out = new Map<string, string>();
-  for (const m of block.matchAll(/(\d{3})\s*->\s*"([^"]*)"/g)) out.set(m[1]!, m[2]!);
+  for (const m of block.matchAll(/(\d{3})\s*->\s*(?:"([^"]*)"|(\w+))/g)) {
+    out.set(m[1]!, m[2] ?? constants.get(m[3]!) ?? "");
+  }
   return out;
 }
 
@@ -84,7 +89,7 @@ describe("android LLM — modèle par défaut au catalogue (#359)", () => {
 describe("android LLM — une cause par message (#359)", () => {
   test("404 et 401 donnent deux messages distincts", () => {
     const kotlin = src(DATA, "OpenRouterLlm.kt");
-    const messages = statusMessages(kotlin);
+    const messages = statusMessages(kotlin, src(DATA, "LlmPolicy.kt"));
     expect(messages.has("401")).toBe(true);
     expect(messages.has("404")).toBe(true);
     // L'exigence : 404 (modèle indisponible) ≠ 401 (clé refusée).
@@ -98,7 +103,7 @@ describe("android LLM — une cause par message (#359)", () => {
     const kotlin = src(DATA, "OpenRouterLlm.kt") + src(DATA, "LlmPolicy.kt");
     const max = Number(/const val MAX_ERROR_CHARS = (\d+)/.exec(kotlin)?.[1] ?? "0");
     expect(max).toBeGreaterThan(0);
-    const messages = statusMessages(kotlin);
+    const messages = statusMessages(src(DATA, "OpenRouterLlm.kt"), src(DATA, "LlmPolicy.kt"));
     const fallback = /else\s*->\s*"([^"]*)"/.exec(kotlin)?.[1] ?? "";
     expect(fallback).not.toBe("");
     for (const msg of [...messages.values(), fallback]) {

@@ -57,6 +57,7 @@ import {
 import { useNow } from "../home/useNow";
 import { cardActionFlags } from "./actions";
 import { HomeworkChat, type HomeworkChatState, type HomeworkTurn } from "./HomeworkChat";
+import { AiCostReminder, aiFailureNotice } from "../assistant/notices";
 import { emptyTurn, storedThread } from "./homeworkThread";
 import { TasksSummary } from "./TasksSummary";
 import "./tasks.css";
@@ -304,7 +305,7 @@ function TasksWeek({ week }: { week: string }) {
           actions: parseHomeworkActions(result.actions),
         });
       } else if (!result.ok) {
-        finish({ error: result.message || "L'assistant n'a pas répondu." });
+        finish({ error: aiFailureNotice(undefined, result.message).message });
       } else {
         const answer = parseHomeworkAnswer(result);
         finish({
@@ -387,7 +388,7 @@ function TasksWeek({ week }: { week: string }) {
           actions: parseHomeworkActions(result.actions),
         });
       } else if (!result.ok) {
-        finish({ error: result.message || "L'assistant n'a pas répondu." });
+        finish({ error: aiFailureNotice(undefined, result.message).message });
       } else {
         const answer = parseHomeworkAnswer(result);
         finish({
@@ -484,7 +485,8 @@ function TasksWeek({ week }: { week: string }) {
       notify("Fiche de révision créée.");
       navigate("/revision-sheets");
     } catch (e) {
-      notify(e instanceof Error ? e.message : "La fiche n'a pas pu être créée.", "error");
+      const message = e instanceof Error ? e.message : "La fiche n'a pas pu être créée.";
+      notify(aiFailureNotice(undefined, message).message, "error");
     } finally {
       setRevisionPending((state) => {
         const nextState = { ...state };
@@ -583,6 +585,12 @@ function TasksWeek({ week }: { week: string }) {
             </button>
           </div>
         </Card>
+      ) : null}
+
+      {!assistantChecking && !assistantDisabled ? (
+        <p className="tiny muted tasks-assistant__cost">
+          <AiCostReminder />
+        </p>
       ) : null}
 
       {sections.length === 0 ? (
