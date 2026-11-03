@@ -334,6 +334,50 @@ try {
     // rouvre ensuite pour jouer la déconnexion.
     const logoutDialog = flow.getByRole("alertdialog");
     await logoutDialog.waitFor({ timeout: 5000 });
+    // Accessibilité (#930) : la racine est inerte et masquée, le dialogue est
+    // portalé hors d'elle, et le focus reste dedans — l'équivalent des règles
+    // axe « aria-hidden-focus », « aria-dialog-name » et du piège à Tab.
+    const dialogA11y = await flow.evaluate(() => {
+      const root = document.getElementById("root");
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"], [role="alertdialog"]');
+      const active = document.activeElement;
+      const hiddenByAncestor = (element: Element | null): boolean => {
+        for (let node = element; node; node = node.parentElement) {
+          if (node.getAttribute("aria-hidden") === "true") return true;
+        }
+        return false;
+      };
+      return {
+        rootInert: root?.inert === true,
+        rootHidden: root?.getAttribute("aria-hidden") === "true",
+        portal: !!root && !!dialog && !root.contains(dialog),
+        single: document.querySelectorAll('[role="dialog"], [role="alertdialog"]').length === 1,
+        focusInside: !!dialog && !!active && dialog.contains(active),
+        focusHidden: hiddenByAncestor(active),
+        named: !!dialog && (dialog.hasAttribute("aria-labelledby") || dialog.hasAttribute("aria-label")),
+      };
+    });
+    if (
+      !dialogA11y.rootInert ||
+      !dialogA11y.rootHidden ||
+      !dialogA11y.portal ||
+      !dialogA11y.single ||
+      !dialogA11y.focusInside ||
+      dialogA11y.focusHidden ||
+      !dialogA11y.named
+    ) {
+      console.error(`web-smoke : dialogue non conforme à l'accessibilité (${JSON.stringify(dialogA11y)})`);
+      code = 1;
+    }
+    for (let i = 0; i < 4; i++) await flow.keyboard.press("Tab");
+    const trapped = await flow.evaluate(() => {
+      const dialog = document.querySelector('[role="dialog"], [role="alertdialog"]');
+      return !!dialog && dialog.contains(document.activeElement);
+    });
+    if (!trapped) {
+      console.error("web-smoke : Tab sort du dialogue modal");
+      code = 1;
+    }
     await flow.keyboard.press("Escape");
     const dialogClosed = await logoutDialog
       .waitFor({ state: "detached", timeout: 3000 })
@@ -360,6 +404,17 @@ try {
       console.error(
         `web-smoke : Échap ne ferme pas le dialogue de déconnexion ou ne rend pas le focus (fermé=${dialogClosed}, focus=${focusReturned})`,
       );
+      code = 1;
+    }
+    const released = await flow.evaluate(() => {
+      const root = document.getElementById("root");
+      return {
+        inert: root?.inert === true,
+        hidden: root?.getAttribute("aria-hidden") === "true",
+      };
+    });
+    if (released.inert || released.hidden) {
+      console.error(`web-smoke : la racine reste inerte après la fermeture (${JSON.stringify(released)})`);
       code = 1;
     }
     await logoutTrigger.click();
