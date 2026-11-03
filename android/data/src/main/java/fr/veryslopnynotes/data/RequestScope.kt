@@ -8,6 +8,9 @@ class RequestCancellation {
     internal val native: fr.veryslopnynotes.pronote.RequestCancellation =
         fr.veryslopnynotes.pronote.RequestCancellation()
 
+    /** Le fil du pont s'en sert pour rendre la main sans attendre le plafond. */
+    val isCancelled: Boolean get() = native.isCancelled
+
     fun cancel() {
         native.cancel()
     }

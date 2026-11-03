@@ -63,7 +63,6 @@ import java.io.File
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 
 /**
  * Pont natif de la WebView (#333). Une SEULE interface exposée : [call].
@@ -829,7 +828,10 @@ class VsnBridge(
     }
 
     /** Attend un callback de dépôt (toujours livré sur le thread principal). */
-    internal fun <T> await(timeoutMs: Long = AWAIT_DEFAULT_MS, start: ((T) -> Unit) -> Unit): T? {
+    internal fun <T> await(
+        timeoutMs: Long = BridgeTimeouts.AWAIT_DEFAULT_MS,
+        start: ((T) -> Unit) -> Unit,
+    ): T? {
         val latch = CountDownLatch(1)
         val holder = arrayOfNulls<Any?>(1)
         try {
@@ -842,14 +844,20 @@ class VsnBridge(
         } catch (_: Exception) {
             return null
         }
-        return if (latch.await(timeoutMs, TimeUnit.MILLISECONDS)) {
-            @Suppress("UNCHECKED_CAST")
-            holder[0] as T?
-        } else {
+        val cancellation = RequestScope.current()
+        return when (BridgeWait.await(latch, timeoutMs, cancellation)) {
+            AwaitOutcome.DONE -> {
+                @Suppress("UNCHECKED_CAST")
+                holder[0] as T?
+            }
             // Timeout de l'APPELANT : le travail natif n'est pas laissé tourner
             // (il garderait un socket et le fil de la file).
-            RequestScope.current()?.cancel()
-            null
+            AwaitOutcome.TIMED_OUT -> {
+                cancellation?.cancel()
+                null
+            }
+            // Abandon déjà propagé : le socket est coupé, le fil rend la main.
+            AwaitOutcome.CANCELLED -> null
         }
     }
 
@@ -948,58 +956,7 @@ class VsnBridge(
         /** Journal du pont (jamais de secret : cf. le `init` de la classe). */
         private const val TAG = "vsn-bridge"
 
-        /** Attente par défaut d'un dépôt (`await`). */
-        const val AWAIT_DEFAULT_MS = 20_000L
-
-        /**
-         * Attente native d'un appel LLM : STRICTEMENT plus longue que le
-         * budget fournisseur de l'aide aux devoirs ([HOMEWORK_LLM_TIMEOUT_MS]).
-         * À budget égal, la réponse produite par la reprise arrive au même
-         * instant que l'abandon et est perdue.
-         */
-        const val AWAIT_LLM_MS = 40_000L
-
-        /**
-         * Budget fournisseur de `llm.askHomework` : le client le répartit sur
-         * deux tentatives, donc l'appel se termine avant [AWAIT_LLM_MS] et la
-         * réponse de la reprise a le temps d'arriver.
-         */
-        const val HOMEWORK_LLM_TIMEOUT_MS = 35_000L
-
-        /**
-         * Attente d'une photo : l'élève cadre, l'appareil écrit, puis la
-         * transcription. Le JS ne met PAS de timeout sur cette méthode ;
-         * ce plafond natif évite seulement un fil pendu pour toujours.
-         */
-        const val AWAIT_PHOTO_MS = 180_000L
-
-        /**
-         * Récupération d'un extrait de manuel via le scraper, avant l'appel
-         * LLM. Bornée par le client (`ManualsClient`), mais comptée dans le
-         * plafond pour que le JS n'abandonne jamais trop tôt.
-         */
-        const val AWAIT_MANUAL_MS = 35_000L
-
         /** Après un échec de scrape, on ne réessaie pas à chaque question. */
         internal const val MANUAL_RETRY_MS = 10 * 60 * 1000L
-
-        /**
-         * Budget TOTAL de lecture des pièces jointes (#631) : il est COMPTÉ
-         * dans le plafond d'attente natif (défaut + manuel + pièces jointes +
-         * LLM) pour que le JS ne perde jamais la réponse. Passé ce délai, les
-         * pièces restantes sont nommées « délai dépassé », jamais abandonnées
-         * en silence.
-         */
-        internal const val ATTACHMENT_BUDGET_MS = 20_000L
-
-        /**
-         * Plafond d'attente natif : le chemin le plus long d'un devoir
-         * (chargement des devoirs 20 s + manuel 35 s + pièces jointes 20 s +
-         * attente LLM 40 s = 115 s). Le JS doit attendre PLUS que ce plafond,
-         * sinon il abandonne avant la réponse native et la perd définitivement
-         * (#371). Miroir : `web/src/bridge/types.ts`.
-         */
-        const val MAX_NATIVE_WAIT_MS =
-            AWAIT_DEFAULT_MS + AWAIT_MANUAL_MS + ATTACHMENT_BUDGET_MS + AWAIT_LLM_MS
     }
 }

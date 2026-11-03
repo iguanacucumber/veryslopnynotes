@@ -19,8 +19,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import fr.veryslopnynotes.app.VsnBridge.Companion.AWAIT_LLM_MS
-import fr.veryslopnynotes.app.VsnBridge.Companion.AWAIT_PHOTO_MS
+import fr.veryslopnynotes.app.BridgeTimeouts.AWAIT_LLM_MS
+import fr.veryslopnynotes.app.BridgeTimeouts.AWAIT_PHOTO_MS
 
 /**
  * Aucune lecture réseau : l'écran s'ouvre même hors ligne.

@@ -25,7 +25,7 @@ import fr.veryslopnynotes.data.teacherThreadJson
 import org.json.JSONArray
 import org.json.JSONObject
 import fr.veryslopnynotes.core.AiContextResult
-import fr.veryslopnynotes.app.VsnBridge.Companion.AWAIT_LLM_MS
+import fr.veryslopnynotes.app.BridgeTimeouts.AWAIT_LLM_MS
 
 /**
  * Proposition LOCALE, sans appel payant : on ne fabrique jamais un énoncé, et
