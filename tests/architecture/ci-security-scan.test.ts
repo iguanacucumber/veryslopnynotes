@@ -44,10 +44,24 @@ describe("CI : dépendances et conteneur (#908)", () => {
   test("dependency review ne s'exécute que sur une PR et échoue à HIGH", () => {
     const review = job("dependency-review");
     expect(review).toContain("if: github.event_name == 'pull_request'");
-    expect(review).toContain("fail-on-severity: high");
+    expect(step("Revue des dépendances")).toContain("fail-on-severity: high");
     // `warn-only` et `continue-on-error` transformeraient le gate en avis.
     expect(review).not.toContain("warn-only");
     expect(review).not.toContain("continue-on-error");
+  });
+
+  test("le repli sans graphe audite HIGH/CRITICAL seulement sur un diff de manifeste", () => {
+    const graph = step("Graphe de dépendances");
+    expect(graph).toContain("dependency-graph/sbom");
+    expect(step("Revue des dépendances")).toContain("steps.graph.outputs.supported == 'true'");
+    const fallback = step("Repli bun audit");
+    expect(fallback).toContain("steps.graph.outputs.supported != 'true'");
+    expect(fallback).toContain("bun audit --audit-level=high");
+    expect(fallback).toContain("git diff --name-only");
+    expect(fallback).toContain("github.event.pull_request.base.sha");
+    for (const manifest of ["package.json", "bun.lock", "android/gradle/libs.versions.toml"]) {
+      expect(fallback).toContain(manifest);
+    }
   });
 
   test("Trivy est épinglé et vérifié avant extraction", () => {
@@ -92,7 +106,11 @@ describe("CI : dépendances et conteneur (#908)", () => {
 
   test("l'image scannée est celle construite dans le job", () => {
     expect(step("Image serveur")).toContain("docker build -t veryslopnynotes-server:scan");
-    expect(step("Scan de l'image")).toContain("veryslopnynotes-server:scan");
+    const scan = step("Scan de l'image");
+    expect(scan).toContain("veryslopnynotes-server:scan");
+    // Une seule exemption, ciblée : le compilateur TS de développement.
+    expect([...scan.matchAll(/--skip-dirs/g)]).toHaveLength(1);
+    expect(scan).toContain("--skip-dirs app/node_modules/@typescript");
   });
 
   test("Gradle vérifie les empreintes d'artefacts dans le gate", () => {

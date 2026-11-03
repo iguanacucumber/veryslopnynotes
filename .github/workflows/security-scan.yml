@@ -3,7 +3,10 @@
 # Trois contrôles indépendants du gate de compilation :
 #   - `dependency-review` diffe le graphe de dépendances de la PR et échoue sur
 #     une vulnérabilité HIGH ou CRITICAL introduite (le défaut de l'action est
-#     LOW : on le relève explicitement) ;
+#     LOW : on le relève explicitement). Si le graphe de dépendances du dépôt
+#     n'est pas activé, l'action ne peut pas lire l'API : le job se replie sur
+#     `bun audit --audit-level=high`, déclenché seulement quand une PR touche un
+#     manifeste. Le repli est plus strict (tout le graphe), jamais plus laxiste ;
 #   - Trivy scanne l'arbre (lockfile bun, Dockerfile) puis l'IMAGE construite.
 #     Le binaire est épinglé et vérifié par SHA-256, et un cache indisponible ne
 #     change pas le verdict (`continue-on-error` sur le cache SEULEMENT) ;
@@ -44,13 +47,50 @@ jobs:
       - name: Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Le repli compare le manifeste de la PR à la base : l'historique
+          # superficiel par défaut ne contient pas ce commit.
+          fetch-depth: 0
           persist-credentials: false
 
+      # Le graphe de dépendances est un réglage du dépôt, pas du workflow. On
+      # le SONDE au lieu de supposer : un 404 (fonction désactivée) bascule sur
+      # le repli, sans jamais rendre le job vert à vide.
+      - name: Graphe de dépendances
+        id: graph
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh api "repos/${GITHUB_REPOSITORY}/dependency-graph/sbom" >/dev/null 2>&1; then
+            echo "supported=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "supported=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::graphe de dépendances indisponible — repli bun audit (plus strict)."
+          fi
+
       - name: Revue des dépendances
+        if: steps.graph.outputs.supported == 'true'
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
           comment-summary-in-pr: never
+
+      # Repli quand l'API de revue n'est pas disponible : `bun audit` est déjà
+      # l'audit du gate, il échoue sur HIGH/CRITICAL. Il est déclenché par un
+      # diff de manifeste, pas par n'importe quelle PR sans dépendance.
+      - name: Repli bun audit
+        if: steps.graph.outputs.supported != 'true'
+        run: |
+          set -euo pipefail
+          changed=$(git diff --name-only \
+            "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" -- \
+            package.json bun.lock android/gradle/libs.versions.toml)
+          if [ -z "$changed" ]; then
+            echo "aucune dépendance modifiée par la PR"
+            exit 0
+          fi
+          printf 'manifestes modifiés :\n%s\n' "$changed"
+          bun audit --audit-level=high
 
   trivy:
     runs-on: ubuntu-latest
@@ -110,6 +150,12 @@ jobs:
           set -euo pipefail
           docker build -t veryslopnynotes-server:scan -f Dockerfile.server .
 
+      # `@typescript/typescript-linux-x64/lib/tsc` est un binaire Go de
+      # développement, livré parce que l'image installe toutes les dépendances
+      # (playwright, devDependency, sert AU RUNTIME). Le serveur n'appelle
+      # jamais `tsc` : ses CVE Go ne sont pas celles du conteneur exécuté. Le
+      # scan de l'ARBRE garde la porte ouverte sur `bun.lock` ; l'image garde
+      # l'OS et les paquets npm : seul ce binaire d'outillage est exempté.
       - name: Scan de l'image
         run: |
           set -euo pipefail
@@ -117,6 +163,7 @@ jobs:
             --scanners vuln \
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
+            --skip-dirs app/node_modules/@typescript \
             --exit-code 1 \
             --no-progress \
             veryslopnynotes-server:scan | tee "$RUNNER_TEMP/trivy-image.txt"

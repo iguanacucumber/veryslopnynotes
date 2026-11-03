@@ -70,8 +70,10 @@ valeur de test volontaire s'exempte dans `.gitleaks.toml`, pas par un
 
 Trois contrôles couvrent la chaîne d'approvisionnement, sur chaque PR et sur
 `main` : [`security-scan.yml`](.github/workflows/security-scan.yml) diffe le
-graphe de dépendances de la PR (`fail-on-severity: high`), puis Trivy scanne
-l'arbre et l'IMAGE serveur construite dans le job. Le binaire Trivy `0.76.1`
+graphe de dépendances de la PR (`fail-on-severity: high`) ; si le graphe du
+dépôt est désactivé, le job se replie sur `bun audit --audit-level=high` quand
+un manifeste change. Trivy scanne ensuite l'arbre et l'IMAGE serveur construite
+dans le job. Le binaire Trivy `0.76.1`
 est épinglé et vérifié par SHA-256 ; un cache indisponible ne change pas le
 verdict. Une trouvaille HIGH/CRITICAL **avec correctif** échoue le job.
 `--ignore-unfixed` est une politique explicite : une CVE sans version corrigée
