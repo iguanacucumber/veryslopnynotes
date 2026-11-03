@@ -222,7 +222,7 @@ export interface ResourceResult {
 }
 
 export interface BridgeError {
-  code: "auth_required" | "bad_request" | "unavailable" | "unknown";
+  code: "auth_required" | "bad_request" | "unavailable" | "unknown" | "stale_session";
   message: string;
 }
 

@@ -7,22 +7,26 @@ import fr.veryslopnynotes.core.DiscussionRecipient
 import fr.veryslopnynotes.core.MessagePaging
 import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.DiscussionWriteOutcome
+import fr.veryslopnynotes.data.EpochRead
 import fr.veryslopnynotes.data.RefreshFailureCause
 import fr.veryslopnynotes.data.RefreshOutcome
+import fr.veryslopnynotes.data.SessionEpoch
+import fr.veryslopnynotes.data.StaleSessionRead
+import fr.veryslopnynotes.data.orStale
 import org.json.JSONArray
 import org.json.JSONObject
-import fr.veryslopnynotes.data.SessionEpoch
 
 internal fun VsnBridge.resourceCached(p: JSONObject, epoch: Long): JSONObject {
     // Session changée depuis l'ARRIVÉE de l'appel (déconnexion, session morte,
     // bascule de compte) : l'entrée pourrait être celle d'un AUTRE compte.
-    if (SessionEpoch.current() != epoch) return emptyCached()
+    if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
     val key = p.string("key")
     val resource = cacheKey(key) ?: return emptyCached()
     // Le cache est indexé par (ressource, requête) : l'entrée servie est celle
-    // de la requête AFFICHÉE, pas celle d'une autre semaine.
+    // de la requête AFFICHÉE, pas celle d'une autre semaine. La lecture est
+    // gardée par l'époque : la purge ne peut pas passer entre contrôle et load.
     val query = bounded(p.string("query"), 200)
-    val entry = repo.cached(resource, query) ?: return emptyCached()
+    val entry = repo.cached(resource, query, epoch).orStale() ?: return emptyCached()
     return JSONObject()
         .put("payload", entry.payload)
         .put("fetchedAt", entry.fetchedAt)
@@ -45,15 +49,21 @@ internal fun VsnBridge.emptyCached(error: String? = null, cause: RefreshFailureC
  * marqué périmé, avec la cause. L'écran garde ses données au lieu de tomber
  * sur une promesse rejetée, et le travail réseau a déjà été annulé.
  */
-internal fun VsnBridge.deadlineOutcome(resource: String?, query: String, message: String): JSONObject {
+internal fun VsnBridge.deadlineOutcome(
+    resource: String?,
+    query: String,
+    message: String,
+    epoch: Long,
+): JSONObject {
     if (resource == null) {
         return emptyCached(message, RefreshFailureCause.NETWORK).put("stale", true)
     }
-    val cached = repo.cached(resource, query)
+    val cached = repo.cached(resource, query, epoch).orStale()
     return resultJson(
         RefreshOutcome.Failed(message, cached?.payload, RefreshFailureCause.NETWORK),
         resource,
         query,
+        epoch,
     )
 }
 
@@ -67,12 +77,13 @@ internal fun payloadPartial(payload: String?): Boolean {
     }
 }
 
-internal fun VsnBridge.resourceLoad(p: JSONObject): JSONObject {
+internal fun VsnBridge.resourceLoad(p: JSONObject, epoch: Long): JSONObject {
+    if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
     val key = p.string("key")
     val deadline = BridgeTimeouts.resourceDeadlineMs(key)
     if (key == "profile") {
         return try {
-            profileMe(deadline)
+            profileMe(epoch, deadline)
                 .put("fetchedAt", System.currentTimeMillis())
                 .put("stale", false)
         } catch (e: BridgeFailure) {
@@ -85,15 +96,15 @@ internal fun VsnBridge.resourceLoad(p: JSONObject): JSONObject {
     if (key == "periods") {
         val outcome = await<RefreshOutcome>(deadline) { cb ->
             repo.fetchPeriods(currentBaseUrl(), cb)
-        } ?: return deadlineOutcome(null, "", "Délai dépassé : tranches indisponibles.")
-        return resultJson(outcome, null)
+        } ?: return deadlineOutcome(null, "", "Délai dépassé : tranches indisponibles.", epoch)
+        return resultJson(outcome, null, epoch = epoch)
     }
     val resource = cacheKey(key) ?: throw BridgeFailure("bad_request", "Ressource inconnue.")
     val query = bounded(p.string("query"), 200)
     val outcome = await<RefreshOutcome>(deadline) { cb ->
-        repo.refreshAsync(resource, currentBaseUrl(), query, p.optBoolean("force", false), cb)
-    } ?: return deadlineOutcome(resource, query, "Délai dépassé : lecture partielle.")
-    return resultJson(outcome, resource, query)
+        repo.refreshAsync(resource, currentBaseUrl(), query, p.optBoolean("force", false), epoch, cb)
+    } ?: return deadlineOutcome(resource, query, "Délai dépassé : lecture partielle.", epoch)
+    return resultJson(outcome, resource, query, epoch)
 }
 
 internal fun VsnBridge.resourceInvalidate(p: JSONObject): JSONObject {
@@ -104,13 +115,19 @@ internal fun VsnBridge.resourceInvalidate(p: JSONObject): JSONObject {
 }
 
 internal fun VsnBridge.resourceSync(): JSONObject {
+    val epoch = SessionEpoch.current()
     val outcome = await<RefreshOutcome>(BridgeTimeouts.resourceDeadlineMs("sync")) { cb ->
         repo.requestSyncRefresh(currentBaseUrl(), accounts.current().orEmpty(), cb)
-    } ?: return deadlineOutcome(null, "", "Délai dépassé : relecture indisponible.")
-    return resultJson(outcome, null)
+    } ?: return deadlineOutcome(null, "", "Délai dépassé : relecture indisponible.", epoch)
+    return resultJson(outcome, null, epoch = epoch)
 }
 
-internal fun VsnBridge.resultJson(outcome: RefreshOutcome, resource: String?, query: String = ""): JSONObject {
+internal fun VsnBridge.resultJson(
+    outcome: RefreshOutcome,
+    resource: String?,
+    query: String = "",
+    epoch: Long = SessionEpoch.current(),
+): JSONObject {
     val obj = JSONObject()
     when (outcome) {
         is RefreshOutcome.Updated -> obj
@@ -132,7 +149,7 @@ internal fun VsnBridge.resultJson(outcome: RefreshOutcome, resource: String?, qu
         is RefreshOutcome.Failed -> {
             sessionOrThrow(outcome.message)
             // L'entrée de cache servie est celle de la MÊME requête.
-            val cached = resource?.let { repo.cached(it, query) }
+            val cached = resource?.let { repo.cached(it, query, epoch).orStale() }
             val payload = outcome.cachedPayload
             obj.put("payload", payload ?: JSONObject.NULL)
                 .put("fetchedAt", cached?.fetchedAt ?: 0L)
@@ -141,15 +158,18 @@ internal fun VsnBridge.resultJson(outcome: RefreshOutcome, resource: String?, qu
                 .put("error", outcome.message)
                 .put("cause", outcome.cause.wire)
         }
+        RefreshOutcome.Stale -> throw StaleSessionRead()
     }
     return obj
 }
 
-internal fun VsnBridge.capabilitiesJson(force: Boolean): JSONObject {
+internal fun VsnBridge.capabilitiesJson(force: Boolean, epoch: Long = SessionEpoch.current()): JSONObject {
+    if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
     val outcome = await<RefreshOutcome> { cb ->
-        repo.refreshAsync(CachePolicy.CAPABILITIES, currentBaseUrl(), force = force, cb = cb)
+        repo.refreshAsync(CachePolicy.CAPABILITIES, currentBaseUrl(), force = force, epoch = epoch, cb = cb)
     }
     if (outcome is RefreshOutcome.Failed) sessionOrThrow(outcome.message)
+    if (outcome is RefreshOutcome.Stale) throw StaleSessionRead()
     val payload = when (outcome) {
         is RefreshOutcome.Updated -> outcome.payload
         is RefreshOutcome.OfflineFallback -> outcome.payload
@@ -230,9 +250,10 @@ internal fun VsnBridge.openAttachment(p: JSONObject): JSONObject {
     }
 }
 
-internal fun VsnBridge.messagesList(): JSONObject {
+internal fun VsnBridge.messagesList(epoch: Long = SessionEpoch.current()): JSONObject {
+    if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
     val outcome = await<RefreshOutcome> { cb ->
-        repo.refreshAsync(CachePolicy.DISCUSSIONS, currentBaseUrl(), force = false, cb = cb)
+        repo.refreshAsync(CachePolicy.DISCUSSIONS, currentBaseUrl(), force = false, epoch = epoch, cb = cb)
     } ?: throw BridgeFailure("unavailable", "Messagerie indisponible.")
     val obj = JSONObject()
     when (outcome) {
@@ -248,17 +269,21 @@ internal fun VsnBridge.messagesList(): JSONObject {
             // Aucun cache de la MÊME requête : l'échec est un échec, jamais un
             // succès avec zéro fil (I14).
             val cached = outcome.cachedPayload ?: throw BridgeFailure("unavailable", outcome.message)
+            val cachedThread = repo.cached(CachePolicy.DISCUSSIONS, "", SessionEpoch.current())
+            val fetchedAt = (cachedThread as? EpochRead.Current)?.value?.fetchedAt ?: 0L
             obj.put("payload", cached)
                 .put("error", outcome.message)
-                .put("fetchedAt", repo.cached(CachePolicy.DISCUSSIONS, "")?.fetchedAt ?: 0L)
+                .put("fetchedAt", fetchedAt)
                 .put("stale", true)
                 .put("cause", outcome.cause.wire)
         }
+        RefreshOutcome.Stale -> throw StaleSessionRead()
     }
     return obj
 }
 
-internal fun VsnBridge.messagesThread(p: JSONObject): JSONObject {
+internal fun VsnBridge.messagesThread(p: JSONObject, epoch: Long = SessionEpoch.current()): JSONObject {
+    if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
     val id = bounded(p.string("id"), 64)
     if (id.isEmpty()) throw BridgeFailure("bad_request", "Fil introuvable.")
     val before = if (p.has("before") && !p.isNull("before")) {
@@ -274,6 +299,7 @@ internal fun VsnBridge.messagesThread(p: JSONObject): JSONObject {
     // Un fil non lu (échec ou réponse vide) est une ERREUR, pas un fil vide.
     if (error != null) throw BridgeFailure("unavailable", error)
     if (thread == null) throw BridgeFailure("unavailable", "Fil indisponible.")
+    if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
     val arr = JSONArray()
     for (m in thread.messages) {
         arr.put(
@@ -313,7 +339,8 @@ internal fun VsnBridge.messagesThread(p: JSONObject): JSONObject {
     return obj
 }
 
-internal fun VsnBridge.messagesEnrich(p: JSONObject): JSONObject {
+internal fun VsnBridge.messagesEnrich(p: JSONObject, epoch: Long = SessionEpoch.current()): JSONObject {
+    if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
     val ids = p.optJSONArray("ids") ?: JSONArray()
     if (ids.length() > MessagePaging.MAX_VISIBLE_ENRICH) {
         throw BridgeFailure("bad_request", "Trop de fils visibles.")
@@ -331,6 +358,7 @@ internal fun VsnBridge.messagesEnrich(p: JSONObject): JSONObject {
     sessionOrThrow(error)
     if (error != null) throw BridgeFailure("unavailable", error)
     if (payload == null) throw BridgeFailure("unavailable", "Fils indisponibles.")
+    if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
     return JSONObject().put("payload", payload)
 }
 
@@ -375,12 +403,14 @@ internal fun VsnBridge.writeOutcome(start: ((DiscussionWriteOutcome) -> Unit) ->
     }
 }
 
-internal fun VsnBridge.messagesRecipients(): JSONObject {
+internal fun VsnBridge.messagesRecipients(epoch: Long = SessionEpoch.current()): JSONObject {
+    if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
     val result = await<Pair<List<DiscussionRecipient>, String?>> { cb ->
         discussions.fetchRecipients { list, error -> cb(list to error) }
     } ?: throw BridgeFailure("unavailable", "Destinataires indisponibles.")
     val (recipients, error) = result
     sessionOrThrow(error)
+    if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
     val arr = JSONArray()
     for (r in recipients) {
         arr.put(

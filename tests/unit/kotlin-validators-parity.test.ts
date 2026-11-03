@@ -488,7 +488,7 @@ describe("catalogue de manuels — classe et spécialités", () => {
     expect(bridge).toContain("manualDocsFor(assignment.subject, assignment.manualPages())");
     expect(bridge).not.toContain("manualDocFor(a.subject)");
     expect(bridge).toContain("manuals.saveDoc(cacheKey, doc)");
-    expect(bridge).toContain("internal fun VsnBridge.knownSubjects()");
+    expect(bridge).toContain("internal fun VsnBridge.knownSubjects(");
     expect(bridge).toContain("internal fun VsnBridge.profileClassLabel()");
   });
 });

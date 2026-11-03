@@ -18,8 +18,11 @@ import fr.veryslopnynotes.core.TeacherMode
 import fr.veryslopnynotes.core.VisionImage
 import fr.veryslopnynotes.core.secretRefusalMessage
 import fr.veryslopnynotes.core.transcribeLesson
+import fr.veryslopnynotes.data.EpochRead
 import fr.veryslopnynotes.data.LlmError
 import fr.veryslopnynotes.data.OpenRouterLlm
+import fr.veryslopnynotes.data.SessionEpoch
+import fr.veryslopnynotes.data.StaleSessionRead
 import fr.veryslopnynotes.data.TeacherChatDelete
 import fr.veryslopnynotes.data.parseTeacherThreadOrNull
 import fr.veryslopnynotes.data.teacherThreadJson
@@ -376,8 +379,13 @@ internal fun JSONObject.withTeacherHistory(context: AiContextResult, summaryChar
  * Lecture seule, aucune donnée scolaire hors de l'appareil. Une donnée locale
  * illisible LÈVE : le pont répond la phrase choisie, jamais un fil vide.
  */
-internal fun VsnBridge.teacherLoad(): JSONObject =
-    JSONObject(teacherThreadJson(teacherChat.load()))
+internal fun VsnBridge.teacherLoad(epoch: Long = SessionEpoch.current()): JSONObject {
+    val thread = when (val read = SessionEpoch.readIfCurrent(epoch) { teacherChat.load() }) {
+        is EpochRead.Current -> read.value
+        EpochRead.Stale -> throw StaleSessionRead()
+    }
+    return JSONObject(teacherThreadJson(thread))
+}
 
 /**
  * Le web envoie la matière + les tours ; le pont borne, valide, puis écrit sous

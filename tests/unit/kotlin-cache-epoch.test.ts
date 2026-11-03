@@ -40,14 +40,14 @@ describe("purge de déconnexion (#364)", () => {
   test("câblage : l'époque est capturée AVANT la lecture, revérifiée AVANT l'écriture", () => {
     const repo = readFileSync(REPO, "utf8");
     const iEpoch = repo.indexOf("SessionEpoch.current()");
-    const iRead = repo.indexOf("readLocal(resource, query, previous)");
+    const iRead = repo.indexOf("readLocal(resource, query, epoch");
     const iGuard = repo.indexOf("SessionEpoch.writeIfCurrent");
     const iSave = repo.indexOf("store.save(");
     expect(iEpoch).toBeGreaterThan(-1);
     expect(iRead).toBeGreaterThan(-1);
     expect(iGuard).toBeGreaterThan(-1);
     expect(iSave).toBeGreaterThan(-1);
-    // Capturée avant la lecture locale (le client peut mettre des secondes).
+    // L'époque est le paramètre de la lecture locale (capturée à l'appel).
     expect(iEpoch).toBeLessThan(iRead);
     // Revérifiée juste avant l'écriture du cache.
     expect(iGuard).toBeLessThan(iSave);

@@ -33,6 +33,8 @@ sealed interface RefreshOutcome {
         val cachedPayload: String?,
         val cause: RefreshFailureCause = RefreshFailureCause.OTHER,
     ) : RefreshOutcome
+    /** La session a changé pendant la lecture : rien n'est livré (I16 bis). */
+    data object Stale : RefreshOutcome
 }
 
 // Une écriture de cache ratée n'est pas « un cache illisible » : le disque a
@@ -59,12 +61,23 @@ class SyncedRepository(
     // de fond compris. Le client local est mutable (refresh() réassigne son
     // état) : deux lectures concurrentes = course et login en double.
 
-    fun cached(resource: String, query: String): CachedEntry? = store.load(resource, query)
+    fun cached(
+        resource: String,
+        query: String,
+        epoch: Long = SessionEpoch.current(),
+    ): EpochRead<CachedEntry?> = SessionEpoch.readIfCurrent(epoch) {
+        store.load(resource, query)
+    }
 
     // L'IA et les écrans agrégés ne lisent que du FRAIS : une entrée dont le
     // TTL est dépassé ne doit pas alimenter une matière ou une alerte.
-    fun payloads(resource: String, now: Long = clock()): List<String> =
+    fun payloads(
+        resource: String,
+        now: Long = clock(),
+        epoch: Long = SessionEpoch.current(),
+    ): EpochRead<List<String>> = SessionEpoch.readIfCurrent(epoch) {
         store.freshPayloads(resource, now)
+    }
 
     fun isStale(resource: String, entry: CachedEntry, now: Long = clock()): Boolean =
         CachePolicy.isStale(resource, entry.fetchedAt, now)
@@ -86,70 +99,101 @@ class SyncedRepository(
         baseUrl: String,
         query: String = "",
         force: Boolean = false,
+        epoch: Long = SessionEpoch.current(),
         cb: (RefreshOutcome) -> Unit,
     ) {
         require(CachePolicy.isCacheable(resource)) { "ressource non cachable: $resource" }
-        val entry = try {
-            store.load(resource, query)
-        } catch (_: Exception) {
-            null
+        val entry = when (val read = SessionEpoch.readIfCurrent(epoch) {
+            try {
+                store.load(resource, query)
+            } catch (_: Exception) {
+                null
+            }
+        }) {
+            is EpochRead.Current -> read.value
+            EpochRead.Stale -> {
+                post(cb, RefreshOutcome.Stale)
+                return
+            }
         }
         // L'entrée ne sert que si elle vient de la MÊME requête ; le magasin
         // garde une entrée par requête, donc revenir sur une requête déjà vue
         // est un cache-hit sans réseau.
         if (entry != null && !CachePolicy.shouldFetch(entry, resource, query, clock(), force)) {
-            post(cb, RefreshOutcome.Updated(entry.payload, entry.fetchedAt))
+            val delivered = SessionEpoch.readIfCurrent(epoch) {
+                RefreshOutcome.Updated(entry.payload, entry.fetchedAt)
+            }
+            post(cb, if (delivered is EpochRead.Current) delivered.value else RefreshOutcome.Stale)
             return
         }
         // Geste EXPLICITE (`force`) : on relit tout, jamais de réutilisation.
-        readAsync(save = true, resource = resource, query = query, cb = cb, previous = if (force) null else entry?.payload)
+        readAsync(
+            save = true,
+            resource = resource,
+            query = query,
+            epoch = epoch,
+            cb = cb,
+            previous = if (force) null else entry?.payload,
+        )
     }
 
     /**
      * Lecture locale SANS écriture cache : une semaine non courante ne doit
      * pas écraser l'entrée de la semaine courante.
      */
-    fun fetchAsync(resource: String, query: String = "", cb: (RefreshOutcome) -> Unit) {
+    fun fetchAsync(
+        resource: String,
+        query: String = "",
+        epoch: Long = SessionEpoch.current(),
+        cb: (RefreshOutcome) -> Unit,
+    ) {
         require(CachePolicy.isCacheable(resource)) { "ressource non cachable: $resource" }
-        readAsync(save = false, resource = resource, query = query, cb = cb)
+        readAsync(save = false, resource = resource, query = query, epoch = epoch, cb = cb)
     }
 
     private fun readAsync(
         save: Boolean,
         resource: String,
         query: String,
+        epoch: Long,
         cb: (RefreshOutcome) -> Unit,
         previous: String? = null,
     ) {
-        // Clé de dédoublonnage : ressource|query|écriture. Deux lectures
-        // identiques en vol = une seule exécution, le MÊME RefreshOutcome
-        // pour tous les callbacks.
+        // Clé de dédoublonnage : ressource|query|écriture|époque. Deux sessions
+        // ne partagent JAMAIS une lecture en vol (le résultat de l'ancienne
+        // serait celui d'un autre compte).
         //
         // L'ÉCRITURE fait partie de la clé : sinon une lecture sans écriture
         // (l'assistant) pouvait avaler l'écriture du cache de la même requête.
         ClientQueue.submit(
-            CachePolicy.dedupKey(resource, query, save),
-            work = { readOutcome(save, resource, query, previous) },
+            "${CachePolicy.dedupKey(resource, query, save)}|epoch=$epoch",
+            work = { readOutcome(epoch, save, resource, query, previous) },
             deliver = { o ->
                 // L'échec de la file est un outcome : la promesse est toujours
                 // réglée, jamais laissée en attente du délai natif.
-                post(cb, o.orFailed(RefreshOutcome.Failed("Lecture impossible.", null)))
+                when (val delivered = SessionEpoch.readIfCurrent(epoch) {
+                    o.orFailed(RefreshOutcome.Failed("Lecture impossible.", null))
+                }) {
+                    is EpochRead.Current -> post(cb, delivered.value)
+                    EpochRead.Stale -> post(cb, RefreshOutcome.Stale)
+                }
             },
         )
     }
 
     /** Corps de lecture (jamais d'exception qui s'echappe : tout echec = outcome). */
     private fun readOutcome(
+        epoch: Long,
         save: Boolean,
         resource: String,
         query: String,
         previous: String? = null,
     ): RefreshOutcome {
-        // Époque capturée AVANT la lecture locale : une déconnexion pendant la
-        // lecture invalide l'écriture, sinon elle annule la purge du cache.
-        val epoch = SessionEpoch.current()
+        // Époque revérifiée AVANT la lecture locale : une déconnexion ou une
+        // bascule déjà passée ne relit pas le compte suivant pour l'ancien.
+        if (!SessionEpoch.isCurrent(epoch)) return RefreshOutcome.Stale
         return try {
-            val payload = readLocal(resource, query, previous)
+            val payload = readLocal(resource, query, epoch, previous)
             if (save) {
                 // Gardée par l'epoch : `null` = session changée, le payload est
                 // abandonné et rien n'est écrit.
@@ -162,19 +206,29 @@ class SyncedRepository(
                     }
                 }
                 when {
-                    written == null -> RefreshOutcome.Failed("Session déconnectée.", null)
+                    written == null -> RefreshOutcome.Stale
                     written == false -> RefreshOutcome.Failed(CACHE_WRITE_FAILED, payload)
                     else -> RefreshOutcome.Updated(payload, clock())
                 }
             } else {
-                RefreshOutcome.Updated(payload, clock())
+                // Livraison sous la garde : la session a pu changer pendant la
+                // lecture locale (plusieurs secondes).
+                when (val delivered = SessionEpoch.readIfCurrent(epoch) {
+                    RefreshOutcome.Updated(payload, clock())
+                }) {
+                    is EpochRead.Current -> delivered.value
+                    EpochRead.Stale -> RefreshOutcome.Stale
+                }
             }
+        } catch (_: StaleSessionRead) {
+            RefreshOutcome.Stale
         } catch (e: NoLocalSession) {
-            cachedOrFailed(resource, query, "Aucune donnée en cache.", RefreshFailureCause.OTHER)
+            cachedOrFailed(epoch, resource, query, "Aucune donnée en cache.", RefreshFailureCause.OTHER)
         } catch (e: RateLimitedError) {
             // Débit limité, pas une panne ni une session morte : le cache est
             // servi et le payload partiel n'a pas été écrit (il a LEVÉ).
             cachedOrFailed(
+                epoch,
                 resource,
                 query,
                 "L'établissement limite les connexions : attends une ou deux minutes, puis réessaie.",
@@ -190,7 +244,7 @@ class SyncedRepository(
                 DeviceAuth.reject()
                 RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null, RefreshFailureCause.OTHER)
             } else {
-                cachedOrFailed(resource, query, "Aucune donnée en cache.", cause)
+                cachedOrFailed(epoch, resource, query, "Aucune donnée en cache.", cause)
             }
         }
     }
@@ -198,16 +252,21 @@ class SyncedRepository(
     // Repli cache : seule une entrée de la MÊME requête est servie — celle
     // d'une autre semaine afficherait un écran vide sans le dire.
     private fun cachedOrFailed(
+        epoch: Long,
         resource: String,
         query: String,
         message: String,
         cause: RefreshFailureCause,
     ): RefreshOutcome {
-        val c = try {
-            store.load(resource, query)
-        } catch (_: Exception) {
-            null
+        val read = SessionEpoch.readIfCurrent(epoch) {
+            try {
+                store.load(resource, query)
+            } catch (_: Exception) {
+                null
+            }
         }
+        if (read is EpochRead.Stale) return RefreshOutcome.Stale
+        val c = (read as EpochRead.Current).value
         val same = c?.takeIf { CachePolicy.normalizeQuery(it.query) == CachePolicy.normalizeQuery(query) }
         return if (same != null) {
             RefreshOutcome.OfflineFallback(same.payload, same.fetchedAt, isStale(resource, same), cause)
@@ -346,7 +405,8 @@ class SyncedRepository(
      * ([NoLocalSession] : repli cache, comme un réseau KO). La lecture passe
      * par `cachedRead` (porte unique), exécutée dans la file partagée.
      */
-    private fun readLocal(resource: String, query: String, previous: String? = null): String {
+    private fun readLocal(resource: String, query: String, epoch: Long, previous: String? = null): String {
+        if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
         val client = try {
             provider()
         } catch (_: Exception) {
@@ -354,19 +414,24 @@ class SyncedRepository(
         } ?: throw NoLocalSession()
         // Alertes : balayage des contenus DÉJÀ en cache, aucun réseau (marche
         // hors ligne) — ce n'est pas une lecture du client.
-        if (resource == CachePolicy.SECURITY_ALERTS) return alertsPayload(scanTexts())
+        if (resource == CachePolicy.SECURITY_ALERTS) return alertsPayload(scanTexts(epoch))
         return cachedRead(client, resource, query, previous, schoolTime)
     }
 
-    private fun scanTexts(): List<SecurityAlert.ScannableText> {
+    private fun scanTexts(epoch: Long): List<SecurityAlert.ScannableText> {
         val out = mutableListOf<SecurityAlert.ScannableText>()
         for (resource in listOf(CachePolicy.NEWS, CachePolicy.ASSIGNMENTS, CachePolicy.DISCUSSIONS)) {
             // Une ressource a une entrée par requête : on lit TOUTES les
             // entrées FRAÎCHES, sans réinjecter une semaine périmée.
-            val payloads = try {
-                store.freshPayloads(resource, clock())
-            } catch (_: Exception) {
-                emptyList()
+            val payloads = when (val read = SessionEpoch.readIfCurrent(epoch) {
+                try {
+                    store.freshPayloads(resource, clock())
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            }) {
+                is EpochRead.Current -> read.value
+                EpochRead.Stale -> throw StaleSessionRead()
             }
             val source = when (resource) {
                 CachePolicy.NEWS -> "news"

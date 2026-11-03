@@ -30,6 +30,7 @@ import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.ClientQueue
 import fr.veryslopnynotes.data.DeviceAuth
 import fr.veryslopnynotes.data.DiscussionsRepository
+import fr.veryslopnynotes.data.EpochRead
 import fr.veryslopnynotes.data.FileCacheStore
 import fr.veryslopnynotes.data.FileCooldownStore
 import fr.veryslopnynotes.data.FileRevisionStore
@@ -58,6 +59,7 @@ import fr.veryslopnynotes.data.SecureStorage
 import fr.veryslopnynotes.data.ServerStore
 import fr.veryslopnynotes.data.SessionEpoch
 import fr.veryslopnynotes.data.SessionStores
+import fr.veryslopnynotes.data.StaleSessionRead
 import fr.veryslopnynotes.data.StoreHealth
 import fr.veryslopnynotes.data.SubjectPrefsRepository
 import fr.veryslopnynotes.data.SyncedRepository
@@ -70,6 +72,27 @@ import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+
+/**
+ * Lectures dont le résultat appartient à la session : l'époque de l'ARRIVÉE
+ * est revérifiée avant la lecture et au moment de livrer. Une bascule de
+ * compte rend un rejet typé, jamais les données du précédent.
+ */
+private val EPOCH_GUARDED_READS = setOf(
+    "resources.cached",
+    "resources.load",
+    "capabilities.load",
+    "capabilities.refresh",
+    "profile.me",
+    "profile.photo",
+    "messages.list",
+    "messages.thread",
+    "messages.enrich",
+    "messages.recipients",
+    "lessons.list",
+    "lessons.load",
+    "teacher.load",
+)
 
 /**
  * Pont natif de la WebView (#333). Une SEULE interface exposée : [call].
@@ -371,7 +394,8 @@ class VsnBridge(
                     }
                     // null = réponse différée (scan QR).
                     RequestScope.with(cancellation) {
-                        handle(requestId, method, params, epoch)?.let { resolve(requestId, it) }
+                        val result = handle(requestId, method, params, epoch)
+                        if (result != null) deliver(requestId, method, epoch, result)
                     }
                 }
                 // Jamais le message brut : il peut nommer un hôte ou un compte.
@@ -414,7 +438,25 @@ class VsnBridge(
         executors.shutdown()
     }
 
+    /**
+     * Livraison sous la garde d'époque : le contrôle et `resolve` sont dans la
+     * MÊME section critique, donc une bascule ne peut pas se glisser entre les
+     * deux. Une lecture d'une session révolue rejette, elle ne s'affiche pas.
+     */
+    private fun deliver(requestId: String, method: String, epoch: Long, result: JSONObject) {
+        if (method !in EPOCH_GUARDED_READS) {
+            resolve(requestId, result)
+            return
+        }
+        val delivered = SessionEpoch.readIfCurrent(epoch) {
+            resolve(requestId, result)
+            true
+        }
+        if (delivered !is EpochRead.Current) throw StaleSessionRead()
+    }
+
     private fun handle(requestId: String, method: String, p: JSONObject, epoch: Long): JSONObject? {
+        if (method in EPOCH_GUARDED_READS && !SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
         // `bridge.cancel` n'arrive jamais ici : il est intercepté dans `call()`
         // (signal immédiat, hors file d'exécution).
         return when (method) {
@@ -436,22 +478,22 @@ class VsnBridge(
             "pairing.pairDemo" -> pairDemo()
             "pairing.cancel" -> cancelPairing()
             "resources.cached" -> resourceCached(p, epoch)
-            "resources.load" -> resourceLoad(p)
+            "resources.load" -> resourceLoad(p, epoch)
             "resources.invalidate" -> resourceInvalidate(p)
             "resources.sync" -> resourceSync()
-            "capabilities.load" -> capabilitiesJson(force = false)
-            "capabilities.refresh" -> capabilitiesJson(force = true)
+            "capabilities.load" -> capabilitiesJson(force = false, epoch = epoch)
+            "capabilities.refresh" -> capabilitiesJson(force = true, epoch = epoch)
             "news.item" -> newsItem(p)
             "assignments.toggle" -> toggleAssignment(p)
             "assignments.attachment" -> openAttachment(p)
-            "messages.list" -> messagesList()
-            "messages.thread" -> messagesThread(p)
-            "messages.enrich" -> messagesEnrich(p)
+            "messages.list" -> messagesList(epoch)
+            "messages.thread" -> messagesThread(p, epoch)
+            "messages.enrich" -> messagesEnrich(p, epoch)
             "messages.reply" -> messagesReply(p)
             "messages.create" -> messagesCreate(p)
             "messages.setRead" -> messagesSetRead(p)
             "messages.delete" -> messagesDelete(p)
-            "messages.recipients" -> messagesRecipients()
+            "messages.recipients" -> messagesRecipients(epoch)
             "settings.get" -> settings()
             "settings.saveServer" -> saveServer(p, requestId)
             "settings.localNetwork" -> localNetworkStatus(p)
@@ -459,8 +501,8 @@ class VsnBridge(
             "settings.dismissManualPrompt" -> dismissManualPrompt()
             "settings.subjectPrefs" -> subjectPrefs()
             "settings.saveSubject" -> saveSubject(p, epoch)
-            "lessons.list" -> lessonsList()
-            "lessons.load" -> lessonsLoad(p)
+            "lessons.list" -> lessonsList(epoch)
+            "lessons.load" -> lessonsLoad(p, epoch)
             "lessons.save" -> lessonsSave(p, epoch)
             "lessons.delete" -> lessonsDelete(p, epoch)
             "lessons.setManual" -> lessonsSetManual(p)
@@ -477,14 +519,14 @@ class VsnBridge(
             "llm.teacherTurn" -> teacherTurn(p)
             "exercises.propose" -> exercisesPropose(p)
             "exercises.help" -> exercisesHelp(p)
-            "teacher.load" -> teacherLoad()
+            "teacher.load" -> teacherLoad(epoch)
             "teacher.save" -> teacherSave(p, epoch)
             "teacher.delete" -> teacherDelete(epoch)
             "revision.list" -> revisionList()
             "revision.load" -> revisionLoad(p)
             "revision.exportPdf" -> revisionExportPdf(p)
-            "profile.me" -> profileMe()
-            "profile.photo" -> profilePhoto()
+            "profile.me" -> profileMe(epoch)
+            "profile.photo" -> profilePhoto(epoch)
             else -> throw BridgeFailure("bad_request", "Méthode inconnue.")
         }
     }
