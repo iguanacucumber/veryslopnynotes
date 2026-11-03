@@ -14,6 +14,7 @@ import {
 import { CopyTextButton } from "../../ui/CopyTextButton";
 import { ThinkingLine } from "../../ui/ThinkingLine";
 import { useStickToBottom } from "../../ui/useStickToBottom";
+import { AiCostReminder, aiFailureNotice } from "../assistant/notices";
 import { MarkdownBody } from "../revisions/MarkdownBody";
 import { relativeLongFr, subjectColor, tint } from "../../lib/format";
 import { subjectEmoji } from "../../lib/subjectVisual";
@@ -248,7 +249,7 @@ function AssistantTurn({
 
       {turn.error ? (
         <div className="hw-error" role="alert">
-          <p>{turn.error}</p>
+          <p>{aiFailureNotice(undefined, turn.error).message}</p>
           {interactive ? (
             <button type="button" className="btn btn--small" onClick={onRetry}>
               Réessayer
@@ -522,7 +523,7 @@ export function HomeworkChat({
           </form>
 
           <div className="hw-foot__meta ai-meta">
-            <span className="tiny muted hw-foot__paid">1 question = 1 appel.</span>
+            <AiCostReminder short className="hw-foot__paid" />
           </div>
         </div>
       </div>

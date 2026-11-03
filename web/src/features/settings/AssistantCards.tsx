@@ -5,6 +5,7 @@ import { STORAGE_UNAVAILABLE_MESSAGE } from "../../lib/session";
 import { useApp } from "../../ui/AppContext";
 import { Card } from "../../ui/components";
 import { Dialog } from "../../ui/Dialog";
+import { AI_MODEL_NOTE } from "../assistant/notices";
 import { AssistantOverviewCard } from "./AssistantOverviewCard";
 import { actionMessage } from "./action";
 import { MAX_API_KEY_CHARS, llmSaveError } from "./model";
@@ -77,6 +78,7 @@ export function AssistantCards({ snapshot, loading }: { snapshot: SettingsSnapsh
           L’assistant utilise ton compte OpenRouter. La clé est enregistrée sur cet appareil ;
           elle part directement au fournisseur avec chaque demande.
         </p>
+        <p className="tiny muted">{AI_MODEL_NOTE}</p>
         <label className="assistant-key__label" htmlFor="llm-key">
           Clé OpenRouter
         </label>

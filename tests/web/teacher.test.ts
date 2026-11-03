@@ -181,12 +181,25 @@ describe("professeur IA — modèle local (#633)", () => {
   });
 
   test("classe les erreurs du pont avec un message et un geste", () => {
+    expect(classifyTeacherFailure({ ok: false, code: "model", message: "" }).kind).toBe("model");
+    expect(
+      classifyTeacherFailure({ ok: false, message: "Modèle LLM introuvable (404) : le catalogue a changé." })
+        .kind,
+    ).toBe("model");
     expect(classifyTeacherFailure({ ok: false, code: "key", message: "clé" }).kind).toBe("key");
     expect(classifyTeacherFailure({ ok: false, code: "quota", message: "429" }).kind).toBe("quota");
     expect(classifyTeacherFailure({ ok: false, code: "timeout", message: "" }).kind).toBe("timeout");
     expect(classifyTeacherFailure({ ok: false, code: "empty", message: "" }).kind).toBe("empty");
     expect(classifyTeacherFailure({ ok: false, refused: true, message: "Aucune source" }).kind).toBe("refused");
     expect(classifyTeacherFailure({ ok: false, message: "boom" }).kind).toBe("unavailable");
+  });
+
+  test("un modèle retiré est affiché avec le rappel de coût, sans repli", () => {
+    const error = classifyTeacherFailure({ ok: false, code: "model", message: "" });
+    const html = renderView({ error });
+    expect(html).toContain("Modèle LLM indisponible");
+    expect(html).toContain("crédits OpenRouter");
+    expect(html).not.toContain("gratuit");
   });
 
   test("rejeter pendant le vol : la réponse ne ressuscite pas le tour rejeté (#751)", () => {
