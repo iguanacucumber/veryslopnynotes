@@ -149,6 +149,7 @@ components:
         username: { type: string, maxLength: 512, writeOnly: true, description: Obsolete, refuse par le serveur (#526) : le scraper ne s'authentifie pas. }
         password: { type: string, maxLength: 512, writeOnly: true, description: Obsolete, refuse par le serveur (#526) : le scraper ne s'authentifie pas. }
         startUrl: { type: string, maxLength: 2000 }
+        page: { type: integer, minimum: 1, maximum: 2000 }
     ManualsScrapeResponse:
       type: object
       required: [docs]
