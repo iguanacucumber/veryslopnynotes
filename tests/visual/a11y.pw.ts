@@ -26,15 +26,23 @@ const MASQUES = [
   ".news-card__date",
 ] as const;
 
-/** Emoji de matière : la fonte emoji n'est pas vendoriée, elle diffère entre
- *  poste et runner. Le reste de la carte reste comparé. */
-const MASQUES_EMOJI = [
-  ".grades-latest__emoji",
-  ".grades-subject__emoji",
-  ".home-task__emoji",
-  ".task-card__emoji",
-  ".hw-context__emoji",
-] as const;
+/** Emoji de matière : la fonte emoji n'est pas vendoriée, sa largeur change
+ *  avec le système. On leur donne une boîte fixe et on les cache : la
+ *  géométrie de la carte reste comparable, sans glyphe dépendant du runner. */
+const STYLE_EMOJI = `
+  .grades-latest__emoji,
+  .grades-subject__emoji,
+  .home-task__emoji,
+  .task-card__emoji,
+  .hw-context__emoji {
+    visibility: hidden !important;
+    flex: 0 0 24px !important;
+    width: 24px !important;
+    height: 24px !important;
+    font-size: 0 !important;
+    line-height: 0 !important;
+  }
+`;
 
 const BRIDGE_FACTICE = `
   window.VSN = {
@@ -103,6 +111,7 @@ async function ouvrir(page: Page, route: string, dark: boolean): Promise<void> {
   // Le spinner est un ÉVÉNEMENT : on attend sa disparition, pas une durée fixe.
   await page.waitForFunction(() => !document.querySelector(".spinner")).catch(() => undefined);
   await page.evaluate(() => document.fonts.ready);
+  await page.addStyleTag({ content: STYLE_EMOJI });
   // Deux frames : la dernière mutation de layout est peinte avant la mesure.
   await page.evaluate(
     () =>
@@ -212,7 +221,7 @@ const PAIRES_CONTRASTE: ReadonlyArray<readonly [keyof Couleurs, keyof Couleurs, 
 
 async function masques(page: Page): Promise<Locator[]> {
   const out: Locator[] = [];
-  for (const selector of [...MASQUES, ...MASQUES_EMOJI]) {
+  for (const selector of MASQUES) {
     const locator = page.locator(selector);
     if ((await locator.count()) > 0) out.push(locator);
   }
