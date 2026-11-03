@@ -30,7 +30,7 @@ import ProfRoute from "./routes/prof";
 function ErrorFallback() {
   return (
     <div className="shell">
-      <main id="main" tabIndex={-1} className="main">
+      <main id="main" tabIndex={-1} className="main main--bare">
         <div className="card card--danger" role="alert">
           <h1 className="t-headline" style={{ margin: 0 }}>
             L’interface n’a pas pu s’afficher

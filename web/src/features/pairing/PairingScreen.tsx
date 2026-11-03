@@ -178,7 +178,7 @@ export default function PairingScreen() {
 
   return (
     <div className="shell">
-      <main id="main" tabIndex={-1} className="main" style={{ paddingBottom: 32 }}>
+      <main id="main" tabIndex={-1} className="main main--bare">
         {canGoBack ? (
           <div className="row" style={{ marginBottom: 10 }}>
             <button

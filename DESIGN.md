@@ -236,6 +236,22 @@ une unité de viewport figée. Le dock est une capsule fixe de 72 px, à 12 px d
 bords au plus (largeur maximale 480 px), et remonte avec `--keyboard-bottom`. Le
 `main` réserve l'empreinte du dock (84 px avec sa marge basse) et 20 px.
 
+Encoche et zones système : `MainActivity` lit `WindowInsets`. Le clavier reste
+un layout (padding bas du conteneur) ; l'encoche, les barres visibles et le
+geste d'accueil deviennent des variables CSS `--native-safe-*`, consommées par
+les jetons `--safe-*` (`web/src/styles/tokens.css`). Le CSS les applique une
+seule fois : barre du haut, contenu, dock, dialogues, appairage et écran de
+secours (`.main--bare`) ; `env(safe-area-inset-*)` n'est que le repli hors
+WebView. Barres masquées = 0, donc l'immersion reste pleine écran ; une barre
+révélée recouvre brièvement le contenu, comportement Android assumé.
+
+Grands écrans, pliables et fenêtres libres : `resizeableActivity="true"`, aucune
+orientation verrouillée hors du scan. Chaque fenêtre reçoit ses insets à chaque
+redimensionnement ; la colonne reste centrée à 700 px (dock 480 px), donc un
+écran large garde des marges au lieu d'étirer les cartes. Vérification appareil :
+paysage sur téléphone à encoche, puis fenêtre libre réduite — titre, dock,
+actions d'appairage et boutons de dialogue restent visibles.
+
 L'accueil suit Papillon : en-tête sur papier peint, grille de raccourcis,
 widgets (cours, moyenne, devoirs) dans cet ordre. Les écrans de liste sont des
 cartes séparées, jamais un registre à filets. Réglages : profil centré, quatre

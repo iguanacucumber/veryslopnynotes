@@ -109,8 +109,14 @@
   /* Empreinte du dock flottant : 72 px de capsule, 10 px de marge basse et
      2 px de sécurité. Le `main` ajoute ensuite sa propre respiration. */
   --tabbar-h: 84px;
-  --safe-top: env(safe-area-inset-top, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* Zones sûres : le natif pose `--native-safe-*` depuis `WindowInsets`
+     (encoche, barres visibles, gestes). `env()` n'est que le repli hors
+     WebView : dans l'APK il peut compter l'encoche déjà paddée par le natif,
+     donc la valeur native, toujours posée, gagne. */
+  --safe-top: var(--native-safe-top, env(safe-area-inset-top, 0px));
+  --safe-right: var(--native-safe-right, env(safe-area-inset-right, 0px));
+  --safe-bottom: var(--native-safe-bottom, env(safe-area-inset-bottom, 0px));
+  --safe-left: var(--native-safe-left, env(safe-area-inset-left, 0px));
   /* #399 : la hauteur utile est PUBLIÉE par le JS (viewport visuel), pas
      figée par une unité de viewport : le clavier réduit la zone visible.
      La valeur ci-dessous n'est que le PREMIER instant, avant la mesure —
