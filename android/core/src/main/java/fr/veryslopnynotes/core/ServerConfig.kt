@@ -9,10 +9,17 @@ sealed interface ServerUrlResult {
     data class Rejected(val message: String) : ServerUrlResult
 }
 
-// Config allowlist du scraper unique : HTTPS-only sauf hôtes émulateur
-// (10.0.2.2/localhost). Aucun hôte tiers, aucune URL en dur : l'allowlist tient
-// dans `validateBaseUrl`, qui borne et normalise la saisie. Le téléphone lit
-// l'établissement en direct (ADR-003) ; le scraper ne sert que des manuels.
+/** Politique de clair de la validation : release (`FORBID`) ou debug loopback. */
+enum class CleartextPolicy {
+    FORBID,
+    LOOPBACK_ONLY,
+}
+
+// Config allowlist du scraper unique : HTTPS-only ; le clair n'est toléré que
+// par `LOOPBACK_ONLY` (build debug) pour la boucle locale et l'émulateur. Aucun
+// hôte tiers, aucune URL en dur : l'allowlist tient dans `validateBaseUrl`, qui
+// borne et normalise la saisie. Le téléphone lit l'établissement en direct
+// (ADR-003) ; le scraper ne sert que des manuels.
 object ServerConfig {
     const val SCHEME_PLACEHOLDER = "https"
     const val HOST_PLACEHOLDER = "server-host-configured-at-build"
@@ -29,6 +36,10 @@ object ServerConfig {
     // Messages de refus : une cause, une correction, jamais l'adresse saisie.
     private const val PORT_HINT = "Port invalide : utilisez un nombre entre 1 et 65535."
     private const val HOST_HINT = "Domaine invalide : utilisez un nom de domaine, une IPv4 ou une IPv6 entre crochets."
+    private const val CLEARTEXT_DEBUG_HINT =
+        "HTTP est réservé à l'émulateur et à la boucle locale : utilisez l'adresse https de votre serveur."
+    private const val CLEARTEXT_RELEASE_HINT =
+        "HTTP en clair n'existe que dans les builds de développement : utilisez https."
 
     fun baseUrl(scheme: String = SCHEME_PLACEHOLDER, host: String = HOST_PLACEHOLDER): String =
         "$scheme://$host"
@@ -98,16 +109,21 @@ object ServerConfig {
      * Valide et NORMALISE l'adresse du serveur choisi à l'exécution : la saisie
      * est libre, la contrainte est donc ici.
      *
-     * Forme acceptée : `https://hôte[:port]` (ou `http` si et seulement si
-     * l'hôte est l'émulateur ou la boucle locale). REFUSÉS, avec un message qui
-     * dit quoi corriger : identifiants `user:pass@`, chemin, query, fragment,
-     * espaces et contrôles, schémas autres, ports hors bornes, IP à zéro initial
-     * (lecture octale divergente), IPv6 sans crochets, adresses trop longues.
+     * Forme acceptée : `https://hôte[:port]` ; `http` seulement en
+     * [CleartextPolicy.LOOPBACK_ONLY] (debug) et pour l'émulateur ou la boucle
+     * locale. [CleartextPolicy.FORBID] (défaut, release) refuse tout clair.
+     * REFUSÉS, avec un message qui dit quoi corriger : identifiants
+     * `user:pass@`, chemin, query, fragment, espaces et contrôles, schémas
+     * autres, ports hors bornes, IP à zéro initial (lecture octale divergente),
+     * IPv6 sans crochets, adresses trop longues.
      *
      * ponytail: validation à la main plutôt que `java.net.URI`, qui accepte `@`,
      * chemins et espaces. Upgrade: URI + comparaison de composants.
      */
-    fun validateBaseUrl(raw: String): ServerUrlResult {
+    fun validateBaseUrl(
+        raw: String,
+        cleartext: CleartextPolicy = CleartextPolicy.FORBID,
+    ): ServerUrlResult {
         val input = raw.trim()
         if (input.isEmpty()) {
             return rejected("Adresse vide : saisissez l'adresse de votre serveur.")
@@ -154,8 +170,9 @@ object ServerConfig {
         if (!isValidHost(parts.host)) return rejected(HOST_HINT)
         if (parts.port != null && !isValidPort(parts.port)) return rejected(PORT_HINT)
         // Le seul cas où le clair est toléré : une adresse de développement.
-        if (scheme == "http" && !isLoopbackHost(parts.host)) {
-            return rejected("HTTP est réservé à l'émulateur et à la boucle locale : utilisez l'adresse https de votre serveur.")
+        if (scheme == "http") {
+            if (cleartext == CleartextPolicy.FORBID) return rejected(CLEARTEXT_RELEASE_HINT)
+            if (!isLoopbackHost(parts.host)) return rejected(CLEARTEXT_DEBUG_HINT)
         }
         return ServerUrlResult.Ok("$scheme://$authority")
     }

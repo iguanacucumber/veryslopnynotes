@@ -16,6 +16,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import fr.veryslopnynotes.core.CleartextPolicy
 import fr.veryslopnynotes.core.RevisionKv
 import fr.veryslopnynotes.core.ServerConfig
 import fr.veryslopnynotes.core.TextScale
@@ -108,7 +109,9 @@ class VsnBridge(
             BuildConfig.SERVER_HOST,
         )
     }
-    internal val serverStore = ServerStore(ctx)
+    internal val cleartextPolicy: CleartextPolicy =
+        if (BuildConfig.DEBUG) CleartextPolicy.LOOPBACK_ONLY else CleartextPolicy.FORBID
+    internal val serverStore = ServerStore(ctx, cleartextPolicy)
     internal val manuals = ManualStore(ctx)
     // #586 : cahier de cours local, dans `offline/` (donc purgé avec le cache
     // du compte). Le fichier est relu avant chaque fusion par le dépôt.

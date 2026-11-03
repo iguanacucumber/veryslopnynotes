@@ -135,12 +135,14 @@ comme l'écran qui affiche le QR. Un QR sans `url` est illisible pour l'app
 « rescane ».
 
 L'allowlist est donc `core/ServerConfig.validateBaseUrl` (et `isAllowed` en
-préfixe strict), pas une constante de build : `https` obligatoire, `http` uni-
-quement pour `10.0.2.2`/`localhost`, hôte IPv4/IPv6-littérale/nom DNS borné,
-port 1-65535, et refus de tout identifiant, chemin, query, fragment, espace ou
-caractère de contrôle. Elle ne valide plus que l'adresse du scraper de manuels
-(#209) : l'app ne parle plus métier à personne. Une déconnexion invalide la
-session et purge les caches par le chemin existant `PairingRepository.logoutBlocking()`.
+préfixe strict), pas une constante de build : `https` obligatoire ; le clair
+(`http`) n'est accepté qu'en build debug et pour `10.0.2.2`, `localhost`,
+`127.0.0.0/8` ou `[::1]` (`CleartextPolicy.LOOPBACK_ONLY`), la release refusant
+tout clair (`CleartextPolicy.FORBID`, défaut). Hôte IPv4/IPv6-littérale/nom DNS
+borné, port 1-65535, et refus de tout identifiant, chemin, query, fragment,
+espace ou caractère de contrôle. Elle ne valide plus que l'adresse du scraper de
+manuels (#209) : l'app ne parle plus métier à personne. Une déconnexion invalide
+la session et purge les caches par le chemin existant `PairingRepository.logoutBlocking()`.
 
 ### Autorisation réseau local (Android 17+)
 
