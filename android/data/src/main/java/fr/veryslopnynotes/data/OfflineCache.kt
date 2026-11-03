@@ -194,7 +194,12 @@ object SessionEpoch {
 //
 // Le nom du fichier porte l'empreinte de la requête ; l'entrée garde la requête
 // dans son en-tête, donc une empreinte tombée sur une autre requête est IGNORÉE.
-class FileCacheStore(private val dir: File) : CacheStore {
+class FileCacheStore internal constructor(
+    private val dir: File,
+    private val writeFile: (File, ByteArray) -> Unit,
+) : CacheStore {
+    constructor(dir: File) : this(dir, { file, bytes -> file.writeBytes(bytes) })
+
     private val lock = lockFor(dir)
 
     private class DiskEntry(val fetchedAt: Long?, val query: String?, val payload: String)
@@ -271,7 +276,9 @@ class FileCacheStore(private val dir: File) : CacheStore {
         require(!payload.contains('\u0000')) { "payload invalide" }
         require(!CachePolicy.isPayloadTooLarge(payload)) { "payload hors borne" }
         synchronized(lock) {
-            if (!dir.exists()) dir.mkdirs()
+            if (!dir.isDirectory && !dir.mkdirs() && !dir.isDirectory) {
+                throw IOException("dossier de cache inaccessible: ${dir.name}")
+            }
             // ponytail: premiere ligne horodatage + requete, reste payload brut.
             // Upgrade: SQLite si requetes.
             val head = "$fetchedAt\t${CachePolicy.normalizeQuery(query)}"
@@ -363,23 +370,11 @@ class FileCacheStore(private val dir: File) : CacheStore {
     }
 
     /**
-     * Écriture ATOMIQUE : fichier temporaire puis `rename`. `writeText`
-     * tronquerait d'abord la cible : un lecteur concurrent verrait un fichier
-     * à moitié écrit qui passe pourtant la vérification de `load`.
+     * Écriture ATOMIQUE : fichier temporaire puis `rename`. Une écriture
+     * partielle (disque plein) laisse la cible précédente intacte.
      */
     private fun writeAtomic(target: File, content: String) {
-        val tmp = File.createTempFile("cache_", ".tmp", dir)
-        try {
-            tmp.writeText(content)
-            if (!tmp.renameTo(target)) {
-                // rename refusé (plateforme) : remplacement explicite plutôt
-                // qu'une écriture en place.
-                target.delete()
-                if (!tmp.renameTo(target)) throw IOException("ecriture du cache impossible: ${target.name}")
-            }
-        } finally {
-            tmp.delete()
-        }
+        writeFileAtomically(target, content.toByteArray(Charsets.UTF_8), writeFile)
     }
 
     companion object {

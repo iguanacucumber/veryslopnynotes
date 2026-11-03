@@ -83,9 +83,13 @@ object CachePolicy {
     // soustraction seule la dirait fraîche, le badge disparaîtrait et
     // `shouldFetch` ne relirait plus jamais le client. Règle PARTAGÉE avec
     // `cacheStatus` (shared/contracts/cache.ts), borne du TTL comprise.
-    fun isStale(resource: String, fetchedAt: Long, now: Long): Boolean {
-        if (fetchedAt > now) return true
-        return now - fetchedAt > ttlFor(resource)
+    fun isStale(resource: String, fetchedAt: Long, now: Long): Boolean =
+        isExpired(ttlFor(resource), fetchedAt, now)
+
+    /** Même règle pour un cache mémoire à TTL propre : futur = expiré. */
+    fun isExpired(ttlMs: Long, at: Long, now: Long): Boolean {
+        if (at > now) return true
+        return now - at > ttlMs
     }
 
     /**

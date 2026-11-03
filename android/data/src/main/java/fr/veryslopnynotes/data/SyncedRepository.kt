@@ -13,6 +13,12 @@ sealed interface RefreshOutcome {
     data class Failed(val message: String, val cachedPayload: String?) : RefreshOutcome
 }
 
+// Une écriture de cache ratée n'est pas « un cache illisible » : le disque a
+// refusé l'écriture. Le payload reste affichable pour cette session, mais la
+// panne est DITE (jamais un succès silencieux).
+private const val CACHE_WRITE_FAILED =
+    "Stockage plein ou indisponible : les données ne sont pas enregistrées hors ligne."
+
 // Dépôts offline-first (ADR-003). Lecture : `loadCached()` synchrone, jamais de
 // réseau. Écriture : `refreshAsync()` lit le client local en tâche de fond,
 // sauve au succès, replie sur le cache à l'échec. `baseUrl` reste dans les
@@ -134,7 +140,7 @@ class SyncedRepository(
                 }
                 when {
                     written == null -> RefreshOutcome.Failed("Session déconnectée.", null)
-                    written == false -> RefreshOutcome.Failed("Cache illisible.", payload)
+                    written == false -> RefreshOutcome.Failed(CACHE_WRITE_FAILED, payload)
                     else -> RefreshOutcome.Updated(payload, clock())
                 }
             } else {

@@ -17,7 +17,9 @@ internal object DiscussionListCache {
     @Synchronized
     fun get(now: Long = System.currentTimeMillis()): List<Discussion>? {
         if (entries.isEmpty()) return null
-        if (now - at > TTL_MS) {
+        // Horloge reculée : une marque « future » est EXPIRÉE, sinon la liste
+        // resterait fraîche pour toujours.
+        if (CachePolicy.isExpired(TTL_MS, at, now)) {
             clear()
             return null
         }
