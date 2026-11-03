@@ -374,7 +374,8 @@ describe("registre d'invariants", () => {
       ["web/README.md", 4_000],
       ["server/README.md", 4_800],
       ["shared/contracts/README.md", 1_000],
-      ["docs/RELEASE.md", 7_000],
+      // +500 pour la publication loopback et le digest Docker (#921).
+      ["docs/RELEASE.md", 7_500],
       ["docs/HUMAN_INPUTS.md", 4_500],
       ["docs/PRODUCT.md", 7_500],
     ];
