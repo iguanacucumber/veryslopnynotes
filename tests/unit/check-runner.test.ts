@@ -184,10 +184,10 @@ describe("check.ts : pilote de `make check`", () => {
     const makefile = await Bun.file(join(ROOT, "Makefile")).text();
     // `check-fast` (boucle interne) : l'opt-in EXPLICITE qui autorise la liste
     // réduite — c'est le seul usage légitime de CHECK_TARGETS.
-    expect(makefile).toMatch(/check-fast:\n\tCHECK_HARNESS=1 CHECK_TARGETS=/);
+    expect(makefile).toMatch(/check-fast:(?: ## [^\n]*)?\n\tCHECK_HARNESS=1 CHECK_TARGETS=/);
     // Liste EXACTE : ajouter ou retirer une étape du raccourci casse ici.
     const fast =
-      /check-fast:\n\tCHECK_HARNESS=1 CHECK_TARGETS="([^"]+)"/.exec(makefile)?.[1]?.split(" ") ?? [];
+      /check-fast:(?: ## [^\n]*)?\n\tCHECK_HARNESS=1 CHECK_TARGETS="([^"]+)"/.exec(makefile)?.[1]?.split(" ") ?? [];
     expect([...fast].sort()).toEqual(
       DEFAULT_TARGETS.filter((t) => t !== "android-compile" && t !== "audit").sort(),
     );
@@ -200,7 +200,7 @@ describe("check.ts : pilote de `make check`", () => {
     );
     // Le GATE (la phase 1, `check-run`) : l'opt-in est VIDE, donc même un
     // shell qui exporterait CHECK_HARNESS=1 ne peut pas rétrécir le gate.
-    const gate = /check-run:\n((?:\t[^\n]*\n)+)/.exec(makefile)?.[1] ?? "";
+    const gate = /check-run:(?: ## [^\n]*)?\n((?:\t[^\n]*\n)+)/.exec(makefile)?.[1] ?? "";
     expect(gate).toContain(
       "CHECK_HARNESS= ALLOW_SKIP_ANDROID= REQUIRE_KOTLIN_TOOLCHAIN=1 bun run agents/runtime/check.ts",
     );
@@ -343,10 +343,10 @@ exit "\${FAKE_BUN_CODE:-0}"
       const makefile = await Bun.file(join(ROOT, "Makefile")).text();
       // `check` dépend de `check-run` : la phase 1 (le harnais) tourne AVANT
       // que la phase 2 (le verdict) soit expandue.
-      expect(makefile).toMatch(/^check: check-run$/m);
+      expect(makefile).toMatch(/^check: check-run(?: ## [^\n]*)?$/m);
       // Le verdict refuse par `$(error)` : `-i` ignore l'échec d'une RECETTE,
       // pas une erreur de make.
-      const verdict = /^check: check-run\n((?:\t[^\n]*\n)+)/m.exec(makefile)?.[1] ?? "";
+      const verdict = /^check: check-run(?: ## [^\n]*)?\n((?:\t[^\n]*\n)+)/m.exec(makefile)?.[1] ?? "";
       expect(verdict).toContain("$(error");
       expect(verdict).toContain("GATE_STATUS");
     });
@@ -563,7 +563,8 @@ describe("gate : chaque étape a une vraie recette", () => {
     if (start < 0) return false;
     // Cible agrégat (`architecture: web-build architecture-test`) : sa recette
     // est celle de ses prérequis, qui doivent eux-mêmes en avoir une.
-    const prereqs = /^[^:]+:(.*)$/.exec(MAKEFILE[start]!)?.[1]?.trim().split(/\s+/).filter(Boolean) ?? [];
+    // `##` ouvre un commentaire make (description de `make help`) : hors prérequis.
+    const prereqs = /^[^:]+:(.*)$/.exec(MAKEFILE[start]!.replace(/\s*##.*$/, ""))?.[1]?.trim().split(/\s+/).filter(Boolean) ?? [];
     if (prereqs.length > 0) return prereqs.every((p) => hasRecipe(p, seen));
     for (let i = start + 1; i < MAKEFILE.length; i++) {
       const line = MAKEFILE[i]!;
@@ -582,6 +583,6 @@ describe("gate : chaque étape a une vraie recette", () => {
     expect(hasRecipe("unit")).toBe(true);
     // Le filtre est dans la recette : un échec bun doit encore rougir le gate
     // (le code de sortie est forwardé, cf. test-output.test.ts).
-    expect(MAKEFILE.join("\n")).toMatch(/^unit:\n\t\$\(TEST_OUTPUT\) unit tests\/unit --parallel$/m);
+    expect(MAKEFILE.join("\n")).toMatch(/^unit:(?: ## [^\n]*)?\n\t\$\(TEST_OUTPUT\) unit tests\/unit --parallel$/m);
   });
 });

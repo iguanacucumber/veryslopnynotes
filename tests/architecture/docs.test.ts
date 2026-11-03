@@ -356,7 +356,7 @@ describe("registre d'invariants", () => {
       fichier: "AGENTS.md",
       sousBudget: true,
     });
-    expect({ fichier: "Makefile", sousBudget: MAKEFILE.length <= 9_000 }).toEqual({
+    expect({ fichier: "Makefile", sousBudget: MAKEFILE.length <= 10_000 }).toEqual({
       fichier: "Makefile",
       sousBudget: true,
     });
@@ -659,7 +659,7 @@ describe("commandes citées", () => {
 
 describe("check-fast", () => {
   const recipe =
-    /^check-fast:\n\tCHECK_HARNESS=1 CHECK_TARGETS="([^"]+)"/m.exec(MAKEFILE)?.[1]?.split(" ") ?? [];
+    /^check-fast:(?: ## [^\n]*)?\n\tCHECK_HARNESS=1 CHECK_TARGETS="([^"]+)"/m.exec(MAKEFILE)?.[1]?.split(" ") ?? [];
   const skipped = ["android-compile", "audit"];
 
   test("saute exactement les étapes Kotlin et réseau du gate", () => {
