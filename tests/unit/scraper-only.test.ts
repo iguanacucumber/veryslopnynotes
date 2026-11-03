@@ -54,7 +54,11 @@ function scrapeBodyWithCredentials() {
 }
 
 const post = (path: string, body: unknown) =>
-  new Request(`http://127.0.0.1${path}`, { method: "POST", body: JSON.stringify(body) });
+  new Request(`http://127.0.0.1${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
 
 // Le VRAI scraper, navigateur MOCKÉ : `playwright` et `fetch` sont stubés.
 const PUBLIC_URL = "https://manuels.example.invalid/6e/maths";
@@ -243,7 +247,11 @@ describe("scraper-only (#209)", () => {
     }
     expect(fake.calls).toHaveLength(0);
     const huge = await app.handler(
-      new Request("http://127.0.0.1/v1/manuals/scrape", { method: "POST", body: "x".repeat(9000) }),
+      new Request("http://127.0.0.1/v1/manuals/scrape", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "x".repeat(9000),
+      }),
     );
     expect(huge.status).toBe(400);
     expect(fake.calls).toHaveLength(0);

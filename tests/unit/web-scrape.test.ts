@@ -240,6 +240,7 @@ describe("page web : route HTTP (#634)", () => {
     const res = await app.handler(
       new Request("http://127.0.0.1/v1/web/scrape", {
         method: "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({ url: PUBLIC_URL }),
       }),
     );
@@ -263,7 +264,11 @@ describe("page web : route HTTP (#634)", () => {
       { url: "http://127.0.0.1/a" },
     ]) {
       const res = await app.handler(
-        new Request("http://127.0.0.1/v1/web/scrape", { method: "POST", body: JSON.stringify(body) }),
+        new Request("http://127.0.0.1/v1/web/scrape", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
       );
       expect(res.status).toBe(400);
     }
@@ -279,6 +284,7 @@ describe("page web : route HTTP (#634)", () => {
     const res = await app.handler(
       new Request("http://127.0.0.1/v1/web/scrape", {
         method: "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({ url: PUBLIC_URL }),
       }),
     );
@@ -300,6 +306,7 @@ describe("page web : route HTTP (#634)", () => {
       const res = await app.handler(
         new Request("http://127.0.0.1/v1/web/scrape", {
           method: "POST",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify({ url: PUBLIC_URL }),
         }),
       );

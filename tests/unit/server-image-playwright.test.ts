@@ -18,6 +18,7 @@ const BODY = {
 const post = () =>
   new Request("http://127.0.0.1/v1/manuals/scrape", {
     method: "POST",
+    headers: { "content-type": "application/json" },
     body: JSON.stringify(BODY),
   });
 

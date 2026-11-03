@@ -497,6 +497,7 @@ describe("garde SSRF : le NOM est résolu (#419)", () => {
     const res = await app.handler(
       new Request("http://127.0.0.1/v1/manuals/scrape", {
         method: "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           platform: "editeur-fake",
           startUrl: "https://interne.example.invalid/secret",
@@ -516,6 +517,7 @@ describe("garde SSRF : le NOM est résolu (#419)", () => {
     const res = await app.handler(
       new Request("http://127.0.0.1/v1/manuals/scrape", {
         method: "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           platform: "editeur-fake",
           startUrl: PUBLIC_URL,
@@ -552,6 +554,7 @@ describe("jar de session : choisi par le serveur, jamais par l'appelant (#538)",
         const res = await app.handler(
           new Request("http://127.0.0.1/v1/manuals/scrape", {
             method: "POST",
+            headers: { "content-type": "application/json" },
             body: JSON.stringify({ ...base, authFile: asked }),
           }),
         );
@@ -593,6 +596,7 @@ describe("#779 — fermetures SSRF et bornes du scrape", () => {
   const postManuals = (extra: Record<string, unknown> = {}) =>
     new Request("http://127.0.0.1/v1/manuals/scrape", {
       method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ platform: "editeur-fake", startUrl: PUBLIC_URL, ...extra }),
     });
 
