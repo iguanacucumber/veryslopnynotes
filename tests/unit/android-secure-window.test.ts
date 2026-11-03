@@ -13,6 +13,7 @@ import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harnes
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "SecureWindowParityMain.kt");
 const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
 const ACTIVITY = codeOnly(readFileSync(join(APP, "MainActivity.kt"), "utf8"));
+const HOST = codeOnly(readFileSync(join(APP, "SecureWindowHost.kt"), "utf8"));
 const SHOT = readFileSync(join(ROOT, "agents", "runtime", "shot.sh"), "utf8");
 
 const skip = parityToolchain.skipReason !== null;
@@ -26,7 +27,7 @@ async function secureUnderDebug(debug: boolean): Promise<boolean> {
 
 /** Corps de `applySecureWindow`, jusqu'à l'accolade qui le ferme. */
 function applySecureWindowBody(source: string): string {
-  const start = source.indexOf("private fun applySecureWindow()");
+  const start = source.indexOf("internal fun applySecureWindow");
   if (start < 0) return "";
   const open = source.indexOf("{", start);
   let depth = 0;
@@ -53,11 +54,13 @@ describe("fenêtre protégée (#898)", () => {
   });
 
   test("l'activité pose FLAG_SECURE selon la décision, jamais en dur", () => {
-    const body = applySecureWindowBody(ACTIVITY);
     // La décision de build est l'entrée : un `addFlags` nu ne serait pas exempté en debug.
-    expect(body).toContain("secureWindowRequired(BuildConfig.DEBUG)");
+    expect(ACTIVITY).toMatch(/applySecureWindow\(window, BuildConfig\.DEBUG\)/);
+    expect(ACTIVITY).not.toContain("FLAG_SECURE");
+    const body = applySecureWindowBody(HOST);
+    expect(body).toContain("secureWindowRequired(isDebugBuild)");
     expect(body).toContain("WindowManager.LayoutParams.FLAG_SECURE");
-    expect(ACTIVITY).toMatch(/override fun onCreate\([\s\S]*?applySecureWindow\(\)/);
+    expect(ACTIVITY).toMatch(/override fun onCreate\([\s\S]*?applySecureWindow\(window/);
   });
 
   test("l'exemption debug est bien celle de make shot", () => {

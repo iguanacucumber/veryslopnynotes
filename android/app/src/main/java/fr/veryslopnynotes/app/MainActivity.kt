@@ -5,7 +5,6 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowManager
 import android.webkit.WebView
 import android.widget.Button
 import android.widget.FrameLayout
@@ -34,7 +33,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        applySecureWindow()
+        applySecureWindow(window, BuildConfig.DEBUG)
         // Edge-to-edge : `enableEdgeToEdge` pose aussi le mode découpe (API 28+),
         // donc le fond occupe l'encoche et le contenu est décalé par l'inset.
         enableEdgeToEdge()
@@ -182,15 +181,8 @@ class MainActivity : ComponentActivity() {
     private fun savedRoute(savedInstanceState: Bundle?): String? =
         routePathFromState(savedInstanceState?.getString(ROUTE_STATE_KEY))
 
-    /**
-     * Aperçu des applications récentes, captures et enregistrements d'écran
-     * masqués en release. Le debug est exempté (voir [secureWindowRequired]).
-     */
-    private fun applySecureWindow() {
-        if (secureWindowRequired(BuildConfig.DEBUG)) {
-            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        }
-    }
+    // Le câblage Android (fenêtre + flag) vit dans SecureWindowHost.kt : la
+    // décision reste PURE et testable sans activité.
 
     /**
      * Deux chemins distincts, sans double comptage :

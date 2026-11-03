@@ -19,6 +19,9 @@ la section `0.1.0` le jour du tag.
 - Taille du texte réglable (100/125/150 %) et suivi du réglage Android jusqu'à 200 %.
 - Smoke CI sur émulateur : APK debug installé, appairage démo, accueil vérifié,
   captures et logcat en artefact (non bloquant tant que non stable).
+- Tests instrumentés sur émulateur : clé chiffrée, Keystore dégradé puis sain,
+  purge complète d'un compte, fichier corrompu et `FLAG_SECURE` (non bloquant
+  tant que non stable).
 
 ### Modifié
 

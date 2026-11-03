@@ -18,6 +18,13 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "0.1.0"
+        // Tests instrumentés (#887) : même APK debug que le smoke émulateur.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    testOptions {
+        // Une fenêtre animée rend les assertions d'état non déterministes.
+        animationsDisabled = true
     }
 
     signingConfigs {
@@ -116,4 +123,8 @@ dependencies {
     // ponytail: un seul client HTTP (OkHttp allowlist serveur).
     // Upgrade: cache offline Room.
     implementation(libs.okhttp)
+
+    // Instrumenté uniquement : aucune dépendance de test n'entre dans l'APK.
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
 }
