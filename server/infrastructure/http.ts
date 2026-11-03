@@ -13,6 +13,7 @@ import { CONTRACTS_VERSION } from "../../shared/contracts/models";
 import {
   MANUALS_SCRAPE_MAX_BODY_CHARS,
   MANUALS_SCRAPE_PATH,
+  MAX_SCRAPE_BODY_BYTES,
   WEB_SCRAPE_MAX_BODY_CHARS,
   WEB_SCRAPE_PATH,
   isManualsScrapeDoc,
@@ -172,6 +173,63 @@ function hasCredentialFields(body: unknown): boolean {
   );
 }
 
+type ReadJsonBody = { readonly ok: true; readonly text: string } | { readonly ok: false; readonly response: Response };
+
+/** Coupe le flux dès le refus : le client n'a pas à finir d'envoyer un corps inutile. */
+function discardBody(req: Request): void {
+  if (!req.body || req.body.locked) return;
+  void req.body.cancel().catch(() => {});
+}
+
+/**
+ * Corps JSON lu EN STREAMING et borné en OCTETS : un `req.text()` bufferisait
+ * tout le corps avant de mesurer, donc une route ouverte pouvait être remplie
+ * avec une taille arbitraire. Le `content-type` est exigé AVANT toute lecture ;
+ * au-delà du plafond, la lecture s'arrête et le flux est annulé.
+ */
+async function readJsonBody(req: Request): Promise<ReadJsonBody> {
+  const mediaType = (req.headers.get("content-type") ?? "").split(";", 1)[0]?.trim().toLowerCase();
+  if (mediaType !== "application/json") {
+    discardBody(req);
+    return {
+      ok: false,
+      response: error("bad_request", 415, "content-type application/json requis"),
+    };
+  }
+  const announced = Number(req.headers.get("content-length") ?? "");
+  if (Number.isFinite(announced) && announced > MAX_SCRAPE_BODY_BYTES) {
+    discardBody(req);
+    return { ok: false, response: error("too_large", 413, "corps trop volumineux") };
+  }
+  if (!req.body) return { ok: true, text: "" };
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value || value.byteLength === 0) continue;
+      size += value.byteLength;
+      if (size > MAX_SCRAPE_BODY_BYTES) {
+        await reader.cancel().catch(() => {});
+        return { ok: false, response: error("too_large", 413, "corps trop volumineux") };
+      }
+      chunks.push(value);
+    }
+  } catch {
+    await reader.cancel().catch(() => {});
+    return { ok: false, response: error("bad_request", 400, "invalid JSON body") };
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { ok: true, text: new TextDecoder().decode(bytes) };
+}
+
 async function handleScrape(
   req: Request,
   runScrape: NonNullable<ScraperDeps["scrape"]>,
@@ -192,16 +250,14 @@ async function handleScrape(
   const controller = new AbortController();
   let done = false;
   try {
-    let text: string;
-    try {
-      text = await req.text();
-    } catch {
-      return error("bad_request", 400, "invalid JSON body");
+    const read = await readJsonBody(req);
+    if (!read.ok) return read.response;
+    if (read.text.length > MANUALS_SCRAPE_MAX_BODY_CHARS) {
+      return error("bad_request", 400, "invalid body");
     }
-    if (text.length > MANUALS_SCRAPE_MAX_BODY_CHARS) return error("bad_request", 400, "invalid body");
     let body: unknown;
     try {
-      body = JSON.parse(text);
+      body = JSON.parse(read.text);
     } catch {
       return error("bad_request", 400, "invalid JSON body");
     }
@@ -334,16 +390,14 @@ async function handleWebScrape(
   const controller = new AbortController();
   let done = false;
   try {
-    let text: string;
-    try {
-      text = await req.text();
-    } catch {
-      return error("bad_request", 400, "invalid JSON body");
+    const read = await readJsonBody(req);
+    if (!read.ok) return read.response;
+    if (read.text.length > WEB_SCRAPE_MAX_BODY_CHARS) {
+      return error("bad_request", 400, "invalid body");
     }
-    if (text.length > WEB_SCRAPE_MAX_BODY_CHARS) return error("bad_request", 400, "invalid body");
     let body: unknown;
     try {
-      body = JSON.parse(text);
+      body = JSON.parse(read.text);
     } catch {
       return error("bad_request", 400, "invalid JSON body");
     }
@@ -449,9 +503,6 @@ function parsePort(raw: string | null): number {
   return port;
 }
 
-/** Corps HTTP maximal : la seule route JSON est bornée à quelques ko. */
-const MAX_REQUEST_BODY_BYTES = 1_048_576;
-
 function envValue(env: Record<string, string | undefined>, key: string): string {
   return (env[key] ?? "").trim();
 }
@@ -506,7 +557,9 @@ export function start(
   const server = Bun.serve({
     port,
     hostname,
-    maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
+    // Même plafond au transport : le handler refuse aussi en streaming, mais
+    // aucun corps plus gros n'est accepté avant lui.
+    maxRequestBodySize: MAX_SCRAPE_BODY_BYTES,
     idleTimeout: 30,
     fetch: app.handler,
     ...(tls ? { tls } : {}),

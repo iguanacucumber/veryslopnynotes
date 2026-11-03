@@ -12,11 +12,17 @@ import {
   scrapeManuals,
 } from "../../server/infrastructure/manuals-scrape";
 import type { HostResolver } from "../../server/infrastructure/ssrf";
+import {
+  MANUALS_SCRAPE_PATH,
+  MAX_SCRAPE_BODY_BYTES,
+  WEB_SCRAPE_PATH,
+} from "../../shared/contracts/api";
 
 const CONFIG = { platform: "editeur-fake" };
 const PUBLIC_URL = "https://manuels.example.invalid/6e";
 /** IP publique factice (aucune adresse réelle n'est contactée). */
 const PUBLIC_IP = "93.184.216.34";
+const JSON_HEADERS = { "content-type": "application/json" };
 
 function fakeResolver(table: Record<string, readonly string[]>): HostResolver {
   return async (host: string) => {
@@ -40,6 +46,8 @@ interface FakeState {
   headers: Record<string, string>;
   browserClosed: boolean;
   contextClosed: boolean;
+  /** `acceptDownloads` demandé au contexte Playwright. */
+  acceptDownloads: boolean | null;
 }
 
 /** État neuf du faux navigateur (champs complets : le faux applique la borne). */
@@ -52,6 +60,7 @@ function fakeState(overrides: Partial<FakeState> = {}): FakeState {
     headers: {},
     browserClosed: false,
     contextClosed: false,
+    acceptDownloads: null,
     ...overrides,
   };
 }
@@ -68,28 +77,31 @@ afterEach(() => {
 mock.module("playwright", () => ({
   chromium: {
     launch: async () => ({
-      newContext: async () => ({
-        routeWebSocket: async () => {},
-        newPage: async () => ({
-          url: () => PUBLIC_URL,
-          title: async () => "Titre factice",
-          // La borne est appliquée DANS le navigateur : il ne matérialise jamais plus que `max`.
-          evaluate: async (_fn: unknown, max: number) => {
-            state.contentCalls += 1;
-            state.contentMax = max;
-            // `null` = la page streame sans jamais finir.
-            if (state.html === null) return await new Promise<string>(() => {});
-            if (state.contentFails) throw new Error("Target page, context or browser has been closed");
-            return state.html.length > max ? state.html.slice(0, max + 1) : state.html;
+      newContext: async (options?: { acceptDownloads?: boolean }) => {
+        state.acceptDownloads = options?.acceptDownloads ?? null;
+        return {
+          routeWebSocket: async () => {},
+          newPage: async () => ({
+            url: () => PUBLIC_URL,
+            title: async () => "Titre factice",
+            // La borne est appliquée DANS le navigateur : il ne matérialise jamais plus que `max`.
+            evaluate: async (_fn: unknown, max: number) => {
+              state.contentCalls += 1;
+              state.contentMax = max;
+              // `null` = la page streame sans jamais finir.
+              if (state.html === null) return await new Promise<string>(() => {});
+              if (state.contentFails) throw new Error("Target page, context or browser has been closed");
+              return state.html.length > max ? state.html.slice(0, max + 1) : state.html;
+            },
+            route: async () => {},
+            goto: async () => ({ status: () => 200, ok: () => true, headers: () => state.headers }),
+          }),
+          storageState: async () => {},
+          close: async () => {
+            state.contextClosed = true;
           },
-          route: async () => {},
-          goto: async () => ({ status: () => 200, ok: () => true, headers: () => state.headers }),
-        }),
-        storageState: async () => {},
-        close: async () => {
-          state.contextClosed = true;
-        },
-      }),
+        };
+      },
       close: async () => {
         state.browserClosed = true;
       },
@@ -231,6 +243,7 @@ describe("délai de lecture du HTML (#422)", () => {
     const res = await app.handler(
       new Request("http://127.0.0.1/v1/manuals/scrape", {
         method: "POST",
+        headers: JSON_HEADERS,
         body: JSON.stringify({
           platform: "editeur-fake",
           startUrl: PUBLIC_URL,
@@ -300,5 +313,179 @@ describe("sérialisation bornée pendant le parcours du DOM (#779)", () => {
 
   test("une page courte est rendue entière (pas de témoin parasite)", () => {
     expect(bounded(element("p", [text("ok")]), 1000)).toBe("<p>ok</p>");
+  });
+});
+
+// #949 : le corps JSON est borné PENDANT la lecture, le content-type est exigé,
+// et aucune page ne peut déposer de fichier chez le serveur.
+describe("corps JSON : plafond streamé et content-type (#949)", () => {
+  const MANUAL_BODY = { platform: "editeur-fake", startUrl: PUBLIC_URL };
+  const WEB_BODY = { url: "https://page.example.invalid/article" };
+
+  function appCounting(scrape: () => void, scrapeWeb: () => void) {
+    return createApp({
+      scrape: async () => {
+        scrape();
+        return [];
+      },
+      scrapeWeb: async () => {
+        scrapeWeb();
+        return [];
+      },
+    });
+  }
+
+  test("un corps chunked au-delà du plafond est coupé AU plafond, jamais bufferisé", async () => {
+    let scrapes = 0;
+    const app = appCounting(
+      () => {
+        scrapes += 1;
+      },
+      () => {},
+    );
+    let pulls = 0;
+    let cancelled = false;
+    const chunk = new Uint8Array(4096).fill(0x78);
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        if (pulls > 64) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const res = await app.handler(
+      new Request(`http://127.0.0.1${MANUALS_SCRAPE_PATH}`, {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body,
+      }),
+    );
+    expect(res.status).toBe(413);
+    expect((await res.json()) as unknown).toMatchObject({ error: { code: "too_large" } });
+    expect(scrapes).toBe(0);
+    // La lecture s'arrête au voisinage du plafond et le flux est annulé :
+    // les 64 chunks du générateur ne sont jamais tirés.
+    expect(cancelled).toBe(true);
+    expect(pulls).toBeLessThanOrEqual(MAX_SCRAPE_BODY_BYTES / chunk.byteLength + 3);
+  });
+
+  test("un content-length annoncé au-delà du plafond est refusé sans lire", async () => {
+    let scrapes = 0;
+    const app = appCounting(
+      () => {
+        scrapes += 1;
+      },
+      () => {},
+    );
+    let pulls = 0;
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        controller.enqueue(new Uint8Array(4096).fill(0x78));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const res = await app.handler(
+      new Request(`http://127.0.0.1${MANUALS_SCRAPE_PATH}`, {
+        method: "POST",
+        headers: { ...JSON_HEADERS, "content-length": String(MAX_SCRAPE_BODY_BYTES + 1) },
+        body,
+      }),
+    );
+    expect(res.status).toBe(413);
+    expect(scrapes).toBe(0);
+    expect(cancelled).toBe(true);
+    expect(pulls).toBeLessThanOrEqual(1);
+  });
+
+  test("sans content-type ou avec un autre type = 415, aucun scrape", async () => {
+    let scrapes = 0;
+    const app = appCounting(
+      () => {
+        scrapes += 1;
+      },
+      () => {
+        scrapes += 1;
+      },
+    );
+    for (const [path, body] of [
+      [MANUALS_SCRAPE_PATH, MANUAL_BODY],
+      [WEB_SCRAPE_PATH, WEB_BODY],
+    ] as const) {
+      const headerVariants: Record<string, string>[] = [
+        {},
+        { "content-type": "text/plain" },
+        { "content-type": "application/json-patch+json" },
+      ];
+      for (const headers of headerVariants) {
+        const res = await app.handler(
+          new Request(`http://127.0.0.1${path}`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(body),
+          }),
+        );
+        expect({ path, headers, status: res.status }).toEqual({ path, headers, status: 415 });
+        expect((await res.json()) as unknown).toMatchObject({ error: { code: "bad_request" } });
+      }
+    }
+    expect(scrapes).toBe(0);
+  });
+
+  test("application/json avec charset et casse libre reste accepté", async () => {
+    const app = appCounting(
+      () => {},
+      () => {},
+    );
+    const res = await app.handler(
+      new Request(`http://127.0.0.1${MANUALS_SCRAPE_PATH}`, {
+        method: "POST",
+        headers: { "content-type": "Application/JSON; Charset=UTF-8" },
+        body: JSON.stringify(MANUAL_BODY),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ docs: [] });
+  });
+
+  test("un contenu non textuel reste refusé (415 not_text)", async () => {
+    const app = createApp({
+      scrapeWeb: async () => {
+        throw new ScrapeManualsError("contenu non textuel refuse", "not_text");
+      },
+    });
+    const res = await app.handler(
+      new Request(`http://127.0.0.1${WEB_SCRAPE_PATH}`, {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify(WEB_BODY),
+      }),
+    );
+    expect(res.status).toBe(415);
+    expect((await res.json()) as unknown).toMatchObject({ error: { code: "not_text" } });
+  });
+
+  test("les téléchargements sont coupés sur le contexte Playwright", async () => {
+    stubFetch();
+    state = fakeState();
+    await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
+    expect(state.acceptDownloads).toBe(false);
+
+    state = fakeState();
+    await scrapeManuals(CONFIG, {
+      startUrl: PUBLIC_URL,
+      resolveHost: PUBLIC_RESOLVER,
+      useSession: false,
+    });
+    expect(state.acceptDownloads).toBe(false);
   });
 });

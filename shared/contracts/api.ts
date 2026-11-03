@@ -274,6 +274,12 @@ export function isDiscussionRecipientsResponse(v: unknown): v is DiscussionRecip
 // compilation, mais un corps qui les porte est refusé — un credential collecté
 // pour rien ne doit pas passer pour une authentification.
 export const MANUALS_SCRAPE_PATH = "/v1/manuals/scrape";
+/**
+ * Plafond HTTP du corps JSON des routes de scrape, en OCTETS : lu en
+ * STREAMING et refusé au-delà, jamais bufferisé en entier puis mesuré.
+ * 16 Kio couvrent les contrats (URL de 2 000 caractères) avec de la marge.
+ */
+export const MAX_SCRAPE_BODY_BYTES = 16 * 1024;
 export const MANUALS_SCRAPE_MAX_BODY_CHARS = 8192;
 export const MANUALS_SCRAPE_PLATFORM_MAX_CHARS = 100;
 export const MANUALS_SCRAPE_URL_MAX_CHARS = 2000;

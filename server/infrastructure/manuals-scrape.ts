@@ -606,7 +606,9 @@ export async function scrapePage(
     // `serviceWorkers: "block"` : `page.route` ne voit PAS les requêtes émises
     // par un service worker. Sans ce refus d'enregistrement, une page pouvait
     // fetcher un hôte interne et recopier la réponse dans son DOM.
-    const contextOptions = { serviceWorkers: "block" as const };
+    // `acceptDownloads: false` : une page ne dépose jamais de fichier sur le
+    // disque du serveur (le téléchargement est annulé par le navigateur).
+    const contextOptions = { serviceWorkers: "block" as const, acceptDownloads: false };
     context =
       (jar
         ? await browser.newContext({ ...contextOptions, storageState: jar }).catch(
