@@ -11,16 +11,14 @@ L'app parle directement à Pronote et à OpenRouter ; ce serveur ne participe pa
   Le contenu non textuel est refusé (`415 not_text`) et une page trop
   volumineuse est refusée avant lecture (`413 too_large`).
 
-Le scraper est sans authentification et n'exige que la plateforme et l'URL de
-départ dans le corps de requête. Les identifiants de portail (`username` /
-`password`) sont REFUSÉS (400) : le scraper ne s'authentifie pas — la session
-est celle du serveur (son cookie jar), donc un identifiant reçu ne serait
-collecté pour rien (#526). Risque SSRF et d'épuisement du compte : garder sur
-la boucle locale ; toute autre interface exige un proxy authentifié devant.
-`make runServer` et Docker lancent ce seul service. `make runServer` écoute par
-défaut sur la boucle locale (`HOST=0.0.0.0` seulement derrière ce proxy), et sa
-préparation TLS est obligatoire : un échec arrête le lancement, jamais de repli
-en clair.
+Sur la boucle locale, le scraper est sans authentification. Les identifiants de
+portail (`username` / `password`) sont REFUSÉS (400) : le scraper ne
+s'authentifie pas — la session est celle du serveur (son cookie jar), donc un
+identifiant reçu ne serait collecté pour rien (#526). Risque SSRF et
+d'épuisement du compte : garder sur la boucle locale. Hors loopback, le
+démarrage est REFUSÉ sans `ALLOW_PUBLIC=1` + `SCRAPER_TOKEN` (Bearer exigé sur
+toutes les routes, comparé à temps constant), avec un proxy authentifié devant.
+`make runServer` écoute sur la boucle locale ; TLS obligatoire, échec = arrêt.
 
 L'IMAGE Docker suit la même règle (#533, #921) : la commande documentée publie
 sur la boucle locale par défaut, sans `TLS_CERT_FILE`/`TLS_KEY_FILE` (volume)
@@ -39,7 +37,7 @@ docker run --rm -p 127.0.0.1:3000:3000 \
   --security-opt seccomp=./server/chromium-seccomp.json \
   --tmpfs /tmp --tmpfs /home/vsn:rw,nosuid,nodev,size=64m,mode=1777 \
   -v veryslopnynotes-jar:/app/playwright/.auth \
-  -e HOST=0.0.0.0 \
+  -e HOST=0.0.0.0 -e ALLOW_PUBLIC=1 -e SCRAPER_TOKEN="$SCRAPER_TOKEN" \
   -e TLS_CERT_FILE=/tls/cert.pem -e TLS_KEY_FILE=/tls/key.pem \
   -v ~/.cache/veryslopnynotes/tls:/tls:ro \
   veryslopnynotes-server:local
@@ -55,16 +53,17 @@ quand le défaut Docker évolue. Ce n'est PAS une isolation VM : une faille du
 processus navigateur ou du noyau reste hors du sandbox ; gVisor ou une VM
 dédiée est le cran supérieur.
 
-`-p 127.0.0.1:3000:3000` publie sur la boucle locale seulement ; c'est `-p`,
-pas `HOST=0.0.0.0` (requis dans le conteneur), qui borne l'exposition. Sans
-auth : hors boucle locale, proxy authentifié OBLIGATOIRE.
+`-p 127.0.0.1:3000:3000` borne l'exposition à la boucle locale ;
+`HOST=0.0.0.0` est requis DANS le conteneur, d'où `ALLOW_PUBLIC=1` et un
+`SCRAPER_TOKEN` exporté. Hors boucle locale, proxy authentifié OBLIGATOIRE.
 
-Public = opt-in explicite : `-p 3000:3000` expose sans auth avec la session du
-serveur (compte épuisable, usage détourné) ; uniquement derrière ce proxy.
+Public = opt-in explicite : `-p 3000:3000` publie partout (compte épuisable,
+usage détourné) ; uniquement derrière un proxy qui injecte
+`Authorization: Bearer $SCRAPER_TOKEN`. Le client Android n'envoie pas de jeton.
 
-Sans couple TLS, le conteneur ne démarre pas : un point d'entrée sans auth ne se
-sert pas en clair. Hors image, un lancement local sans couple TLS sert en clair
-et le dit (`[server] ATTENTION : service en CLAIR`).
+Sans couple TLS, le conteneur ne démarre pas : un point d'entrée qui monte la
+session du serveur ne se sert pas en clair. Hors image, un lancement local sans
+couple TLS sert en clair et le dit (`[server] ATTENTION : service en CLAIR`).
 
 Garde-fous côté serveur (#362, #779) : seuls des hôtes publics sont visités
 (IP privée refusée, IPv4-mapped comprise), la chaîne de redirections est

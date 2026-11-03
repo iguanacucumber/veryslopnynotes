@@ -68,15 +68,16 @@ d'embarquer une UI absente. Détails : [`android/README.md`](android/README.md),
 
 ```bash
 make runServer                 # HTTPS sur 127.0.0.1:8080 (boucle locale)
-make runServer HOST=0.0.0.0    # pour joindre le scraper depuis le téléphone
+ALLOW_PUBLIC=1 SCRAPER_TOKEN=... make runServer HOST=0.0.0.0  # derrière un proxy
 ```
 
 TLS obligatoire (certificat auto-signé hors dépôt, ou `TLS_CERT_FILE` et
 `TLS_KEY_FILE` fournis), jamais de repli en clair ; l'adresse du manuel se
-règle une fois dans l'app. Le point d'entrée est **sans authentification** :
-à garder sur la boucle locale ou derrière un proxy authentifié
-([I8](docs/architecture/INVARIANTS.md)). Routes, limites et catalogue :
-[`server/README.md`](server/README.md).
+règle une fois dans l'app. Boucle locale = sans authentification. Toute
+autre interface est REFUSÉE sans `ALLOW_PUBLIC=1` et exige `SCRAPER_TOKEN`
+(`Authorization: Bearer`) : à garder sur la boucle locale ou derrière un proxy
+authentifié ([I8](docs/architecture/INVARIANTS.md)). Routes, limites et
+catalogue : [`server/README.md`](server/README.md).
 
 ## Configuration, structure, docs
 
@@ -102,9 +103,9 @@ Compatibilité : Android 8.0+ (API 26) avec **WebView système Chromium 100+**,
 QR + PIN uniquement, MFA non prise en charge ; seuil, détection et matrice :
 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 Limites assumées : accès Pronote dépendant de l'établissement et du QR ;
-assistant IA inactif sans clé OpenRouter ; scraper sans authentification par
-conception, jamais public ; pas de compte Pronote réel dans la suite par
-défaut (fixtures synthétiques et états hors-ligne).
+assistant IA inactif sans clé OpenRouter ; scraper sans authentification sur
+la boucle locale, jamais public sans jeton ; pas de compte Pronote réel dans la
+suite par défaut (fixtures synthétiques et états hors-ligne).
 
 ## License
 

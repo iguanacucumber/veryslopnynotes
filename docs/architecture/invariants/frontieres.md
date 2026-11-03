@@ -27,8 +27,8 @@
 <a id="i8"></a>
 
 ## I8 — Le scraper est un sidecar local, sans auth, borné et sans SSRF
-- Invariant : session et clé LLM locales ; scraper sans auth, local ou derrière
-  proxy authentifié. Identifiants refusés (400), login jamais ingéré
+- Invariant : session et clé LLM locales ; scraper local sans auth ; hors
+  loopback, `ALLOW_PUBLIC=1` + `SCRAPER_TOKEN` Bearer. Identifiants refusés (400), login jamais ingéré
   (`login_required`), jar du SERVEUR 0700/0600, `authFile` refusé. Hôtes
   privés, IP internes, WebSocket, service workers refusés ; 20 redirections
   max, URL finale re-vérifiée. Corps JSON en `application/json`, ≤16 Kio

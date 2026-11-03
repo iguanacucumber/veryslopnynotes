@@ -1,5 +1,5 @@
-# Scraper de manuels seul : seuls http.ts + manuals*.ts embarqués, sans auth
-# (I8, risque documenté dans server/infrastructure/http.ts).
+# Scraper de manuels seul : seuls http.ts + manuals*.ts embarqués ; sans auth
+# sur loopback, opt-in ALLOW_PUBLIC=1 + jeton Bearer hors loopback (I8).
 # Base épinglée (ADR-001) : tag ET digest (index multi-arch, résolu le
 # 2026-11-01 via le registre Docker Hub). Ne pas redescendre sous 1.4.4
 # (CVE-2026-111497, Brotli/node2shell/HTTP2Shell).
@@ -32,5 +32,5 @@ ENV HOME=/home/vsn
 ENV PORT=3000
 EXPOSE 3000
 USER vsn
-# TLS obligatoire (service sans auth, I8) : jamais de repli en clair.
-CMD ["sh", "-c", "if [ -z \"$TLS_CERT_FILE\" ] || [ -z \"$TLS_KEY_FILE\" ]; then echo 'scraper : TLS_CERT_FILE et TLS_KEY_FILE obligatoires (service sans auth, I8) — pas de repli en clair.' >&2; exit 1; fi; exec bun run server/infrastructure/http.ts"]
+# TLS obligatoire (session du serveur, I8) : jamais de repli en clair.
+CMD ["sh", "-c", "if [ -z \"$TLS_CERT_FILE\" ] || [ -z \"$TLS_KEY_FILE\" ]; then echo 'scraper : TLS_CERT_FILE et TLS_KEY_FILE obligatoires (I8) — pas de repli en clair.' >&2; exit 1; fi; exec bun run server/infrastructure/http.ts"]
