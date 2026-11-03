@@ -101,6 +101,40 @@ private class Driver {
                 "memoSize" to JVal.Num((client.readMemo?.size ?: 0).toDouble()),
             )
         }
+        "budget" -> {
+            // Budgets EXPLICITES et horloge injectée : les bornes se prouvent
+            // sans attendre ni remplir la vraie mémoire.
+            var now = 0L
+            val memo = ReadMemo(
+                ttlMs = op.num("ttlMs")?.toLong() ?: ReadMemo.TTL_MS,
+                maxEntries = op.num("maxEntries")?.toInt() ?: ReadMemo.MAX_ENTRIES,
+                maxBytes = op.num("maxBytes")?.toInt() ?: ReadMemo.MAX_BYTES,
+                maxEntryBytes = op.num("maxEntryBytes")?.toInt() ?: ReadMemo.MAX_ENTRY_BYTES,
+                clock = { now },
+            )
+            val hits = mutableListOf<JVal>()
+            val steps = (op.fields["steps"] as? JVal.Arr)?.items ?: emptyList()
+            for (raw in steps) {
+                val step = raw as? JVal.Obj ?: continue
+                when (step.str("op")) {
+                    "now" -> now = step.num("at")?.toLong() ?: now
+                    "put" -> {
+                        val key = step.str("key") ?: throw IllegalArgumentException("pilote: key absent")
+                        val value = step.str("value")?.let { Json.parse(it) } ?: JVal.Null
+                        memo.put(key, value)
+                    }
+                    "get" -> hits.add(JVal.Bool(memo.get(step.str("key") ?: "") != null))
+                    "clear" -> memo.clear()
+                }
+            }
+            ok(
+                "size" to JVal.Num(memo.size.toDouble()),
+                "bytes" to JVal.Num(memo.bytes.toDouble()),
+                "hits" to JVal.Arr(hits),
+                "maxBytes" to JVal.Num(ReadMemo.MAX_BYTES.toDouble()),
+                "maxEntryBytes" to JVal.Num(ReadMemo.MAX_ENTRY_BYTES.toDouble()),
+            )
+        }
         else -> throw IllegalArgumentException("pilote: opération inconnue : ${op.str("op")}")
     }
 }

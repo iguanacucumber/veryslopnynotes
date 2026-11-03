@@ -8,8 +8,26 @@ import java.util.Locale
 import java.util.TimeZone
 import java.util.zip.GZIPInputStream
 
-/** Plafond d'une réponse (10 Mo), une fois décompressée. */
+/** Plafond d'une réponse (10 Mio), en OCTETS UTF-8 une fois décompressée. */
 internal const val MAX_RESPONSE_BYTES = 10_485_760
+
+/**
+ * Copie [input] vers [output] en refusant au-delà de [maxBytes] OCTETS lus.
+ * Le dépassement est une `IOException` : aucune réponse partielle n'est gardée
+ * par l'appelant (fichier temporaire supprimé, tampon jeté).
+ */
+internal fun copyBounded(input: java.io.InputStream, output: java.io.OutputStream, maxBytes: Int): Long {
+    val buf = ByteArray(8192)
+    var total = 0L
+    while (true) {
+        val n = input.read(buf)
+        if (n < 0) break
+        total += n
+        if (total > maxBytes) throw java.io.IOException("Reponse trop volumineuse")
+        output.write(buf, 0, n)
+    }
+    return total
+}
 
 /**
  * Jar à cookies persistant (RFC 6265) + redirects suivies à la main : ni
@@ -245,21 +263,11 @@ class HttpSession(
     /** Comme `URLSearchParams` : UTF-8, espace → `+` (`URLEncoder`). */
     private fun urlEncode(s: String): String = URLEncoder.encode(s, "UTF-8")
 
-    // ponytail: plafond 10 Mo par chunks, evite OOM sur grosse reponse.
+    // ponytail: plafond 10 Mio par chunks, evite OOM sur grosse reponse.
     private fun cappedBytes(stream: java.io.InputStream, max: Int): ByteArray {
-        stream.use { s ->
-            val out = java.io.ByteArrayOutputStream()
-            val buf = ByteArray(8192)
-            var total = 0
-            while (true) {
-                val n = s.read(buf)
-                if (n < 0) break
-                total += n
-                if (total > max) throw java.io.IOException("Reponse trop volumineuse")
-                out.write(buf, 0, n)
-            }
-            return out.toByteArray()
-        }
+        val out = java.io.ByteArrayOutputStream()
+        stream.use { copyBounded(it, out, max) }
+        return out.toByteArray()
     }
 
 /**
@@ -301,7 +309,85 @@ class HttpSession(
         }
     }
 
-    fun request(method: String, url: String, opts: RequestOpts = RequestOpts()): HttpResponse {
+    fun request(method: String, url: String, opts: RequestOpts = RequestOpts()): HttpResponse =
+        request(method, url, opts, null, MAX_RESPONSE_BYTES)
+
+    /**
+     * Télécharge un corps 2xx vers [dest] en flux, sans jamais le matérialiser
+     * en mémoire. Au-delà de [maxBytes] OCTETS (après décompression), le
+     * fichier est supprimé et l'appel échoue : aucune pièce partielle ne reste.
+     */
+    fun download(
+        url: String,
+        dest: java.io.File,
+        opts: RequestOpts = RequestOpts(),
+        maxBytes: Int = MAX_RESPONSE_BYTES,
+    ): Long {
+        val parent = dest.parentFile
+        if (parent != null && !parent.isDirectory && !parent.mkdirs()) {
+            throw java.io.IOException("dossier de telechargement refuse")
+        }
+        try {
+            val response = request("GET", url, opts, dest, maxBytes)
+            if (!response.ok) {
+                if (response.status == 429) {
+                    throw RateLimitedError("Too many requests (http status: 429)", pronoteErrorCode = null, httpStatus = 429)
+                }
+                throw PronoteAPIError("Bad request (http status: ${response.status})", httpStatus = response.status)
+            }
+            return dest.length()
+        } catch (e: Exception) {
+            dest.delete()
+            throw e
+        }
+    }
+
+    /**
+     * Corps BRUT vers un fichier temporaire, puis décompression BORNÉE vers
+     * [dest]. `gzip` mentant (octets en clair) = le brut est conservé, comme
+     * `gunzip`. Un dépassement ne laisse ni fichier partiel ni temporaire.
+     */
+    private fun streamToFile(
+        stream: java.io.InputStream,
+        dest: java.io.File,
+        gzipped: Boolean,
+        maxBytes: Int,
+    ) {
+        val parent = dest.parentFile ?: java.io.File(".")
+        val temp = java.io.File.createTempFile("telechargement-", ".part", parent)
+        try {
+            stream.use { raw ->
+                java.io.FileOutputStream(temp).use { copyBounded(raw, it, maxBytes) }
+            }
+            if (gzipped) {
+                try {
+                    GZIPInputStream(java.io.FileInputStream(temp)).use { gz ->
+                        java.io.FileOutputStream(dest).use { copyBounded(gz, it, maxBytes) }
+                    }
+                    temp.delete()
+                } catch (_: Exception) {
+                    // Pas un gzip valide : les octets BRUTS (déjà bornés) restent.
+                    dest.delete()
+                    if (!temp.renameTo(dest)) throw java.io.IOException("renommage du telechargement refuse")
+                }
+            } else if (!temp.renameTo(dest)) {
+                throw java.io.IOException("renommage du telechargement refuse")
+            }
+        } catch (e: Exception) {
+            dest.delete()
+            throw e
+        } finally {
+            temp.delete()
+        }
+    }
+
+    private fun request(
+        method: String,
+        url: String,
+        opts: RequestOpts,
+        downloadTo: java.io.File?,
+        maxBytes: Int,
+    ): HttpResponse {
         val maxRedirects = opts.maxRedirects
         var currentMethod = method
         var currentUrl = buildUrl(url, opts.params)
@@ -379,11 +465,28 @@ class HttpSession(
                 // retourne au cache keep-alive et le POST suivant réutilise la
                 // MÊME connexion (pas de handshake TCP+TLS).
                 val stream = if (status >= 400) conn.errorStream else conn.inputStream
-                val raw: ByteArray = if (stream == null) ByteArray(0) else cappedBytes(stream, MAX_RESPONSE_BYTES)
                 // `Content-Encoding` absent = corps déjà en clair (la
                 // décompression est faite par la plateforme quand c'est elle
                 // qui a posé l'en-tête).
                 val gzipped = header("content-encoding").any { it.trim().equals("gzip", ignoreCase = true) }
+                // Téléchargement : le corps ne passe JAMAIS par un tampon
+                // mémoire, même une pièce jointe de plusieurs Mio.
+                if (downloadTo != null && status in 200..299) {
+                    if (stream == null) {
+                        java.io.FileOutputStream(downloadTo).close()
+                    } else {
+                        streamToFile(stream, downloadTo, gzipped, maxBytes)
+                    }
+                    return HttpResponse(
+                        status = status,
+                        ok = true,
+                        url = currentUrl,
+                        headers = received,
+                        text = "",
+                        content = ByteArray(0),
+                    )
+                }
+                val raw: ByteArray = if (stream == null) ByteArray(0) else cappedBytes(stream, MAX_RESPONSE_BYTES)
                 val bytes: ByteArray = if (gzipped) gunzip(raw) else raw
                 return HttpResponse(
                     status = status,

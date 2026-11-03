@@ -166,7 +166,7 @@ internal fun VsnBridge.openAttachment(p: JSONObject): JSONObject {
             ctx,
             homeworkId,
             AssignmentAttachment(id = attachmentId, label = data.name, ref = ""),
-            data.bytes,
+            data,
             epoch,
         ) ?: return JSONObject().put("ok", false).put("error", "Pièce jointe indisponible.")
         openFile(file, mimeOf(data.name))

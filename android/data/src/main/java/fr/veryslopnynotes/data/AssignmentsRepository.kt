@@ -18,12 +18,13 @@ import org.json.JSONObject
 // jointes se téléchargent sur le client local (FileProvider côté UI).
 data class ToggleOutcome(val assignment: Assignment?, val error: String?)
 
-/** Pièce jointe téléchargée : nom pour l'ouvreur, octets à partager. */
-data class AttachmentData(val name: String, val bytes: ByteArray)
+/** Pièce jointe téléchargée : nom pour l'ouvreur, FICHIER temporaire (flux). */
+data class AttachmentData(val name: String, val file: java.io.File)
 
 /**
- * Issue d'un téléchargement de pièce jointe : octets, ou cause affichable.
- * Un échec de session / de débit n'est jamais un « indisponible » silencieux.
+ * Issue d'un téléchargement de pièce jointe : fichier temporaire, ou cause
+ * affichable. Un échec de session / de débit n'est jamais un « indisponible »
+ * silencieux.
  */
 data class AttachmentOutcome(val data: AttachmentData?, val error: String?)
 
@@ -100,6 +101,7 @@ class AssignmentsRepository(
         onDone: (AttachmentOutcome) -> Unit,
     ) {
         Thread {
+            var temp: java.io.File? = null
             val outcome = try {
                 val client = provider() ?: return@Thread post { onDone(AttachmentOutcome(null, null)) }
                 val (from, to) = assignmentWindow(weekStart)
@@ -117,10 +119,17 @@ class AssignmentsRepository(
                 }.orEmpty().firstOrNull { it.id == attachmentId }
                     ?: lessonFiles(client, from, to).firstOrNull { it.id == attachmentId }
                     ?: return@Thread post { onDone(AttachmentOutcome(null, null)) }
-                val bytes = file.data()
                 val name = file.name.trim().take(200).ifEmpty { "piece-jointe" }
-                AttachmentOutcome(AttachmentData(name, bytes), null)
+                // Téléchargement en FLUX vers un temporaire : la pièce n'est
+                // jamais matérialisée en `ByteArray` (jusqu'à 10 Mio).
+                val dest = java.io.File.createTempFile("piece-jointe-", ".part")
+                temp = dest
+                if (file.download(dest, DownloadedFiles.MAX_BYTES) <= 0) {
+                    throw java.io.IOException("pièce jointe vide")
+                }
+                AttachmentOutcome(AttachmentData(name, dest), null)
             } catch (e: Exception) {
+                temp?.delete()
                 // Session morte ou débit limité : re-pair / attente, jamais
                 // « pièce jointe indisponible » (le même chemin que `toggle`).
                 if (mustPropagateReadFailure(e)) {

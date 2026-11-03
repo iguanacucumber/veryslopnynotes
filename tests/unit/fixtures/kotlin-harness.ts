@@ -41,13 +41,16 @@ export interface ParityToolchain {
   ensureParityJars(): Promise<{ port: string; drivers: string; overlay?: string }>;
   openLink(
     jar: string | string[],
-    opts?: { timezone?: string; mainClass?: string },
+    opts?: { timezone?: string; mainClass?: string; jvmFlags?: string[] },
   ): Promise<ParityLink>;
   /**
    * Ouvre le pilote `driverPath` depuis le port compilé et ses pilotes (ou
    * leur overlay). Raccourci des tests de parité : une ligne.
    */
-  openParityLink(driverPath: string, opts?: { timezone?: string }): Promise<ParityLink>;
+  openParityLink(
+    driverPath: string,
+    opts?: { timezone?: string; jvmFlags?: string[] },
+  ): Promise<ParityLink>;
 }
 
 function toolchain(): ParityToolchain {
@@ -74,7 +77,7 @@ function toolchain(): ParityToolchain {
 
   async function openLink(
     jar: string | string[],
-    opts?: { timezone?: string; mainClass?: string },
+    opts?: { timezone?: string; mainClass?: string; jvmFlags?: string[] },
   ): Promise<ParityLink> {
     const java = resolveJava();
     if (!java) throw new Error("`java` absent : le pilote Kotlin ne peut pas démarrer");
@@ -97,7 +100,7 @@ function toolchain(): ParityToolchain {
     if (opts?.mainClass) args.push("-cp", jars.join(delimiter), opts.mainClass);
     else if (jars.length === 1) args.push("-jar", jars[0]!);
     else throw new Error("un classpath multiple exige la classe principale du pilote");
-    const proc = Bun.spawn([java, ...JVM_FLAGS, ...args], {
+    const proc = Bun.spawn([java, ...JVM_FLAGS, ...(opts?.jvmFlags ?? []), ...args], {
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe",
@@ -241,7 +244,7 @@ function toolchain(): ParityToolchain {
    */
   async function openParityLink(
     driverPath: string,
-    opts?: { timezone?: string },
+    opts?: { timezone?: string; jvmFlags?: string[] },
   ): Promise<ParityLink> {
     const jars = await ensureParityJars();
     return openLink(

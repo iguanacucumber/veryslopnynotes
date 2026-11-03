@@ -134,6 +134,29 @@ private class Driver {
             val slot = bench.slot(op)
             ok("files" to JVal.Arr(listFiles(slot.cacheRoot).map { JVal.Str(it) }))
         }
+        // Adoption d'un fichier DÉJÀ téléchargé (flux) : même nom, même garde.
+        "adopt" -> {
+            val slot = bench.slot(op)
+            val epoch = (op.num("epoch") ?: SessionEpoch.current().toDouble()).toLong()
+            val source = File.createTempFile("source-", ".part")
+            source.writeText(op.str("content") ?: "contenu")
+            val adopted = DownloadedFiles.adopt(
+                slot.attachments,
+                op.str("homework") ?: "devoir-1",
+                op.str("id") ?: "1",
+                op.str("label") ?: "piece.pdf",
+                source,
+                epoch,
+            )
+            val exists = adopted != null
+            val out = ok(
+                "ok" to JVal.Bool(exists),
+                "name" to JVal.Str(adopted?.name ?: ""),
+                "sourceExists" to JVal.Bool(source.exists()),
+            )
+            source.delete()
+            out
+        }
         "content" -> {
             val slot = bench.slot(op)
             val name = op.str("name") ?: throw IllegalArgumentException("pilote: name absent")
