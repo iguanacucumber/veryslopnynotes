@@ -75,6 +75,7 @@ function harness(sdk: string): string {
   mkdirSync(join(dir, "shared"), { recursive: true });
   writeFileSync(join(dir, "shared", "placeholder.ts"), "export const placeholder = 1;\n");
   writeFileSync(join(dir, "web", "vite.config.ts"), "export default {};\n");
+  writeFileSync(join(dir, "web", "tsconfig.json"), "{}\n");
   // Le « build » du harnais : le bundle produit est une COPIE du lockfile.
   writeFileSync(
     join(dir, "package.json"),

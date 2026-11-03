@@ -91,6 +91,9 @@ val buildWebUi = tasks.register<Exec>("buildWebUi") {
     inputs.dir(rootProject.projectDir.parentFile.resolve("web/public"))
     inputs.dir(rootProject.projectDir.parentFile.resolve("shared"))
     inputs.file(rootProject.projectDir.parentFile.resolve("web/vite.config.ts"))
+    // Vite lit ce tsconfig pour la transformation : `jsx`, `target` changent
+    // le bundle sans toucher au code source.
+    inputs.file(rootProject.projectDir.parentFile.resolve("web/tsconfig.json"))
     inputs.file(rootProject.projectDir.parentFile.resolve("package.json"))
     // Le lockfile décide des versions RÉSOLUES : sans cette entrée, Gradle dit
     // UP-TO-DATE et l'APK embarque un bundle périmé.
