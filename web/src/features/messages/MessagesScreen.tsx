@@ -90,26 +90,29 @@ export function ConversationListScreen({
       {loading && discussions.length === 0 ? (
         <Loading label="Chargement des discussions…" />
       ) : discussions.length === 0 ? (
-        <EmptyState
-          icon={<IconMessage size={30} />}
-          title={query.trim() ? "Aucune discussion ne correspond." : "Aucune discussion."}
-          body={
-            query.trim()
-              ? "Aucun sujet ne porte ces mots."
-              : "L’établissement n’a publié aucune discussion."
-          }
-          action={
-            query.trim() ? (
-              <button type="button" className="btn btn--small" onClick={() => onQueryChange("")}>
-                Effacer la recherche
-              </button>
-            ) : (
-              <button type="button" className="btn btn--small" onClick={onRefresh}>
-                Actualiser
-              </button>
-            )
-          }
-        />
+        // Avec une erreur, la liste n'est pas connue comme vide (I14).
+        error ? null : (
+          <EmptyState
+            icon={<IconMessage size={30} />}
+            title={query.trim() ? "Aucune discussion ne correspond." : "Aucune discussion."}
+            body={
+              query.trim()
+                ? "Aucun sujet ne porte ces mots."
+                : "L’établissement n’a publié aucune discussion."
+            }
+            action={
+              query.trim() ? (
+                <button type="button" className="btn btn--small" onClick={() => onQueryChange("")}>
+                  Effacer la recherche
+                </button>
+              ) : (
+                <button type="button" className="btn btn--small" onClick={onRefresh}>
+                  Actualiser
+                </button>
+              )
+            }
+          />
+        )
       ) : (
         <div className="list">
           {discussions.map((discussion) => {
@@ -458,22 +461,27 @@ export function NewDiscussionScreen({ recipients, loading, error, sending, onRet
       {loading ? (
         <Loading label="Chargement des destinataires…" />
       ) : recipients.length === 0 ? (
-        <EmptyState
-          icon={<IconMessage size={30} />}
-          title="Aucun destinataire publié par l’établissement."
-          body="La messagerie est active, mais l’établissement ne publie personne."
-        />
+        // Un échec ou un payload illisible n'est pas « personne publié » (I14).
+        error ? null : (
+          <EmptyState
+            icon={<IconMessage size={30} />}
+            title="Aucun destinataire publié par l’établissement."
+            body="La messagerie est active, mais l’établissement ne publie personne."
+          />
+        )
       ) : groups.length === 0 ? (
-        <EmptyState
-          icon={<IconMessage size={30} />}
-          title="Aucun destinataire ne correspond."
-          body="Aucun nom ne porte ces mots."
-          action={
-            <button type="button" className="btn btn--small" onClick={() => setQuery("")}>
-              Effacer la recherche
-            </button>
-          }
-        />
+        error ? null : (
+          <EmptyState
+            icon={<IconMessage size={30} />}
+            title="Aucun destinataire ne correspond."
+            body="Aucun nom ne porte ces mots."
+            action={
+              <button type="button" className="btn btn--small" onClick={() => setQuery("")}>
+                Effacer la recherche
+              </button>
+            }
+          />
+        )
       ) : (
         <div className="stack">
           {groups.map((group) => (

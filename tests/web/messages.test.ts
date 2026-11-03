@@ -7,12 +7,13 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createSeq } from "../../web/src/lib/seq";
 import { createReplyGuard, draftAfterReply } from "../../web/src/features/messages/reply";
-import { ConversationListScreen, ThreadScreen } from "../../web/src/features/messages/MessagesScreen";
+import { ConversationListScreen, NewDiscussionScreen, ThreadScreen } from "../../web/src/features/messages/MessagesScreen";
 import { readBridgeSource } from "../unit/fixtures/bridge-source";
 import {
   isMessagesPayloadReadable,
   type Discussion,
   type DiscussionMessage,
+  type DiscussionRecipient,
 } from "../../web/src/features/messages/model";
 
 useParisTz();
@@ -355,5 +356,105 @@ describe("messagerie — recherche, lignes de liste et fil collé", () => {
     expect(source).toContain("messages-composer");
     expect(source).toContain("toBottom()");
     expect(source).toContain("role=\"log\"");
+  });
+});
+
+// #918 : une ERREUR n'est pas un état vide (I14). La liste, les destinataires et
+// le fil ne doivent jamais affirmer « aucun » quand la donnée est inconnue.
+describe("messagerie : une erreur n'est jamais un état vide (#918)", () => {
+  const discussion: Discussion = {
+    id: "d1",
+    subject: "Cahier de texte",
+    participants: [],
+    unreadCount: 0,
+    lastMessageAt: null,
+    updatedAt: null,
+  };
+
+  function renderList(discussions: Discussion[], query: string, error: string | null): string {
+    return renderToStaticMarkup(
+      createElement(ConversationListScreen, {
+        discussions,
+        query,
+        loading: false,
+        error,
+        stale: Boolean(error),
+        previews: {},
+        onQueryChange: () => {},
+        onOpen: () => {},
+        onMarkRead: () => {},
+        onNew: () => {},
+        onRefresh: () => {},
+      }),
+    );
+  }
+
+  function renderNew(recipients: DiscussionRecipient[], error: string | null): string {
+    return renderToStaticMarkup(
+      createElement(NewDiscussionScreen, {
+        recipients,
+        loading: false,
+        error,
+        sending: false,
+        onRetry: () => {},
+        onCreate: () => {},
+      }),
+    );
+  }
+
+  test("liste : erreur et zéro fil affichent l'erreur et « Réessayer », pas « Aucune discussion »", () => {
+    const html = renderList([], "", "messagerie indisponible");
+    expect(html).toContain("messagerie indisponible");
+    expect(html).toContain("Réessayer");
+    expect(html).not.toContain("Aucune discussion.");
+  });
+
+  test("liste : une recherche sans résultat sous erreur ne dit pas « aucun sujet »", () => {
+    const html = renderList([], "introuvable", "messagerie indisponible");
+    expect(html).not.toContain("Aucune discussion ne correspond");
+    expect(html).not.toContain("Aucun sujet ne porte ces mots");
+  });
+
+  test("nouvelle discussion : erreur et zéro destinataire affichent « Réessayer », pas un établissement sans destinataire", () => {
+    const html = renderNew([], "destinataires indisponibles");
+    expect(html).toContain("destinataires indisponibles");
+    expect(html).toContain("Réessayer");
+    expect(html).not.toContain("Aucun destinataire publié");
+  });
+
+  test("sans erreur, un vrai vide reste un état vide", () => {
+    expect(renderList([], "", null)).toContain("Aucune discussion.");
+    expect(renderNew([], null)).toContain("Aucun destinataire publié");
+  });
+
+  test("fil : erreur et zéro message gardent l'erreur et « Réessayer »", () => {
+    const html = renderToStaticMarkup(
+      createElement(ThreadScreen, {
+        discussion,
+        messages: [],
+        loading: false,
+        error: "fil indisponible",
+        draft: "",
+        sending: false,
+        onDraftChange: () => {},
+        onReply: () => {},
+        onToggleRead: () => {},
+        onDelete: () => {},
+        onRefresh: () => {},
+      }),
+    );
+    expect(html).toContain("fil indisponible");
+    expect(html).toContain("Réessayer");
+    expect(html).not.toContain("Ce fil est vide");
+  });
+
+  test("la route traite un payload de destinataires illisible comme une erreur", () => {
+    const route = readFileSync(join(ROOT, "web/src/routes/messages.tsx"), "utf8");
+    const start = route.indexOf("const loadRecipients");
+    const end = route.indexOf("useEffect(", start);
+    const block = route.slice(start, end);
+    expect(block).toContain("isMessagesPayloadReadable(result.payload)");
+    expect(block).toContain("result.error");
+    expect(block).toContain("Destinataires illisibles");
   });
 });
