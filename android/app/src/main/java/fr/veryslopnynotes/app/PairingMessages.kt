@@ -22,6 +22,7 @@ private val PAIRING_MESSAGES: Map<String, String> = mapOf(
     // Commit refusé : rien n'a été « enregistré » en douce.
     "storage_unavailable" to "Stockage local indisponible : l'appairage n'a pas été enregistré. Réessaie.",
     "session_changed" to "La session a changé pendant l'appairage : rescane le QR puis réessaie.",
+    "session_incomplete" to "L'établissement n'a pas confirmé la session : rescane le QR puis réessaie.",
 )
 
 /** Repli : un code inconnu ne dit rien de l'infrastructure. */

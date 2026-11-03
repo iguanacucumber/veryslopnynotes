@@ -61,6 +61,8 @@ export function demoErrorMessage(code: string | undefined): string {
       return "L'établissement de démonstration ne répond pas : réessaie dans un instant.";
     case "auth_required":
       return "Session expirée : reconnecte l'établissement de démonstration.";
+    case "session_incomplete":
+      return "L'établissement n'a pas confirmé la session : réessaie la démonstration.";
     case "unavailable":
       return "Le téléphone n'a pas répondu : réessaie dans un instant.";
     default:
@@ -90,6 +92,8 @@ export function pairErrorMessage(code: string | undefined): string {
       return "L'établissement limite les connexions : attends une ou deux minutes, puis réessaie.";
     case "school_unreachable":
       return "L'établissement ne répond pas : réessaie dans un instant.";
+    case "session_incomplete":
+      return "L'établissement n'a pas confirmé la session : rescane le QR puis réessaie.";
     case "network":
       return "Réseau indisponible : vérifie ta connexion, puis réessaie.";
     case "bad_request":
