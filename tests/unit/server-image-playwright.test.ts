@@ -70,6 +70,18 @@ describe("#374 — navigateur Playwright absent", () => {
     );
     expect(school.status).toBe(502);
   });
+
+  test("sandbox Chromium indisponible = 501 explicite, jamais un repli sans sandbox", async () => {
+    // Message réel de Chromium quand l'hôte refuse les user namespaces.
+    const message =
+      "Browser logs:\nChromium sandboxing failed!\n" +
+      "No usable sandbox! If you are running on Ubuntu 23.10+ ...";
+    const res = await appThrowing(new Error(message)).handler(post());
+    expect(res.status).toBe(501);
+    expect(await res.json()).toEqual({
+      error: { code: "not_implemented", message: "sandbox Chromium indisponible" },
+    });
+  });
 });
 
 describe("#374 — image Docker : le navigateur est installé au build", () => {

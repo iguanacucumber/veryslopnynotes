@@ -23,6 +23,17 @@ import type { ManualDoc } from "./manuals";
 import { checkPublicHost, systemResolver } from "./ssrf";
 import type { HostResolver } from "./ssrf";
 
+/**
+ * Playwright désactive le sandbox de Chromium par défaut. Le scraper visite
+ * des pages publiques non fiables : le renderer doit rester sandboxé. Sans
+ * user namespaces (hôte ou profil seccomp), le lancement échoue — aucun repli
+ * silencieux vers un navigateur non sandboxé.
+ */
+export const CHROMIUM_LAUNCH_OPTIONS = {
+  headless: true,
+  chromiumSandbox: true,
+} as const;
+
 export interface ManualsConfig {
   readonly platform: string;
 }
@@ -585,7 +596,10 @@ export async function scrapePage(
   } catch {
     throw new ScrapeManualsError("Playwright non installé — e2e manuals skippé (aucune dép ajoutée v1)");
   }
-  const browser = await pw.chromium.launch({ headless: true, timeout: timeoutMs });
+  const browser = await pw.chromium.launch({
+    ...CHROMIUM_LAUNCH_OPTIONS,
+    timeout: timeoutMs,
+  });
   // Annulation RÉELLE : le navigateur est un processus externe, pas une
   // promesse — sans cette fermeture, un délai dépassé laisse tourner un
   // Chromium orphelin (épuisement mémoire).

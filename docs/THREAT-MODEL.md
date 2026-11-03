@@ -238,6 +238,17 @@ sous-ressources du navigateur sont les chemins d'attaque.
   concurrents, délai de 30 s, TLS obligatoire dans l'image. Identifiants
   refusés, page de login jamais ingérée, jar choisi par le serveur et permis
   `0700`/`0600`.
+- Chromium est SANDBOXÉ : Playwright le désactive par défaut,
+  `CHROMIUM_LAUNCH_OPTIONS` l'impose, et le profil seccomp
+  [`chromium-seccomp.json`](../server/chromium-seccomp.json) n'ouvre que le
+  clone des namespaces user/PID/net, `unshare(CLONE_NEWUSER)` et `chroot` ;
+  mount, cgroup, UTS et IPC restent refusés. Le conteneur tourne non-root,
+  sans capability, en racine lecture seule, `no-new-privileges` ; seuls des
+  tmpfs et le jar sont inscriptibles. Sans user namespaces (hôte ou seccomp),
+  le lancement ÉCHOUE (501 « sandbox Chromium indisponible ») : aucun repli
+  vers un Chromium non sandboxé
+  ([`manuals-scrape.ts`](../server/infrastructure/manuals-scrape.ts),
+  [`server/README.md`](../server/README.md)).
 - Le contenu récupéré est marqué `Untrusted` avant l'IA (T2), et le serveur ne
   contacte jamais Pronote (I1).
 
@@ -248,14 +259,23 @@ exposition publique est une erreur d'opérateur que l'image ne peut pas
 empêcher. Le service peut servir de proxy pour atteindre des sites publics
 depuis l'IP de l'opérateur (attribution, conditions d'utilisation), et il n'a
 pas de quota par client au-delà de deux scrapes simultanés. Chromium et
-Playwright restent une surface d'exécution. Le jar de session est en clair sur
-l'hôte (protégé par les permissions, pas par le Keystore) : une compromission
-de l'hôte le lit.
+Playwright restent une surface d'exécution : le sandbox protège le renderer,
+pas le processus navigateur, les services GPU/réseau ni le noyau. Le profil
+seccomp élargit clone/unshare au strict nécessaire : un renderer compromis
+gagne des capabilities dans SON user namespace, pas dans le conteneur. Le
+conteneur est une isolation par namespaces/cgroups, PAS une isolation VM : une
+faille de Chromium hors renderer ou du noyau peut donc traverser. Le sandbox
+dépend des user namespaces non privilégiés de l'hôte ; si un réglage ou le
+profil seccomp dérive, le scrape échoue au lieu de tourner sans sandbox. gVisor
+ou une VM dédiée est le cran supérieur pour des pages franchement hostiles. Le
+jar de session est en clair sur l'hôte (protégé par les permissions, pas par le
+Keystore) : une compromission de l'hôte le lit.
 
 **Preuves** : `tests/unit/scraper-ssrf.test.ts`,
 `tests/unit/scraper-limits.test.ts`, `tests/unit/scraper-jar.test.ts`,
 `tests/unit/scraper-only.test.ts`, `tests/unit/scraper-concurrency.test.ts`,
-`tests/unit/server-image-playwright.test.ts` et
+`tests/unit/server-image-playwright.test.ts`,
+`tests/architecture/chromium-sandbox.test.ts` et
 `tests/contracts/contracts.test.ts`.
 
 ## T5 — Clé perdue

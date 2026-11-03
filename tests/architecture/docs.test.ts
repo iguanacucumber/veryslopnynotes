@@ -372,7 +372,8 @@ describe("registre d'invariants", () => {
       ["docs/architecture/BUILD.md", 4_600],
       ["android/README.md", 9_500],
       ["web/README.md", 4_000],
-      ["server/README.md", 4_800],
+      // +1000 pour le sandbox Chromium et le profil seccomp.
+      ["server/README.md", 5_800],
       ["shared/contracts/README.md", 1_000],
       // +500 pour la publication loopback et le digest Docker (#921).
       ["docs/RELEASE.md", 7_500],

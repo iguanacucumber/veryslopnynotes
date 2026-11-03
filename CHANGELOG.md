@@ -19,5 +19,8 @@ la section `0.1.0` le jour du tag.
 
 ### Sécurité
 
+- Scraper : sandbox Chromium ACTIF dans l'image, confiné par un profil seccomp
+  étroit (namespaces user/PID/net seulement) et une commande Docker sans
+  capabilities.
 - Release sans adresse de serveur par défaut : le défaut émulateur et le HTTP
   en clair restent confinés au variant debug (SEC-01).

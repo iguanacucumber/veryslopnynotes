@@ -17,7 +17,9 @@ RUN bunx playwright install --with-deps chromium
 # Secrets/clés/.env* exclus via .dockerignore (jamais COPY).
 COPY server ./server
 COPY shared ./shared
-# Non privilégié : Chromium refuse de démarrer en root sans `--no-sandbox`.
+# Non privilégié : Chromium refuse le sandbox en root. Le sandbox reste ACTIF
+# (chromiumSandbox: true) ; la commande documentée fournit le profil seccomp
+# étroit qui autorise les user namespaces (server/chromium-seccomp.json).
 # Seul le répertoire du jar de session (0700) appartient au compte.
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin vsn \
  && mkdir -p /app/playwright/.auth \
