@@ -93,6 +93,14 @@ open class ClientBase(
     private val clock: Clock = opts.clock
 
     /**
+     * Appelé APRÈS une rotation du jeton mobile (`refresh`), jamais en mode
+     * identifiant. L'appairage y branche l'écriture de la session : un jeton
+     * tourné resté en mémoire meurt au prochain démarrage.
+     */
+    @Volatile
+    var onTokenRotated: ((String) -> Unit)? = null
+
+    /**
      * `null` = désactivée. Repart vide à chaque `refresh` et à chaque écriture.
      * `internal` : le harnais de parité y injecte une horloge.
      */
@@ -249,8 +257,10 @@ open class ClientBase(
         val lastConn = authData.fields["derniereConnexion"]
         // Falsy = `null` ; sinon `.V` direct (non-objet = jeté).
         lastConnection = if (jsTruthy(lastConn)) datetimeParse((lastConn as JVal.Obj).fields["V"]) else null
+        var rotated: String? = null
         if ((loginMode == "qr_code" || loginMode == "token") && jsTruthy(authData.fields["jetonConnexionAppliMobile"])) {
             password = strOf(authData.fields["jetonConnexionAppliMobile"])
+            rotated = password
         }
         userSettings = post("ParametresUtilisateur", null, null)
         val ressource = (((userSettings as? JVal.Obj)?.fields?.get("dataSec") as? JVal.Obj)
@@ -259,7 +269,11 @@ open class ClientBase(
         communication.authorizedOnglets =
             prepareOnglets((((userSettings as? JVal.Obj)?.fields?.get("dataSec") as? JVal.Obj)
                 ?.fields?.get("data") as? JVal.Obj)?.fields?.get("listeOnglets"))
-        return true.also { logged_in = true }
+        // #870 : le jeton n'est annoncé qu'une fois `logged_in` ET `info` posés :
+        // une session à moitié ouverte ne doit jamais atteindre le disque.
+        logged_in = true
+        rotated?.let { onTokenRotated?.invoke(it) }
+        return true
     }
 
     private fun do2fa(doVerifyPin: Boolean, doRegisterDevice: Boolean, pin: String?, identifier: String?) {

@@ -36,7 +36,11 @@ sealed interface PairingResult {
 
 /** Sortie de la restauration au démarrage (store chiffré → client local). */
 sealed interface RestoreResult {
-    data object Restored : RestoreResult
+    /**
+     * Session publiée. [tokenSaved] faux = le jeton tourné n'a pas atteint le
+     * disque : la session vit en mémoire, le pont PUBLIE cet échec.
+     */
+    data class Restored(val tokenSaved: Boolean = true) : RestoreResult
     data object NoSession : RestoreResult
     /** Jeton mort (tourné, révoqué) : le store est vidé ; `sessionCleared` dit si le disque a suivi. */
     data class Dead(
@@ -243,6 +247,10 @@ class PairingRepository(
             PronoteSession.clear()
             return PairingResult.Err("internal", "Session illisible : réessaie l'appairage.")
         }
+        // Le client publié est le seul écrivain de son jeton : un refresh
+        // ultérieur le persiste par la même garde d'identité.
+        client.onTokenRotated = rotationSink(client)
+        RotatedTokenWrite.reset()
         return PairingResult.Ok(accountId)
     }
 
@@ -270,8 +278,14 @@ class PairingRepository(
         }
         provider()?.let { existing ->
             val missing = clientMissing(existing, stored)
-            return if (missing.isEmpty()) RestoreResult.Restored else rejectIncomplete(missing)
+            return if (missing.isEmpty()) {
+                RestoreResult.Restored(tokenSaved = !RotatedTokenWrite.failed())
+            } else {
+                rejectIncomplete(missing)
+            }
         }
+        val expected = AccountIdentity.of(stored.endpointUrl, stored.username)
+            ?: return rejectIncomplete(listOf("account"))
         // Époque capturée AVANT l'authentification : une déconnexion qui
         // l'invalide pendant `tokenLogin` ne peut pas publier le client restauré.
         val epoch = SessionEpoch.current()
@@ -309,11 +323,25 @@ class PairingRepository(
             }
             val missing = clientMissing(client, stored)
             if (missing.isNotEmpty()) return rejectIncomplete(missing)
+            // Le login a pu TOURNER le jeton : le disque doit suivre avant que
+            // la session soit publiée, sinon le prochain démarrage rouvre avec
+            // l'ancien. Un échec d'écriture ne condamne pas la session en
+            // mémoire : il est rendu à l'appelant, jamais avalé.
+            val rotated = try {
+                client.exportCredentials().password
+            } catch (_: Exception) {
+                return rejectIncomplete(listOf("credentials"))
+            }
+            val saved = saveRotatedToken(sessions, expected, rotated)
+            RotatedTokenWrite.report(saved)
             // `null` = l'époque a changé : ne PAS publier un client dont la
             // session vient d'être invalidée (logout concurrent).
             val published = SessionEpoch.writeIfCurrent(epoch) { PronoteSession.set(client) }
             if (published == null) return rejectIncomplete(listOf("epoch"))
-            RestoreResult.Restored
+            // Le jeton est écrit dès le prochain refresh, par la même garde
+            // d'identité que la restauration.
+            client.onTokenRotated = rotationSink(client)
+            RestoreResult.Restored(tokenSaved = saved.ok)
         } catch (e: Exception) {
             if (e is IOException || !isSessionFailure(e)) {
                 RestoreResult.Offline
@@ -334,6 +362,26 @@ class PairingRepository(
                 RestoreResult.Dead(DeviceAuth.REJECTED_MESSAGE, cleared.ok, purgeFailed = !purgeResult.ok)
             }
         }
+    }
+
+    /**
+     * Écrit le jeton tourné du client COURANT. L'identité du client est la
+     * garde : un client remplacé (logout, autre compte) ne réécrit jamais la
+     * session qui l'a remplacé.
+     */
+    private fun rotationSink(client: Client): (String) -> Unit = { token ->
+        val expected = try {
+            val (endpoint, username, _, _, _) = client.exportCredentials()
+            AccountIdentity.of(endpoint, username)
+        } catch (_: Exception) {
+            null
+        }
+        val written = if (expected == null) {
+            WriteResult.Refused("identité inconnue")
+        } else {
+            saveRotatedToken(sessions, expected, token)
+        }
+        RotatedTokenWrite.report(written)
     }
 
     /** Champs manquants du CLIENT, y compris l'identité persistée. */
@@ -414,6 +462,7 @@ class PairingRepository(
         SessionGate.serialized {
             val result = purge.purge(AccountPurgeMode.LOGOUT, null)
             if (result.ok) {
+                RotatedTokenWrite.reset()
                 WriteResult.Written
             } else {
                 WriteResult.Failed((result as? AccountPurgeResult.Incomplete)?.summary() ?: "purge incomplète")

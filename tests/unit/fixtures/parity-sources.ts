@@ -241,6 +241,9 @@ export const PRODUCTION_SOURCES: string[] = [
   // #862 : repli mémoire et store de session EFFECTIF. Fichier PUR : le
   // harnais EXÉCUTE un logout dégradé puis un lancement sain (rien ne revient).
   join(DATA, "SessionFallback.kt"),
+  // #867 : le jeton tourné est écrit SOUS le verrou de session, avec l'identité
+  // du client comme garde. Fichier PUR : le harnais EXÉCUTE le redémarrage.
+  join(DATA, "SessionRotation.kt"),
   join(DATA, "SyncJobOutcome.kt"),
   // #893 : fuseau de l'établissement et horloge injectable, partagés par les
   // fenêtres EDT/devoirs et les payloads. Fichier PUR : le harnais EXÉCUTE le

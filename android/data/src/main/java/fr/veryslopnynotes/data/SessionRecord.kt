@@ -19,6 +19,17 @@ class StoredSession(
     /** `JETON` (QR) ou `IDENTIFIANT` (démo) ; une session d'avant ce champ reste `JETON`. */
     val mode: String = SessionMode.JETON,
 ) {
+    /** Même compte, jeton tourné : rien d'autre ne bouge. */
+    fun withToken(token: String): StoredSession = StoredSession(
+        endpointUrl = endpointUrl,
+        username = username,
+        password = token,
+        uuid = uuid,
+        clientIdentifier = clientIdentifier,
+        schoolUrl = schoolUrl,
+        mode = mode,
+    )
+
     override fun toString(): String = "StoredSession(url=***, user=***)"
 }
 
