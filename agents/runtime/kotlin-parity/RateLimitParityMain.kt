@@ -31,6 +31,19 @@ private fun ok(vararg pairs: Pair<String, JVal>): JVal.Obj = JVal.Obj(linkedMapO
 
 private fun cookieResponse(): JVal = JVal.Obj(linkedMapOf())
 
+/** Erreurs d'un établissement, telles que `Communication.post` les lève. */
+private fun errorOf(kind: String?): Exception = when (kind) {
+    "http401" -> PronoteAPIError("Bad request (http status: 401)", httpStatus = 401)
+    "g10" -> PronoteAPIError("Session expirée", 10, "session expirée")
+    "g22" -> ExpiredObject("objet d'une session précédente")
+    "g25" -> RateLimitedError()
+    "g99" -> PronoteAPIError("Bizarre", 99, "Bizarre")
+    "http403" -> PronoteAPIError("Bad request (http status: 403)", httpStatus = 403)
+    "http500" -> PronoteAPIError("Bad request (http status: 500)", httpStatus = 500)
+    "http503" -> PronoteAPIError("Bad request (http status: 503)", httpStatus = 503)
+    else -> throw IllegalArgumentException("pilote: erreur inconnue : $kind")
+}
+
 /**
  * Client de test : le TRANSPORT est remplacé, le vrai `post`/`sendWithRefresh`
  * de production est rejoué (porte de refresh, porte de débit, rejeu).
@@ -119,7 +132,7 @@ private class Driver {
         // remonte typée, et la requête suivante ne repart pas.
         "refreshRateLimited" -> {
             val client = ScriptedClient(
-                onSend = { n -> if (n == 1) throw PronoteAPIError("panne") else cookieResponse() },
+                onSend = { n -> if (n == 1) throw errorOf("g10") else cookieResponse() },
                 onRefresh = { throw RateLimitedError() },
             )
             val first = catchName { client.post("DernieresNotes", 198.0, null) }
@@ -137,7 +150,7 @@ private class Driver {
             val client = ScriptedClient(
                 onSend = { n ->
                     when (n) {
-                        1 -> throw PronoteAPIError("panne")
+                        1 -> throw errorOf("http401")
                         2 -> throw RateLimitedError()
                         else -> cookieResponse()
                     }
@@ -153,17 +166,37 @@ private class Driver {
             )
         }
 
-        // Une erreur GÉNÉRIQUE rafraîchit et rejoue (comportement historique).
-        "genericRefreshRetried" -> {
+        // Une erreur NON authentifiante (5xx, G inconnu, 403) NE rafraîchit
+        // pas : la session est intacte, c'est à l'appelant de backoff.
+        "genericNoRefresh" -> {
             val client = ScriptedClient(
                 onSend = { n ->
-                    if (n == 1) throw PronoteAPIError("panne") else cookieResponse()
+                    if (n == 1) throw PronoteAPIError("panne", httpStatus = 500) else cookieResponse()
                 },
             )
             val outcome = catchName { client.post("DernieresNotes", 198.0, null) }
             ok(
                 "sends" to JVal.Num(client.sends.toDouble()),
                 "refreshes" to JVal.Num(client.refreshes.toDouble()),
+                "error" to (outcome?.let { JVal.Str(it) } ?: JVal.Null),
+            )
+        }
+
+        // Politique complète : le premier envoi échoue avec `kind`, le second
+        // (s'il a lieu) réussit. Le nom de la fonction décide du rejeu.
+        "policy" -> {
+            val kind = op.str("kind")
+            val function = op.str("function") ?: "DernieresNotes"
+            val error = errorOf(kind)
+            val client = ScriptedClient(
+                onSend = { n -> if (n == 1) throw error else cookieResponse() },
+            )
+            val outcome = catchName { client.post(function, 198.0, null) }
+            ok(
+                "sends" to JVal.Num(client.sends.toDouble()),
+                "refreshes" to JVal.Num(client.refreshes.toDouble()),
+                "replayed" to JVal.Bool(client.sends > 1),
+                "sessionFailure" to JVal.Bool(isSessionFailure(error)),
                 "error" to (outcome?.let { JVal.Str(it) } ?: JVal.Null),
             )
         }
