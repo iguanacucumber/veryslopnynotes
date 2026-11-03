@@ -244,7 +244,10 @@ sous-ressources du navigateur sont les chemins d'attaque.
   [`rate-limit.ts`](../server/infrastructure/rate-limit.ts).
 - Garde SSRF : refus des IP privées/réservées et des noms qui résolvent vers
   elles, chaîne de redirections suivie et re-vérifiée, URL finale re-testée,
-  WebSocket et service workers bloqués, téléchargements coupés :
+  `context.route` sur toutes les pages (popups fermées), schéma non `http(s)`
+  coupé, WebSocket et service workers bloqués, téléchargements coupés ; le
+  document et les hôtes de redirection sont épinglés à l'adresse validée
+  (`--host-resolver-rules`) :
   [`ssrf.ts`](../server/infrastructure/ssrf.ts),
   [`manuals-scrape.ts`](../server/infrastructure/manuals-scrape.ts).
 - Bornes : corps JSON en streaming ≤ 16 Kio (`413`), HTML ≤ 1 Mo, 2 scrapes
@@ -265,8 +268,12 @@ sous-ressources du navigateur sont les chemins d'attaque.
 - Le contenu récupéré est marqué `Untrusted` avant l'IA (T2), et le serveur ne
   contacte jamais Pronote (I1).
 
-**Risque résiduel** : la fenêtre TOCTOU de la résolution DNS est réelle et
-documentée dans `ssrf.ts` ; la fermer demande d'épingler l'adresse résolue. Sans
+**Risque résiduel** : les hôtes du document et des redirections sont épinglés,
+mais pas les sous-ressources (hôte inconnu au lancement) : leur fenêtre TOCTOU
+est réelle et fermée par la politique d'égression réseau
+([`SERVER-EGRESS.md`](architecture/SERVER-EGRESS.md)), qui valide l'adresse
+connectée et refuse le direct. Sans cette règle d'exploitation, un rebinding de
+sous-ressource reste possible. Sans
 authentification, tout processus local peut utiliser le scraper, et une
 exposition publique est une erreur d'opérateur que l'image ne peut pas
 empêcher. Le service peut servir de proxy pour atteindre des sites publics

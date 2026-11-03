@@ -83,6 +83,8 @@ mock.module("playwright", () => ({
   chromium: {
     launch: async () => ({
       newContext: async () => ({
+        route: async () => {},
+        on: () => {},
         routeWebSocket: async () => {},
         newPage: async () => ({
           url: () => PUBLIC_URL,

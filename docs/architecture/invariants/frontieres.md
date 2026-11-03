@@ -28,15 +28,15 @@
 <a id="i8"></a>
 
 ## I8 — Le scraper est un sidecar local, sans auth, borné et sans SSRF
-- Invariant : session/clé locales ; scraper local sans auth ; hors loopback,
+- Invariant : session/clé locale ; scraper sans auth ; hors loopback,
   `ALLOW_PUBLIC=1` + `SCRAPER_TOKEN` Bearer, seau par jeton, file bornée
   (`429`+`Retry-After`). Identifiants refusés, login jamais ingéré, jar du
-  SERVEUR 0700/0600, `authFile` refusé. Hôtes privés/internes, WebSocket/SW
-  refusés ; 20 redirections, URL finale re-vérifiée. Corps JSON
-  `application/json`, ≤16 Kio streamé (`413`), téléchargements coupés
-  (`acceptDownloads: false`). HTML borné (1 Mo), 2 scrapes, 30 s, 504. Image
-  non-root au digest, TLS obligatoire, `HOST` non forcé, `/v1/ready`, drain
-  SIGTERM.
+  SERVEUR 0700/0600, `authFile` refusé. Hôtes privés, non-http, popups, WS/SW
+  refusés ; 20 redirections, URL finale re-vérifiée. Document épinglé ;
+  sous-ressources via égression réseau. JSON `application/json`
+  ≤16 Kio streamé (`413`), téléchargements coupés. HTML borné (1 Mo), 2
+  scrapes, 30 s, 504. Non-root, TLS obligatoire, `HOST` non forcé,
+  `/v1/ready`, drain SIGTERM.
 - Test : `tests/unit/scraper-ssrf.test.ts`, `tests/unit/scraper-only.test.ts`,
   `tests/unit/scraper-jar.test.ts`, `tests/unit/scraper-limits.test.ts`,
   `tests/unit/scraper-concurrency.test.ts`,

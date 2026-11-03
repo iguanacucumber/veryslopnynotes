@@ -5,9 +5,12 @@
 //
 // Garde SSRF (I8) : hôte normalisé WHATWG, résolu avant la navigation, chaîne
 // de redirections suivie à la main (autant que Chromium), URL finale
-// re-vérifiée, sous-ressources privées coupées, WebSocket gardés et service
-// workers bloqués. Reste la fenêtre TOCTOU de la
-// résolution côté navigateur (cf. ssrf.ts).
+// re-vérifiée, TOUTES les pages du contexte routées (popups comprises et
+// fermées), schéma non http(s) coupé, sous-ressources privées coupées,
+// WebSocket gardés et service workers bloqués. Les hôtes du document et de la
+// chaîne de redirections sont ÉPINGLÉS dans Chromium (adresse validée) ; les
+// sous-ressources gardent la fenêtre TOCTOU, fermée au niveau réseau par la
+// politique d'égression (docs/architecture/SERVER-EGRESS.md).
 // Jar de session : celui du SERVEUR uniquement (I24) ; un corps qui demande
 // `authFile` est refusé. Répertoire 0700, jar 0600, une seule sauvegarde.
 // Le scraper ne s'authentifie pas : `username`/`password` sont refusés, et une
@@ -20,7 +23,7 @@ import { load } from "cheerio";
 import { saveJar } from "./jar-store";
 import { truncateManualText } from "./manuals";
 import type { ManualDoc } from "./manuals";
-import { checkPublicHost, systemResolver } from "./ssrf";
+import { checkPublicHost, resolvePublicHost, systemResolver } from "./ssrf";
 import type { HostResolver } from "./ssrf";
 
 /**
@@ -148,6 +151,16 @@ function hostOf(raw: string): string | null {
   }
 }
 
+/** Seul http(s) sort : `file:`, `ftp:`, `data:` et `blob:` sont coupés. */
+function isHttpUrl(raw: string): boolean {
+  try {
+    const protocol = new URL(raw).protocol;
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Hôte public APRÈS résolution DNS. Un nom qui résout vers une IP
  * privée/interne est refusé (motif explicite : `private_host`), un nom
@@ -206,6 +219,63 @@ const REDIRECT_CHECK_TIMEOUT_MS = 5_000;
 const MAX_REDIRECT_HOPS = 20;
 
 /**
+ * Arguments Chromium du proxy d'égression imposé par l'exploitant.
+ *
+ * `SCRAPER_EGRESS_PROXY` n'est PAS un paramètre d'appelant : il vient de
+ * l'environnement du service. Un proxy absent laisse la garde réseau faire foi
+ * (`SERVER-EGRESS.md`) ; un proxy illisible REFUSE le scrape plutôt que de
+ * partir en direct. `<-loopback>` retire le contournement implicite de la
+ * boucle locale : même `127.0.0.1` passe par le proxy contrôlé.
+ */
+export function chromiumEgressArgs(proxy: string | undefined): readonly string[] {
+  const value = proxy?.trim();
+  if (!value) return [];
+  let protocol: string;
+  try {
+    protocol = new URL(value).protocol;
+  } catch {
+    throw new ScrapeManualsError("proxy d'egression illisible", "generic");
+  }
+  if (protocol !== "http:" && protocol !== "https:") {
+    throw new ScrapeManualsError("proxy d'egression http(s) requis", "generic");
+  }
+  return [`--proxy-server=${value}`, "--proxy-bypass-list=<-loopback>"];
+}
+
+/**
+ * Règles `--host-resolver-rules` épinglant chaque hôte vérifié à une adresse
+ * DÉJÀ validée.
+ *
+ * Chromium résout de son côté au moment de la connexion : sans épinglage, un
+ * enregistrement DNS qui change entre la garde et la navigation ferait partir
+ * la requête vers une IP interne (rebinding). Une seule adresse est retenue
+ * (la première publique) ; une résolution qui échoue ou devient privée REFUSE
+ * le scrape (fail-closed). Les littéraux publics n'ont rien à épingler.
+ *
+ * Les sous-ressources restent hors de ces règles (hôte inconnu au lancement) :
+ * voir `SERVER-EGRESS.md` pour la fermeture réseau.
+ */
+export async function chromiumResolverRules(
+  hosts: readonly string[],
+  resolve: HostResolver = systemResolver,
+): Promise<readonly string[]> {
+  const rules: string[] = [];
+  for (const host of new Set(hosts)) {
+    const resolution = await resolvePublicHost(host, resolve);
+    if (resolution.verdict === "private") {
+      throw new ScrapeManualsError("epinglage : hote prive refuse", "private_host");
+    }
+    if (resolution.verdict === "unresolved") {
+      throw new ScrapeManualsError("epinglage : hote introuvable (resolution DNS)", "unresolved_host");
+    }
+    const address = resolution.addresses[0];
+    if (!address) continue; // littéral public : connexion directe
+    rules.push(`MAP ${host} ${address.includes(":") ? `[${address}]` : address}`);
+  }
+  return rules;
+}
+
+/**
  * Vérifie la chaîne de redirections AVANT de lancer le navigateur.
  *
  * Chromium suit les redirections SANS repasser par le route handler de
@@ -213,6 +283,9 @@ const MAX_REDIRECT_HOPS = 20;
  * publique en 302 vers http://169.254.169.254/… atteint le service interne.
  * On suit donc la chaîne à la main et on refuse dès qu'un maillon est privé ;
  * chaque maillon est aussi RÉSOLU (nom -> adresses) avant le `fetch`.
+ *
+ * Rend les hôtes rencontrés (dédoublonnés) : ils sont épinglés dans Chromium
+ * avant le lancement, sinon le navigateur re-résoudrait ces noms.
  *
  * Au-delà de MAX_REDIRECT_HOPS, REFUS (fail-closed) : un délai de vérification
  * est un refus, jamais une navigation à l'aveugle.
@@ -226,10 +299,19 @@ export async function assertPublicRedirectChain(
   timeoutMs = REDIRECT_CHECK_TIMEOUT_MS,
   resolve: HostResolver = systemResolver,
   rejectCredentials = false,
-): Promise<void> {
+): Promise<readonly string[]> {
   const signal = AbortSignal.timeout(timeoutMs);
+  const hosts = new Set<string>();
+  const remember = (raw: string): void => {
+    try {
+      hosts.add(new URL(raw).hostname);
+    } catch {
+      /* URL illisible : assertPublicUrl refusera */
+    }
+  };
   let current = startUrl;
   for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop += 1) {
+    remember(current);
     await assertPublicUrl(current, "redirection", resolve, rejectCredentials);
     let res: Response;
     try {
@@ -244,14 +326,14 @@ export async function assertPublicRedirectChain(
       // navigateur partir serait atteindre une cible non contrôlée (fail-closed).
       throw new ScrapeManualsError("redirections non verifiables (reseau indisponible)", "generic");
     }
-    if (res.status < 300 || res.status >= 400) return; // pas de redirection
+    if (res.status < 300 || res.status >= 400) return [...hosts]; // pas de redirection
     const location = res.headers.get("location");
-    if (!location) return;
+    if (!location) return [...hosts];
     let target: string;
     try {
       target = new URL(location, current).toString();
     } catch {
-      return;
+      return [...hosts];
     }
     await assertPublicUrl(target, "redirection", resolve, rejectCredentials);
     current = target;
@@ -262,6 +344,7 @@ export async function assertPublicRedirectChain(
       throw new ScrapeManualsError("trop de redirections (chaine non verifiee)", "private_host");
     }
   }
+  return [...hosts];
 }
 
 // Extraction texte : script/style retirés, entités HTML DÉCODÉES (« &eacute; »,
@@ -576,12 +659,21 @@ export async function scrapePage(
   // La chaîne de redirections est vérifiée AVANT le navigateur : Chromium
   // suit un 302 sans repasser par le route handler, la cible interne serait
   // donc atteinte (requête à l'aveugle) si on attendait la navigation.
-  await assertPublicRedirectChain(
+  const chainHosts = await assertPublicRedirectChain(
     opts.startUrl,
     Math.min(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS, REDIRECT_CHECK_TIMEOUT_MS),
     resolve,
     rejectCredentials,
   );
+  // Chaque hôte validé est ÉPINGLÉ à son adresse dans Chromium : le navigateur
+  // ne peut plus rebinder le document ni un saut de redirection.
+  const resolverRules = await chromiumResolverRules(chainHosts, resolve);
+  const chromiumArgs = [
+    ...(resolverRules.length > 0
+      ? [`--host-resolver-rules=${resolverRules.join(",")}`]
+      : []),
+    ...chromiumEgressArgs(process.env.SCRAPER_EGRESS_PROXY),
+  ];
   // Le jar est celui du SERVEUR, et lui seul : le navigateur ne monte jamais
   // la session d'un autre tenant. La page web n'en monte AUCUN.
   const jar = config.useSession ? opts.defaultAuthFile ?? DEFAULT_AUTH_FILE : null;
@@ -598,6 +690,8 @@ export async function scrapePage(
   }
   const browser = await pw.chromium.launch({
     ...CHROMIUM_LAUNCH_OPTIONS,
+    // Les règles viennent de la garde et de l'exploitant : jamais d'un appelant.
+    ...(chromiumArgs.length > 0 ? { args: chromiumArgs } : {}),
     timeout: timeoutMs,
   });
   // Annulation RÉELLE : le navigateur est un processus externe, pas une
@@ -653,34 +747,48 @@ export async function scrapePage(
       }
       await socket.close().catch(() => {});
     });
-    const page = await context.newPage();
-    // Le navigateur suit les redirections : une URL publique qui répond 302
-    // vers http://169.254.169.254/… serait atteinte si on ne coupait pas la
-    // navigation. Le nom est RÉSOLU ici aussi — un nom public qui pointe vers
-    // une IP interne est coupé AVANT que la requête parte (rebinding).
     let blockedTarget = false;
+    // `context.route` couvre TOUTES les pages du contexte, y compris celles
+    // qu'un `window.open` crée : `page.route` seul laissait une popup naviguer
+    // hors garde. Enregistré avant la première page, donc aucun trou.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await page.route("**/*", async (route: any) => {
+    await context.route("**/*", async (route: any) => {
       // API Playwright : `route.request()` est une MÉTHODE.
       const request = typeof route?.request === "function" ? route.request() : null;
       const target = typeof request?.url === "function" ? request.url() : "";
       const kind = typeof request?.resourceType === "function" ? request.resourceType() : "document";
-      if (/^https?:\/\//i.test(target)) {
-        const host = hostOf(target);
-        // Nom illisible ou privé (littéral OU nom qui résout vers une IP
-        // privée) : la requête est coupée.
-        const verdict = host === null ? "private" : await checkPublicHost(host, resolve);
-        if (verdict !== "public") {
-          // Navigation (document) bloquée = scrape refusé ; sous-ressource
-          // bloquée = simple accusé de réception (une image d'un réseau privé
-          // ne doit pas faire échouer le scrape). Un nom INTROUVABLE n'est pas
-          // un hôte privé : la navigation échoue, sans motif SSRF.
-          if (kind === "document" && verdict === "private") blockedTarget = true;
-          await route.abort().catch(() => {});
-          return;
-        }
+      if (!isHttpUrl(target)) {
+        // `file:`, `ftp:`, `data:` et `blob:` ne sortent pas : seul http(s) a
+        // une raison d'être servi à une page non fiable (`ws` a son routeur).
+        await route.abort().catch(() => {});
+        return;
+      }
+      const host = hostOf(target);
+      // Nom illisible ou privé (littéral OU nom qui résout vers une IP
+      // privée) : la requête est coupée.
+      const verdict = host === null ? "private" : await checkPublicHost(host, resolve);
+      if (verdict !== "public") {
+        // Navigation (document) bloquée = scrape refusé ; sous-ressource
+        // bloquée = simple accusé de réception (une image d'un réseau privé
+        // ne doit pas faire échouer le scrape). Un nom INTROUVABLE n'est pas
+        // un hôte privé : la navigation échoue, sans motif SSRF.
+        if (kind === "document" && verdict === "private") blockedTarget = true;
+        await route.abort().catch(() => {});
+        return;
       }
       await route.continue().catch(() => {});
+    });
+    const page = await context.newPage();
+    // Une popup est FERMÉE dès sa création : même routée, une page ouverte par
+    // le contenu hostile n'a aucun rôle dans un scrape d'une seule page.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    context.on("page", (other: any) => {
+      if (other === page) return;
+      try {
+        void other.close().catch(() => {});
+      } catch {
+        /* noop */
+      }
     });
     log(`scrape ${config.label} -> 1 page`);
     // Statut HTTP vérifié AVANT toute extraction : une page d'erreur (404/500)

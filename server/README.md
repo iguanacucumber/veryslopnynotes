@@ -132,20 +132,22 @@ server {
 Le jeton reste hors du dépôt (gestionnaire de secrets du proxy) ; un jeton
 commité se rotate immédiatement.
 
-Garde-fous côté serveur (#362, #779) : seuls des hôtes publics sont visités
-(IP privée refusée, IPv4-mapped comprise), la chaîne de redirections est
-vérifiée avant le navigateur (sonde injoignable = refus) et l'URL finale
-après ; WebSocket gardés par `routeWebSocket`, service workers bloqués, sinon
-ils contourneraient `page.route`. Jar du SERVEUR (#538) préparé en 0700 au
-démarrage, temporaires nettoyés, écrit en 0600 par temporaire + `rename`,
-sérialisé, une seule sauvegarde, logs sans contenu ; cookies bornés à leur
-domaine, page web sans jar.
+Garde-fous (#362, #779, #933) : seuls des hôtes publics sont visités (IP
+privée refusée, IPv4-mapped comprise), la chaîne de redirections est vérifiée
+avant le navigateur (sonde injoignable = refus) et l'URL finale après ;
+`context.route` couvre TOUTES les pages (popup fermée dès sa création), seul
+`http(s)` sort (`file:`, `ftp:`, `data:`, `blob:` coupés), WebSocket gardés,
+service workers bloqués. Le document et les hôtes de redirection sont ÉPINGLÉS
+dans Chromium à l'adresse validée (`--host-resolver-rules`). Jar du SERVEUR
+(#538) en 0700, écrit en 0600 par temporaire + `rename`, sérialisé, une seule
+sauvegarde, logs sans contenu ; cookies bornés, page web sans jar.
 
-Le nom de l'hôte est aussi RÉSOLU (#419) : un nom public qui pointe vers une
-IP interne (rebinding DNS) est refusé avant la navigation, avec un motif
-explicite (`403 private_host`) — jamais un échec muet. Un nom introuvable est
-refusé de même (`502 unresolved_host`). Il reste la fenêtre TOCTOU : le
-navigateur résout de son côté, au moment de la connexion.
+Le nom est aussi RÉSOLU (#419) : un nom public qui pointe vers une IP interne
+est refusé avant la navigation (`403 private_host`), un nom introuvable aussi
+(`502 unresolved_host`). Les sous-ressources, dont l'hôte n'est connu qu'à la
+requête, ne sont pas épinglées : l'égression réseau
+([`SERVER-EGRESS.md`](../docs/architecture/SERVER-EGRESS.md)) ferme leur
+fenêtre TOCTOU en refusant l'adresse connectée, pas le nom.
 
 Le service est borné (#422) : 2 scrapes simultanés (503 `busy`, avec
 `Retry-After`), 30 s (504 `timeout`), HTML sérialisé borné DANS le navigateur
