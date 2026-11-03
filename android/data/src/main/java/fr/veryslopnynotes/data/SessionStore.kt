@@ -5,38 +5,6 @@ import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
-// Session Pronote locale (ADR-003) : ce que `Client.tokenLogin` doit
-// reconstruire sans rescanner le QR — URL du client, login, jeton de connexion
-// et identité de l'appareil.
-//
-// Le PIN du QR n'est JAMAIS persisté : il ne déchiffre `login` + `jeton` qu'à
-// l'appairage. Ce qui dort ici est chiffré, borné, jamais journalisé, jamais
-// dans un `toString()` ni un message d'erreur. Pas une `data class`
-// VOLONTAIREMENT : le `toString()` généré ferait fuiter le jeton.
-// ponytail: pas de sérialisation ici (le jeton ne se copie jamais ailleurs).
-class StoredSession(
-    val endpointUrl: String,
-    val username: String,
-    val password: String,
-    val uuid: String,
-    val clientIdentifier: String?,
-    val schoolUrl: String,
-    /** `JETON` (QR) ou `IDENTIFIANT` (démo) ; une session d'avant ce champ reste `JETON`. */
-    val mode: String = SessionMode.JETON,
-) {
-    override fun toString(): String = "StoredSession(url=***, user=***)"
-}
-
-// Store de session Pronote : une session complète ou rien — sans jeton, l'app
-// ne peut rien lire, donc on refuse d'écrire une session inutilisable.
-interface SessionStore {
-    fun save(session: StoredSession)
-    fun load(): StoredSession?
-    /** Appairé = session complète persistée (le client vit dans PronoteSession). */
-    fun hasSession(): Boolean = load() != null
-    fun clear()
-}
-
 /**
  * UN point de construction des préférences CHIFFRÉES du process (session,
  * clé LLM) : MasterKey AES256-GCM + EncryptedSharedPrefs. Deux copies
@@ -73,76 +41,27 @@ internal fun encryptedPrefs(context: Context, name: String): SharedPreferences {
     )
 }
 
+/**
+ * Session chiffrée : la validation et le commit vivent dans [SessionRecordStore]
+ * (fichier PUR, rejoué par la parité). Ici, seul le câblage Keystore.
+ *
+ * `save` ne dit « enregistré » qu'après un `commit()` synchrone : un appairage
+ * ne peut plus réussir sur une écriture encore en vol, perdue au force-stop.
+ */
 class EncryptedSessionStore(context: Context) : SessionStore {
-    private val prefs: SharedPreferences by lazy { encryptedPrefs(context, PREFS) }
-
-    override fun save(session: StoredSession) {
-        // Messages d'erreur SANS secret : un `require` peut finir dans un
-        // rapport de crash.
-        require(isUsableUrl(session.endpointUrl)) { "session invalide" }
-        require(isUsableSecret(session.username)) { "session invalide" }
-        require(isUsableSecret(session.password)) { "session invalide" }
-        require(session.uuid.isNotBlank() && session.uuid.length <= MAX_UUID_CHARS) { "session invalide" }
-        require((session.clientIdentifier ?: "").length <= MAX_CLIENT_ID_CHARS) { "session invalide" }
-        require(session.schoolUrl.trim().length <= MAX_SCHOOL_URL_CHARS) { "session invalide" }
-        prefs.edit()
-            .putString(KEY_URL, session.endpointUrl.trim())
-            .putString(KEY_USERNAME, session.username)
-            .putString(KEY_PASSWORD, session.password)
-            .putString(KEY_UUID, session.uuid)
-            .putString(KEY_CLIENT_ID, session.clientIdentifier ?: "")
-            .putString(KEY_SCHOOL_URL, session.schoolUrl.trim())
-            .putString(KEY_MODE, SessionMode.of(session.mode))
-            .apply()
+    private val records: SessionRecordStore by lazy {
+        SessionRecordStore(SharedPrefsKeyValue(encryptedPrefs(context, PREFS)))
     }
 
-    override fun load(): StoredSession? {
-        val url = prefs.getString(KEY_URL, null)?.trim().orEmpty()
-        val username = prefs.getString(KEY_USERNAME, null).orEmpty()
-        val password = prefs.getString(KEY_PASSWORD, null).orEmpty()
-        val uuid = prefs.getString(KEY_UUID, null).orEmpty()
-        if (!isUsableUrl(url) || !isUsableSecret(username) || !isUsableSecret(password)) return null
-        if (uuid.isBlank() || uuid.length > MAX_UUID_CHARS) return null
-        return StoredSession(
-            endpointUrl = url,
-            username = username,
-            password = password,
-            uuid = uuid,
-            clientIdentifier = prefs.getString(KEY_CLIENT_ID, null)?.takeIf { it.isNotEmpty() },
-            schoolUrl = prefs.getString(KEY_SCHOOL_URL, null)?.trim().orEmpty(),
-            mode = SessionMode.of(prefs.getString(KEY_MODE, null)),
-        )
-    }
+    override fun save(session: StoredSession): WriteResult = records.save(session)
 
-    // Déconnexion : plus aucune trace de session, jeton compris (un jeton
-    // rejoué après un logout doit échouer). `commit()` : un force-stop juste
-    // après ne doit pas ressusciter la session au lancement suivant.
-    override fun clear() {
-        prefs.edit().clear().commit()
-    }
+    override fun load(): StoredSession? = records.load()
+
+    override fun clear(): WriteResult = records.clear()
 
     companion object {
+        // Nom du fichier chiffré : la désinstallation l'emporte, `clear()` l'efface.
         private const val PREFS = "session"
-        private const val KEY_URL = "endpoint_url"
-        private const val KEY_USERNAME = "username"
-        private const val KEY_PASSWORD = "jeton"
-        private const val KEY_UUID = "uuid"
-        private const val KEY_CLIENT_ID = "client_identifier"
-        private const val KEY_SCHOOL_URL = "school_url"
-        private const val KEY_MODE = "session_mode"
-
-        private const val MAX_URL_CHARS = 2000
-        private const val MAX_SECRET_CHARS = 4096
-        private const val MAX_UUID_CHARS = 128
-        private const val MAX_CLIENT_ID_CHARS = 512
-        private const val MAX_SCHOOL_URL_CHARS = 300
-
-        private fun isUsableUrl(url: String): Boolean =
-            url.isNotBlank() && url.length <= MAX_URL_CHARS &&
-                (url.startsWith("https://") || url.startsWith("http://"))
-
-        private fun isUsableSecret(secret: String): Boolean =
-            secret.isNotEmpty() && secret.length <= MAX_SECRET_CHARS
     }
 }
 
@@ -150,21 +69,13 @@ class EncryptedSessionStore(context: Context) : SessionStore {
 // session ne survit pas au redémarrage, et c'est le contrat — jamais un secret
 // en clair sur disque.
 class InMemorySessionStore : SessionStore {
-    private var session: StoredSession? = null
+    private val records = SessionRecordStore(MemoryKeyValueStore())
 
-    override fun save(session: StoredSession) {
-        require(session.endpointUrl.isNotBlank()) { "session invalide" }
-        require(session.username.isNotEmpty()) { "session invalide" }
-        require(session.password.isNotEmpty()) { "session invalide" }
-        require(session.uuid.isNotBlank()) { "session invalide" }
-        this.session = session
-    }
+    override fun save(session: StoredSession): WriteResult = records.save(session)
 
-    override fun load(): StoredSession? = session
+    override fun load(): StoredSession? = records.load()
 
-    override fun clear() {
-        session = null
-    }
+    override fun clear(): WriteResult = records.clear()
 }
 
 /**

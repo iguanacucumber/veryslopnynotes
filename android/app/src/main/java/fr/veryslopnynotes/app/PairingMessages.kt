@@ -19,6 +19,9 @@ private val PAIRING_MESSAGES: Map<String, String> = mapOf(
     "demo_failed" to "Connexion à la démo impossible : l'établissement de démonstration ne répond pas. Réessaie dans un instant.",
     "internal" to "Session illisible : réessaie l'appairage.",
     "cache_not_cleared" to "Les données locales n'ont pas pu être effacées : réessaie l'appairage.",
+    // Commit refusé : rien n'a été « enregistré » en douce.
+    "storage_unavailable" to "Stockage local indisponible : l'appairage n'a pas été enregistré. Réessaie.",
+    "session_changed" to "La session a changé pendant l'appairage : rescane le QR puis réessaie.",
 )
 
 /** Repli : un code inconnu ne dit rien de l'infrastructure. */

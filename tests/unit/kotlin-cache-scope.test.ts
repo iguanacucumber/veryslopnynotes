@@ -230,10 +230,11 @@ describe("câblage du scopage du cache (#407)", () => {
 
   test("l'appairage purge le cache du compte précédent AVANT d'enregistrer la session", () => {
     const iScope = pairing.indexOf("CacheScope.switchAccount(");
-    const iSave = pairing.indexOf("sessions.save(");
+    const iSave = pairing.indexOf(").switchTo(");
     expect(iScope).toBeGreaterThan(-1);
     expect(iSave).toBeGreaterThan(-1);
-    // AVANT `sessions.save` : si le process meurt, la session restaurée est l'ancienne.
+    // AVANT l'écriture de la session : si le process meurt, la session
+    // restaurée est l'ancienne. L'écriture passe par la transaction #890.
     expect(iScope).toBeLessThan(iSave);
     // L'identité vient de la session PERSISTÉE, jamais d'`AccountStore`.
     expect(pairing).toContain("AccountIdentity.of(it.endpointUrl, it.username)");
@@ -281,7 +282,7 @@ describe("câblage du scopage du cache (#407)", () => {
 
   test("le pont ET le job de fond passent le store de cache au dépôt d'appairage", () => {
     // Sans store, le job de fond (process neuf) laisserait le cache intact.
-    expect(bridge).toContain("PairingRepository(sessions, cacheStore)");
+    expect(bridge).toContain("PairingRepository(sessions, cacheStore, accountRecorder = accounts)");
     expect(worker).toContain("PairingRepository(sessions, cacheStore())");
     // Le job purge le MÊME dossier que l'app (verrou partagé, purge commune).
     expect(worker).toContain('FileCacheStore(File(applicationContext.filesDir, "offline"))');

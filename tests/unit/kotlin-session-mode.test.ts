@@ -51,7 +51,7 @@ describe("mode d'ouverture d'une session persistée", () => {
   });
 
   test("le store PERSISTE le mode de la session", () => {
-    const store = codeOnly(readFileSync(join(DATA, "SessionStore.kt"), "utf8"));
+    const store = codeOnly(readFileSync(join(DATA, "SessionRecord.kt"), "utf8"));
     expect(store).toContain("KEY_MODE");
     expect(store).toContain("SessionMode.of(");
   });
