@@ -117,7 +117,7 @@ describe("le daemon Gradle ne traîne pas trois heures (#517)", () => {
 describe("runServer : PORT et HOST sont surchargeables (#418)", () => {
   /** La recette `runServer`, telle qu'elle est écrite. */
   function recette(): string {
-    return /runServer:\n((?:\t[^\n]*\n)+)/.exec(MAKEFILE)?.[1] ?? "";
+    return /runServer:(?: ## [^\n]*)?\n((?:\t[^\n]*\n)+)/.exec(MAKEFILE)?.[1] ?? "";
   }
 
   test("la recette ne fige plus les valeurs en dur", () => {

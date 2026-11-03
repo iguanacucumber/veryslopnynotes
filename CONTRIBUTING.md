@@ -32,6 +32,7 @@ listées dans [`docs/REPOSITORY.md`](docs/REPOSITORY.md).
 git clone https://github.com/iguanacucumber/veryslopnynotes.git
 cd veryslopnynotes
 bun install
+make help             # liste les cibles publiques et leur description
 bun run dev:web       # interface + pont factice, aucun téléphone requis
 make watch            # tests unitaires et web en continu
 ```

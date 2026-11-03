@@ -165,7 +165,7 @@ describe("JaCoCo et harnais : épinglés, inactifs hors mesure", () => {
   });
 
   test("la cible make produit lcov, rapport Kotlin et vérifie le seuil", () => {
-    const target = /^coverage:\n((?:\t.*\n)+)/m.exec(MAKEFILE)?.[1] ?? "";
+    const target = /^coverage:(?: ## [^\n]*)?\n((?:\t.*\n)+)/m.exec(MAKEFILE)?.[1] ?? "";
     expect(target).not.toBe("");
     expect(target).toContain("--coverage-reporter=lcov");
     expect(target).toContain("JACOCO_DIR=");
@@ -173,7 +173,7 @@ describe("JaCoCo et harnais : épinglés, inactifs hors mesure", () => {
     expect(target).toContain("coverage.ts report");
     expect(target).toContain("coverage.ts check");
     // Hors gate : pas de cible `check` qui tire la couverture.
-    const check = /^check-fast:\n((?:\t.*\n)+)/m.exec(MAKEFILE)?.[1] ?? "";
+    const check = /^check-fast:(?: ## [^\n]*)?\n((?:\t.*\n)+)/m.exec(MAKEFILE)?.[1] ?? "";
     expect(check).not.toContain("coverage");
     expect(read(".gitignore")).toContain("coverage/");
   });
