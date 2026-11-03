@@ -91,7 +91,8 @@ describe("fil local du professeur — offline et purge (#633)", () => {
     expect(BRIDGE).toContain('FileTeacherChatStore(File(ctx.filesDir, "offline/teacher_chat.json"))');
     expect(STORE).toContain("OfflineArtifacts.writeText(file, teacherThreadJson(bounded), epoch)");
     expect(STORE).toContain("SessionEpoch.writeIfCurrent(epoch)");
-    expect(STORE).toContain("file.delete()");
+    // La suppression efface cible, `.bak` ET quarantaine, puis vérifie l'absence.
+    expect(STORE).toContain("DurableFile.delete(file)");
   });
 
   test("l'écriture et la suppression portent l'époque de l'opération", () => {

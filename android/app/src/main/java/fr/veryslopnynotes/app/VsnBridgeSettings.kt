@@ -106,7 +106,10 @@ internal fun VsnBridge.completeServerSave(baseUrl: String): JSONObject =
 internal fun VsnBridge.saveManualUrl(p: JSONObject): JSONObject {
     val raw = bounded(p.string("url"), ManualUrl.MAX_CHARS)
     if (raw.isEmpty()) {
-        manuals.clear()
+        if (!manuals.clear()) {
+            return JSONObject().put("ok", false)
+                .put("message", "Manuel non supprimé : les données locales n'ont pas pu être effacées.")
+        }
         return JSONObject().put("ok", true).put("ready", false).put("auto", false)
     }
     return when (val saved = manuals.save(raw)) {

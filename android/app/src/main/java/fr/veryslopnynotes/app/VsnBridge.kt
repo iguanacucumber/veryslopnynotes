@@ -541,11 +541,11 @@ class VsnBridge(
         sessionReady = false
         cachedProfile = null
         qrHandles.clear()
-        purgeManualAccountData()
+        val manualsCleared = purgeManualAccountData()
         // Le verrou de session sérialise la purge avec un appairage ou une
         // restauration EN VOL : aucun des deux ne peut republier l'ancien client.
         val purged = pairing.logoutBlocking { accounts.clear() }
-        if (!purged.ok) {
+        if (!purged.ok || !manualsCleared) {
             throw BridgeFailure(
                 "unavailable",
                 "Déconnexion incomplète : les données locales n'ont pas pu être effacées. Réessaie.",
@@ -587,9 +587,10 @@ class VsnBridge(
      * de la donnée du compte, et une adresse oubliée n'a plus à bloquer un
      * scrape du nouveau compte.
      */
-    private fun purgeManualAccountData() {
-        manuals.clearAccountData()
+    private fun purgeManualAccountData(): Boolean {
+        val cleared = manuals.clearAccountData()
         manualFailures.clear()
+        return cleared
     }
 
     /** Identité du compte de la session PERSISTÉE ; `null` = inconnue ou illisible. */

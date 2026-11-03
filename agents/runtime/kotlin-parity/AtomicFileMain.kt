@@ -7,6 +7,7 @@
 package fr.veryslopnynotes.offline
 
 import fr.veryslopnynotes.data.DurableFile
+import fr.veryslopnynotes.data.LocalDataUnreadable
 import fr.veryslopnynotes.pronote.JVal
 import fr.veryslopnynotes.pronote.Json
 import java.io.BufferedReader
@@ -51,6 +52,19 @@ private class RenameFailure(private val targetName: String) : DurableFile.Io {
         if (target.name == targetName) false else real.rename(source, target)
 
     override fun syncDirectory(dir: File) = real.syncDirectory(dir)
+}
+
+/** Refuse TOUTE suppression : la cible et ses copies doivent rester. */
+private class DeleteFailure : DurableFile.Io {
+    private val real = DurableFile.PlatformIo
+
+    override fun write(file: File, bytes: ByteArray) = real.write(file, bytes)
+
+    override fun rename(source: File, target: File): Boolean = real.rename(source, target)
+
+    override fun syncDirectory(dir: File) = real.syncDirectory(dir)
+
+    override fun delete(file: File): Boolean = false
 }
 
 private class AtomicBench {
@@ -136,11 +150,25 @@ private class AtomicDriver {
                 atomicOk("failure" to JVal.Str(failure ?: ""))
             }
             "read" -> {
-                val value = DurableFile.read(target) { raw ->
-                    if (raw.startsWith("BAD")) null else raw
+                val value = try {
+                    DurableFile.read(target) { raw ->
+                        if (raw.startsWith("BAD")) null else raw
+                    }
+                } catch (e: LocalDataUnreadable) {
+                    return atomicOk(
+                        "value" to JVal.Null,
+                        "unreadable" to JVal.Bool(true),
+                        "message" to JVal.Str(e.message ?: ""),
+                    )
                 }
-                atomicOk("value" to (value?.let { JVal.Str(it) } ?: JVal.Null))
+                atomicOk(
+                    "value" to (value?.let { JVal.Str(it) } ?: JVal.Null),
+                    "unreadable" to JVal.Bool(false),
+                )
             }
+            "delete" -> atomicOk("deleted" to JVal.Bool(DurableFile.delete(target)))
+            "deleteFail" ->
+                atomicOk("deleted" to JVal.Bool(DurableFile.delete(target, DeleteFailure())))
             "raw" -> {
                 val content = if (target.isFile) target.readText() else ""
                 atomicOk("exists" to JVal.Bool(target.isFile), "content" to JVal.Str(content))

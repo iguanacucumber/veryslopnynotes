@@ -27,6 +27,9 @@ class FileLessonNotesStore(
 
     @Synchronized
     override fun save(notes: List<LessonNote>, epoch: Long): Boolean {
+        // Une cible illisible LÈVE : jamais remplacée par une liste partielle
+        // ou vide construite sur une lecture qui a échoué (#910).
+        read()
         val written = OfflineArtifacts.writeText(file, lessonNotesJson(notes), epoch)
         // Migrate old `cahier.json` only after the new file is safely written.
         if (written) legacyFile?.takeIf { it.isFile }?.delete()

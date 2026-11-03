@@ -9,6 +9,18 @@ import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 
 /**
+ * La donnée existe sur le disque mais ne se relit pas, et aucune sauvegarde
+ * valide ne la remplace. L'appelant doit le DIRE : une liste vide ou un écran
+ * vide affirmerait à tort que l'utilisateur n'a rien enregistré.
+ */
+class LocalDataUnreadable : Exception(MESSAGE) {
+    companion object {
+        const val MESSAGE =
+            "Données locales illisibles : la donnée enregistrée sur cet appareil n'a pas pu être lue."
+    }
+}
+
+/**
  * Écriture DURABLE d'un petit fichier : le contenu part dans un temporaire du
  * même dossier, est `fsync`é, puis remplacé par `rename` atomique. La cible
  * précédente reste dans `<nom>.bak` : une panne entre l'écriture et le
@@ -27,6 +39,8 @@ object DurableFile {
         fun rename(source: File, target: File): Boolean
 
         fun syncDirectory(dir: File)
+
+        fun delete(file: File): Boolean = file.delete()
     }
 
     internal object PlatformIo : Io {
@@ -79,8 +93,11 @@ object DurableFile {
     }
 
     /**
-     * Lit [target] et le remplace par [backup] s'il est illisible. `null` =
-     * absent ou corrompu sans sauvegarde valide.
+     * Lit [target] et le remplace par [backup] s'il est illisible.
+     *
+     * `null` = ABSENT. Une cible présente mais illisible LÈVE
+     * [LocalDataUnreadable] : l'appelant ne peut pas confondre « rien
+     * enregistré » avec « donnée corrompue », ni réécrire par-dessus.
      */
     fun <T> read(target: File, parse: (String) -> T?): T? = read(target, parse, PlatformIo)
 
@@ -101,12 +118,12 @@ object DurableFile {
         }
         quarantine(target, io)
         val backup = backupOf(target)
-        if (!backup.isFile) return null
+        if (!backup.isFile) throw LocalDataUnreadable()
         val recovered = try {
             parse(backup.readText())
         } catch (_: Exception) {
             null
-        } ?: return null
+        } ?: throw LocalDataUnreadable()
         try {
             write(target, backup.readBytes(), io)
         } catch (_: Exception) {
@@ -115,12 +132,33 @@ object DurableFile {
         return recovered
     }
 
-    /** Efface la cible, sa sauvegarde et ses copies en quarantaine. */
-    fun delete(target: File) {
-        target.delete()
-        backupOf(target).delete()
-        val dir = quarantineDir(target) ?: return
-        dir.listFiles { file -> file.name.startsWith("${target.name}.") }?.forEach { it.delete() }
+    /**
+     * Efface la cible, sa sauvegarde et ses copies en quarantaine, puis VÉRIFIE
+     * leur absence. `false` = au moins un fichier résiste : l'appelant ne doit
+     * pas annoncer une suppression réussie.
+     */
+    fun delete(target: File): Boolean = delete(target, PlatformIo)
+
+    internal fun delete(target: File, io: Io): Boolean {
+        var ok = remove(target, io)
+        val backup = backupOf(target)
+        ok = remove(backup, io) && ok
+        val dir = quarantineDir(target)
+        if (dir != null && dir.exists()) {
+            val copies = dir.listFiles { file -> file.name.startsWith("${target.name}.") }
+            if (copies == null) {
+                ok = false
+            } else {
+                for (copy in copies) ok = remove(copy, io) && ok
+            }
+        }
+        return ok && !target.exists() && !backup.exists()
+    }
+
+    private fun remove(file: File, io: Io): Boolean {
+        if (!file.exists()) return true
+        io.delete(file)
+        return !file.exists()
     }
 
     private fun retainBackup(target: File, io: Io) {

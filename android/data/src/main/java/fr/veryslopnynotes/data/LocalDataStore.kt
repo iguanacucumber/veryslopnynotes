@@ -20,8 +20,9 @@ class LocalDataStore(
         val downloadsCleared = DownloadedFiles.purge(cacheRoot)
         // Une photo de cours en attente est de la donnée scolaire : elle part
         // avec le cache même si la capture est restée ouverte.
+        val photos = File(cacheRoot, "photos")
         val photosCleared = try {
-            File(cacheRoot, "photos").deleteRecursively()
+            photos.deleteRecursively() && !photos.exists()
         } catch (_: Exception) {
             false
         }

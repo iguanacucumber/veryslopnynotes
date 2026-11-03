@@ -204,7 +204,8 @@ describe("photo de cours — garde d'image exécutée (#587)", () => {
       join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data", "LocalDataStore.kt"),
       "utf8",
     );
-    expect(store).toContain('File(cacheRoot, "photos").deleteRecursively()');
+    expect(store).toContain('val photos = File(cacheRoot, "photos")');
+    expect(store).toContain("photos.deleteRecursively() && !photos.exists()");
   });
 });
 

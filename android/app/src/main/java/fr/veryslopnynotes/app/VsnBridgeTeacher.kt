@@ -20,6 +20,7 @@ import fr.veryslopnynotes.core.secretRefusalMessage
 import fr.veryslopnynotes.core.transcribeLesson
 import fr.veryslopnynotes.data.LlmError
 import fr.veryslopnynotes.data.OpenRouterLlm
+import fr.veryslopnynotes.data.TeacherChatDelete
 import fr.veryslopnynotes.data.parseTeacherThreadOrNull
 import fr.veryslopnynotes.data.teacherThreadJson
 import org.json.JSONArray
@@ -374,12 +375,12 @@ internal fun JSONObject.withTeacherHistory(context: AiContextResult, summaryChar
         .put("summaryChars", summaryChars)
 }
 
-/** Lecture seule, aucune donnée scolaire hors de l'appareil. */
-internal fun VsnBridge.teacherLoad(): JSONObject = try {
+/**
+ * Lecture seule, aucune donnée scolaire hors de l'appareil. Une donnée locale
+ * illisible LÈVE : le pont répond la phrase choisie, jamais un fil vide.
+ */
+internal fun VsnBridge.teacherLoad(): JSONObject =
     JSONObject(teacherThreadJson(teacherChat.load()))
-} catch (_: Exception) {
-    JSONObject().put("subject", "").put("messages", JSONArray())
-}
 
 /**
  * Le web envoie la matière + les tours ; le pont borne, valide, puis écrit sous
@@ -409,9 +410,11 @@ internal fun VsnBridge.teacherSave(p: JSONObject, epoch: Long): JSONObject {
 }
 
 internal fun VsnBridge.teacherDelete(epoch: Long): JSONObject =
-    if (!teacherChat.delete(epoch)) {
-        JSONObject().put("ok", false).put("message", "Session modifiée : discussion non supprimée.")
-    } else {
-        JSONObject().put("ok", true)
+    when (teacherChat.delete(epoch)) {
+        TeacherChatDelete.DELETED -> JSONObject().put("ok", true)
+        TeacherChatDelete.REFUSED ->
+            JSONObject().put("ok", false).put("message", "Session modifiée : discussion non supprimée.")
+        TeacherChatDelete.FAILED -> JSONObject().put("ok", false)
+            .put("message", "Discussion non supprimée : les données locales n'ont pas pu être effacées.")
     }
 
