@@ -11,6 +11,8 @@ import java.util.concurrent.ConcurrentHashMap
  * Une collision ne sert jamais la mauvaise réponse : `load` vérifie la
  * requête dans l'en-tête.
  */
+private const val MAX_FILE_BYTES = CachePolicy.MAX_PAYLOAD_BYTES + 4096L
+
 private fun queryDigest(query: String): String {
     val digest = MessageDigest.getInstance("SHA-256")
         .digest(CachePolicy.normalizeQuery(query).toByteArray(Charsets.UTF_8))
@@ -34,6 +36,9 @@ interface CacheStore {
     fun save(resource: String, payload: String, fetchedAt: Long, query: String)
     fun load(resource: String, query: String): CachedEntry?
     fun payloads(resource: String): List<String>
+    // Payloads encore FRAIS : l'IA et les écrans agrégés ne lisent pas une
+    // entrée dont le TTL est dépassé (une semaine oubliée, une alerte vieille).
+    fun freshPayloads(resource: String, now: Long): List<String>
     fun clear(resource: String)
     // Purge totale (logout) : toute donnée scolaire locale disparaît, sans
     // dépendre d'une liste de ressources qui dériverait des contrats.
@@ -43,24 +48,62 @@ interface CacheStore {
 
 // ponytail: memoire seule pour tests/preview. Upgrade: persistance seule (File).
 class InMemoryCacheStore : CacheStore {
-    private val map = mutableMapOf<String, CachedEntry>()
+    // Accès = ordre LRU : `get`/`put` déplacent la clé en fin de parcours.
+    private val map = LinkedHashMap<String, CachedEntry>(16, 0.75f, true)
+    private var totalBytes = 0L
 
     private fun keyOf(resource: String, query: String): String =
         "$resource|${CachePolicy.normalizeQuery(query)}"
 
+    private fun bytesOf(entry: CachedEntry): Long =
+        entry.payload.toByteArray(Charsets.UTF_8).size.toLong()
+
     @Synchronized
     override fun save(resource: String, payload: String, fetchedAt: Long, query: String) {
         require(CachePolicy.isCacheable(resource)) { "ressource non cachable: $resource" }
-        map[keyOf(resource, query)] = CachedEntry(payload, fetchedAt, CachePolicy.normalizeQuery(query))
-        // Les entrées PÉRIMÉES de la ressource sont purgées à l'écriture (le
-        // cache ne grossit pas sans borne).
+        require(!CachePolicy.isPayloadTooLarge(payload)) { "payload hors borne" }
+        val normalized = CachePolicy.normalizeQuery(query)
+        val key = keyOf(resource, query)
+        map.remove(key)?.let { totalBytes -= bytesOf(it) }
+        val entry = CachedEntry(payload, fetchedAt, normalized)
+        map[key] = entry
+        totalBytes += bytesOf(entry)
+        pruneStale(resource, fetchedAt)
+        capResource(resource)
+        capTotal()
+    }
+
+    private fun pruneStale(resource: String, now: Long) {
         val prefix = "$resource|"
-        map.keys
-            .filter { it.startsWith(prefix) }
-            .forEach { key ->
-                val entry = map[key] ?: return@forEach
-                if (CachePolicy.isStale(resource, entry.fetchedAt, fetchedAt)) map.remove(key)
+        val iterator = map.entries.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if (!entry.key.startsWith(prefix)) continue
+            if (CachePolicy.isStale(resource, entry.value.fetchedAt, now)) {
+                totalBytes -= bytesOf(entry.value)
+                iterator.remove()
             }
+        }
+    }
+
+    private fun capResource(resource: String) {
+        val prefix = "$resource|"
+        val cap = CachePolicy.maxEntriesFor(resource)
+        var count = map.entries.count { it.key.startsWith(prefix) }
+        while (count > cap) {
+            val victim = map.entries.firstOrNull { it.key.startsWith(prefix) } ?: break
+            totalBytes -= bytesOf(victim.value)
+            map.remove(victim.key)
+            count -= 1
+        }
+    }
+
+    private fun capTotal() {
+        while (totalBytes > CachePolicy.MAX_TOTAL_BYTES) {
+            val victim = map.entries.firstOrNull() ?: break
+            totalBytes -= bytesOf(victim.value)
+            map.remove(victim.key)
+        }
     }
 
     @Synchronized
@@ -71,14 +114,28 @@ class InMemoryCacheStore : CacheStore {
         map.entries.filter { it.key.startsWith("$resource|") }.map { it.value.payload }
 
     @Synchronized
+    override fun freshPayloads(resource: String, now: Long): List<String> =
+        map.entries
+            .filter { it.key.startsWith("$resource|") }
+            .filter { !CachePolicy.isStale(resource, it.value.fetchedAt, now) }
+            .map { it.value.payload }
+
+    @Synchronized
     override fun clear(resource: String) {
         val prefix = "$resource|"
-        map.keys.filter { it.startsWith(prefix) }.forEach { map.remove(it) }
+        val iterator = map.entries.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if (!entry.key.startsWith(prefix)) continue
+            totalBytes -= bytesOf(entry.value)
+            iterator.remove()
+        }
     }
 
     @Synchronized
     override fun clearAll(): Boolean {
         map.clear()
+        totalBytes = 0
         return true
     }
 }
@@ -140,6 +197,20 @@ object SessionEpoch {
 class FileCacheStore(private val dir: File) : CacheStore {
     private val lock = lockFor(dir)
 
+    private class DiskEntry(val fetchedAt: Long?, val query: String?, val payload: String)
+
+    private class CacheInfo(val file: File, val bytes: Long, val fetchedAt: Long?)
+
+    /** Horodatage d'accès monotone : deux accès dans la même ms restent ordonnés. */
+    private fun touch(file: File) {
+        val stamp = stampFor(dir)
+        try {
+            file.setLastModified(stamp)
+        } catch (_: Exception) {
+            // ponytail: LRU best-effort (le cache reste borné par les octets).
+        }
+    }
+
     private fun fileFor(resource: String, query: String): File =
         File(dir, "cache_${resource}_${queryDigest(query)}.txt")
 
@@ -151,70 +222,117 @@ class FileCacheStore(private val dir: File) : CacheStore {
         return if (legacy.exists()) hashed + legacy else hashed
     }
 
+    private fun isFileOf(resource: String, file: File): Boolean =
+        file.name == "cache_$resource.txt" || file.name.startsWith("cache_${resource}_")
+
+    private fun cacheFiles(): List<File> =
+        dir.listFiles { f -> f.isFile && f.name.startsWith("cache_") && f.name.endsWith(".txt") }
+            ?.sortedWith(compareBy({ it.lastModified() }, { it.name }))
+            .orEmpty()
+
+    /**
+     * Lit une entrée SANS jamais matérialiser un payload hors budget. Un
+     * fichier trop gros (écrit par une version antérieure) est effacé : le
+     * servir allouerait sa taille en mémoire.
+     */
+    private fun readEntry(file: File): DiskEntry? = try {
+        if (file.length() > MAX_FILE_BYTES) {
+            file.delete()
+            null
+        } else {
+            val text = file.readText()
+            val cut = text.indexOf('\n')
+            if (cut < 0) {
+                DiskEntry(null, null, "")
+            } else {
+                val head = text.substring(0, cut)
+                val fetchedAt = head.substringBefore('\t').toLongOrNull()
+                val query = if (head.contains('\t')) head.substringAfter('\t', "") else null
+                val payload = text.substring(cut + 1)
+                if (payload.toByteArray(Charsets.UTF_8).size > CachePolicy.MAX_PAYLOAD_BYTES) {
+                    file.delete()
+                    null
+                } else {
+                    DiskEntry(fetchedAt, query, payload)
+                }
+            }
+        }
+    } catch (_: Exception) {
+        null
+    }
+
+    /**
+     * Éviction LRU : l'accès met à jour `lastModified` (compteur monotone par
+     * répertoire) ; l'écriture purge les entrées périmées de la ressource, la
+     * borne d'entrées par ressource, puis le budget global en octets UTF-8.
+     */
     override fun save(resource: String, payload: String, fetchedAt: Long, query: String) {
         require(CachePolicy.isCacheable(resource)) { "ressource non cachable: $resource" }
         require(!payload.contains('\u0000')) { "payload invalide" }
+        require(!CachePolicy.isPayloadTooLarge(payload)) { "payload hors borne" }
         synchronized(lock) {
             if (!dir.exists()) dir.mkdirs()
             // ponytail: premiere ligne horodatage + requete, reste payload brut.
             // Upgrade: SQLite si requetes.
             val head = "$fetchedAt\t${CachePolicy.normalizeQuery(query)}"
-            writeAtomic(fileFor(resource, query), "$head\n$payload")
-            // Les entrées PÉRIMÉES de la ressource sont purgées (borne de
-            // taille).
-            pruneStale(resource, fetchedAt)
+            val target = fileFor(resource, query)
+            writeAtomic(target, "$head\n$payload")
+            touch(target)
+            enforceBudgets(resource, fetchedAt)
         }
     }
 
-    /** Efface les entrées de la ressource dont le TTL est dépassé. */
-    private fun pruneStale(resource: String, now: Long) {
-        for (f in filesOf(resource)) {
-            try {
-                val text = f.readText()
-                val cut = text.indexOf('\n')
-                // En-tête illisible (fichier ancien) : l'entrée ne répond à
-                // aucune requête, elle est effacée.
-                val fetchedAt = if (cut < 0) null else text.substring(0, cut).substringBefore('\t').toLongOrNull()
-                if (fetchedAt == null || CachePolicy.isStale(resource, fetchedAt, now)) f.delete()
-            } catch (_: Exception) {
-                // ponytail: purge best-effort (le cache est jetable).
+    private fun enforceBudgets(resource: String, now: Long) {
+        // Une seule lecture par fichier : taille, TTL et ordre LRU ensemble.
+        val infos = cacheFiles().mapNotNull { file ->
+            readEntry(file)?.let { entry ->
+                CacheInfo(file, entry.payload.toByteArray(Charsets.UTF_8).size.toLong(), entry.fetchedAt)
             }
+        }
+        for (info in infos) {
+            if (!isFileOf(resource, info.file)) continue
+            val fetchedAt = info.fetchedAt
+            if (fetchedAt == null || CachePolicy.isStale(resource, fetchedAt, now)) info.file.delete()
+        }
+        val cap = CachePolicy.maxEntriesFor(resource)
+        var count = infos.count { isFileOf(resource, it.file) && it.file.exists() }
+        for (info in infos.sortedBy { it.file.lastModified() }) {
+            if (count <= cap) break
+            if (isFileOf(resource, info.file) && info.file.delete()) count -= 1
+        }
+        var total = infos.filter { it.file.exists() }.sumOf { it.bytes }
+        for (info in infos.sortedBy { it.file.lastModified() }) {
+            if (total <= CachePolicy.MAX_TOTAL_BYTES) break
+            if (info.file.exists() && info.file.delete()) total -= info.bytes
         }
     }
 
     override fun load(resource: String, query: String): CachedEntry? = synchronized(lock) {
         val f = fileFor(resource, query)
         if (!f.exists()) return@synchronized null
-        try {
-            val text = f.readText()
-            val cut = text.indexOf('\n')
-            if (cut < 0) return@synchronized null
-            val head = text.substring(0, cut)
-            // Fichier sans en-tête de requête (ancien) : ignoré plutôt que
-            // servi au hasard — une relecture le régénère.
-            if (!head.contains('\t')) return@synchronized null
-            val fetchedAt = head.substringBefore('\t').toLongOrNull() ?: return@synchronized null
-            val stored = head.substringAfter('\t', "")
-            // L'empreinte a pu tomber sur une autre requête : on ne sert
-            // jamais la réponse d'une requête différente.
-            if (CachePolicy.normalizeQuery(stored) != CachePolicy.normalizeQuery(query)) return@synchronized null
-            CachedEntry(text.substring(cut + 1), fetchedAt, stored)
-        } catch (_: Exception) {
-            null
-        }
+        val entry = readEntry(f) ?: return@synchronized null
+        val fetchedAt = entry.fetchedAt ?: return@synchronized null
+        // Fichier sans en-tête de requête (ancien) : ignoré plutôt que servi
+        // au hasard — une relecture le régénère.
+        val stored = entry.query ?: return@synchronized null
+        // L'empreinte a pu tomber sur une autre requête : on ne sert jamais la
+        // réponse d'une requête différente.
+        if (CachePolicy.normalizeQuery(stored) != CachePolicy.normalizeQuery(query)) return@synchronized null
+        touch(f)
+        CachedEntry(entry.payload, fetchedAt, stored)
     }
 
     override fun payloads(resource: String): List<String> = synchronized(lock) {
+        filesOf(resource).mapNotNull { f -> readEntry(f)?.payload }
+    }
+
+    override fun freshPayloads(resource: String, now: Long): List<String> = synchronized(lock) {
         val out = mutableListOf<String>()
         for (f in filesOf(resource)) {
-            try {
-                val text = f.readText()
-                val cut = text.indexOf('\n')
-                if (cut < 0) continue
-                out.add(text.substring(cut + 1))
-            } catch (_: Exception) {
-                // ponytail: un fichier illisible est ignore, pas fatal.
-            }
+            val entry = readEntry(f) ?: continue
+            val fetchedAt = entry.fetchedAt ?: continue
+            if (CachePolicy.isStale(resource, fetchedAt, now)) continue
+            out.add(entry.payload)
         }
         out
     }
@@ -269,6 +387,15 @@ class FileCacheStore(private val dir: File) : CacheStore {
         // et doivent s'exclure.
         private val locks = ConcurrentHashMap<String, Any>()
 
+        // Compteur d'accès par répertoire : l'ordre LRU survit aux deux
+        // instances (app + worker) qui partagent un dossier.
+        private val stamps = ConcurrentHashMap<String, Long>()
+
         private fun lockFor(dir: File): Any = locks.computeIfAbsent(dir.absolutePath) { Any() }
+
+        private fun stampFor(dir: File): Long {
+            val now = System.currentTimeMillis()
+            return stamps.compute(dir.absolutePath) { _, previous -> maxOf(now, (previous ?: 0L) + 1L) } ?: now
+        }
     }
 }

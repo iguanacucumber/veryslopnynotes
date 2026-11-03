@@ -224,6 +224,30 @@ describe("les pièces jointes téléchargées ne s'accumulent pas (#540)", () =>
   });
 });
 
+describe("le cache des pièces jointes est borné en OCTETS (#902)", () => {
+  test.skipIf(skip)("les fichiers les plus anciens partent quand le budget d'octets est dépassé", async () => {
+    const sid = await newStore();
+    // 6 pièces de 100 octets : 600 octets au total.
+    for (let i = 0; i < 6; i++) {
+      await write(sid, String(4000 + i), `budget-${i}.pdf`, "x".repeat(100));
+    }
+    expect((await files(sid)).length).toBe(6);
+    const budgets = await ask({ op: "budgets" });
+    expect(budgets.maxCacheBytes).toBe(32 * 1024 * 1024);
+    // Le MÊME prune que `write` appelle, avec un budget synthétique : l'éviction
+    // par octets est prouvée sans écrire 32 Mio dans le pilote.
+    const pruned = await ask({ op: "prune", sid, keep: 24, maxBytes: 250 });
+    expect(pruned.deleted).toBe(4);
+    const kept = await files(sid);
+    expect(kept.length).toBe(2);
+  });
+
+  test("le câblage de l'écriture applique le budget d'octets avant d'écrire", () => {
+    const source = readFileSync(join(DATA, "DownloadedFiles.kt"), "utf8");
+    expect(source).toContain("prune(root, MAX_CACHED_FILES - 1, MAX_CACHE_BYTES - bytes.size)");
+  });
+});
+
 describe("câblage de la purge des téléchargements (#540)", () => {
   const bridge = readBridgeSource();
   const attachments = readFileSync(join(APP, "Attachments.kt"), "utf8");

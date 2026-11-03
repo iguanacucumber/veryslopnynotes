@@ -8,8 +8,9 @@ import java.io.File
  * Le nom porte l'IDENTIFIANT de la pièce (pas le seul libellé) : deux pièces
  * distinctes du même devoir ne peuvent pas viser le même chemin.
  *
- * Le cache des téléchargements est BORNÉ (les plus anciens partent) et PURGÉ
- * avec le cache du compte : un fichier téléchargé est la DONNÉE DU COMPTE.
+ * Le cache des téléchargements est BORNÉ en nombre ET en octets (les plus
+ * anciens partent), puis PURGÉ avec le cache du compte : un fichier téléchargé
+ * est la DONNÉE DU COMPTE.
  *
  * L'écriture passe par la garde d'époque : une pièce téléchargée pendant une
  * déconnexion n'est pas écrite.
@@ -23,6 +24,9 @@ object DownloadedFiles {
     const val EXPORTS = "exports"
 
     const val MAX_CACHED_FILES = 24
+
+    /** Borne globale du cache des pièces (octets réels sur disque). */
+    const val MAX_CACHE_BYTES = 32L * 1024 * 1024
 
     /** Borne d'ouverture : une pièce jointe ne dépasse pas quelques Mo. */
     const val MAX_BYTES = 10 * 1024 * 1024
@@ -101,7 +105,9 @@ object DownloadedFiles {
             // Purge DANS la garde : une écriture d'un compte périmé ne doit pas
             // supprimer les fichiers du compte courant en étant ensuite jetée.
             // Avant l'écriture : le fichier qu'on écrit est le plus récent.
-            prune(root, MAX_CACHED_FILES - 1)
+            // Deux bornes : le nombre de fichiers ET les octets déjà présents,
+            // la nouvelle pièce comprise.
+            prune(root, MAX_CACHED_FILES - 1, MAX_CACHE_BYTES - bytes.size)
             dir.mkdirs()
             file.writeBytes(bytes)
             file
@@ -127,7 +133,7 @@ object DownloadedFiles {
         val file = File(dir, fileName(attachmentId, label))
         require(file.canonicalPath.startsWith(dir.canonicalPath + File.separator)) { "nom de pièce jointe refusé" }
         return SessionEpoch.writeIfCurrent(epoch) {
-            prune(root, MAX_CACHED_FILES - 1)
+            prune(root, MAX_CACHED_FILES - 1, MAX_CACHE_BYTES - size)
             dir.mkdirs()
             if (!source.renameTo(file)) source.inputStream().use { input -> file.outputStream().use { input.copyTo(it) } }
             // Une copie interrompue ne doit pas devenir une pièce TRONQUÉE
@@ -141,10 +147,27 @@ object DownloadedFiles {
         }
     }
 
-    fun prune(root: File, keep: Int): Int {
-        val files = root.walkTopDown().filter { it.isFile }.sortedBy { it.lastModified() }.toList()
+    /**
+     * Éviction LRU (plus ancien `lastModified` d'abord) : garde au plus [keep]
+     * fichiers et [maxBytes] octets. Renvoie le nombre de fichiers partis.
+     */
+    fun prune(root: File, keep: Int, maxBytes: Long = MAX_CACHE_BYTES): Int {
+        val files = root.walkTopDown()
+            .filter { it.isFile }
+            .sortedWith(compareBy({ it.lastModified() }, { it.path }))
+            .toList()
+        var count = files.size
+        var total = files.sumOf { it.length() }
         var deleted = 0
-        for (file in files.drop(keep)) if (file.delete()) deleted++
+        for (file in files) {
+            if (count <= keep && total <= maxBytes) break
+            val size = file.length()
+            if (file.delete()) {
+                deleted++
+                count--
+                total -= size
+            }
+        }
         return deleted
     }
 

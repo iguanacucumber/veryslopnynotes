@@ -32,7 +32,10 @@ class SyncedRepository(
 
     fun cached(resource: String, query: String): CachedEntry? = store.load(resource, query)
 
-    fun payloads(resource: String): List<String> = store.payloads(resource)
+    // L'IA et les écrans agrégés ne lisent que du FRAIS : une entrée dont le
+    // TTL est dépassé ne doit pas alimenter une matière ou une alerte.
+    fun payloads(resource: String, now: Long = clock()): List<String> =
+        store.freshPayloads(resource, now)
 
     fun isStale(resource: String, entry: CachedEntry, now: Long = clock()): Boolean =
         CachePolicy.isStale(resource, entry.fetchedAt, now)
@@ -321,9 +324,9 @@ class SyncedRepository(
         val out = mutableListOf<SecurityAlert.ScannableText>()
         for (resource in listOf(CachePolicy.NEWS, CachePolicy.ASSIGNMENTS, CachePolicy.DISCUSSIONS)) {
             // Une ressource a une entrée par requête : on lit TOUTES les
-            // entrées, une semaine oubliée ne doit pas échapper à l'alerte.
+            // entrées FRAÎCHES, sans réinjecter une semaine périmée.
             val payloads = try {
-                store.payloads(resource)
+                store.freshPayloads(resource, clock())
             } catch (_: Exception) {
                 emptyList()
             }

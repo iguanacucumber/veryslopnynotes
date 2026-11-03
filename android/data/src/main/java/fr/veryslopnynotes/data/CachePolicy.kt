@@ -35,6 +35,29 @@ object CachePolicy {
 
     const val TTL_DISCUSSIONS_MS = 15L * 60L * 1000L
 
+    // Budgets de la mémoire et du disque : le payload est mesuré en UTF-8,
+    // jamais en caractères (un accent pèse 2 octets, un emoji 4).
+    const val MAX_PAYLOAD_BYTES = 512 * 1024
+    const val MAX_TOTAL_BYTES = 2 * 1024 * 1024
+
+    /** Une entrée par requête, et pas plus de [maxEntriesFor] par ressource. */
+    fun maxEntriesFor(resource: String): Int = when (resource) {
+        GRADES -> 8
+        ASSIGNMENTS -> 12
+        TIMETABLE -> 8
+        NEWS -> 4
+        MENUS -> 4
+        ATTENDANCE -> 8
+        PUNISHMENTS -> 4
+        CAPABILITIES -> 2
+        DISCUSSIONS -> 4
+        SECURITY_ALERTS -> 2
+        else -> throw IllegalArgumentException("ressource non cachable: $resource")
+    }
+
+    fun isPayloadTooLarge(payload: String): Boolean =
+        payload.toByteArray(Charsets.UTF_8).size > MAX_PAYLOAD_BYTES
+
     fun isCacheable(resource: String): Boolean =
         resource == GRADES || resource == ASSIGNMENTS || resource == TIMETABLE ||
             resource == NEWS || resource == MENUS ||
