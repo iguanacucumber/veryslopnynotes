@@ -135,7 +135,7 @@ Cette autonomie n'est justifiée que par le gate : `ship.sh` rejoue `make check`
 après rebase, et la CI rejoue le même gate sur la PR. Une PR dont le gate n'a pas
 tourné n'est jamais fusionnée. Depuis #880, `ship.sh` attend
 `gh pr checks --watch` et ne fusionne jamais un check rouge ; un ruleset exige
-`check` et `web-smoke` sur `main`
+`check`, `web-smoke` et `gitleaks` sur `main`
 ([`BRANCH-PROTECTION.md`](../architecture/BRANCH-PROTECTION.md)). Si le gate est
 allégé ou contourné, l'automatisme s'arrête : c'est le gate qui tient lieu de
 relecture finale, pas la confiance.
