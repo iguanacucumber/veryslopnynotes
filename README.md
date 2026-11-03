@@ -96,6 +96,9 @@ Parcours humain (fork, PR, gate, signature) :
 ## État et limites
 
 Projet en développement (`versionName` `0.1.0`), aucune release publiée.
+Compatibilité : Android 8+, QR + PIN uniquement, double authentification non
+prise en charge ; assistant et scraper facultatifs — matrice complète dans
+[`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 Limites assumées : accès Pronote dépendant de l'établissement et du QR ;
 assistant IA inactif sans clé OpenRouter ; scraper sans authentification par
 conception, jamais public ; pas de compte Pronote réel dans la suite par
