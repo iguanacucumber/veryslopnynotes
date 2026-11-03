@@ -2,7 +2,7 @@
 // et emoji. Aucune règle réseau ici, seulement ce qui peut être dit avant
 // l'écriture.
 
-import type { ManualSaveResult, SubjectPref, SubjectSaveResult } from "../../bridge/types";
+import type { ManualSaveResult, SettingsSnapshot, SubjectPref, SubjectSaveResult } from "../../bridge/types";
 
 export type Theme = "SYSTEM" | "LIGHT" | "DARK";
 
@@ -29,6 +29,24 @@ export const MANUAL_RIGHTS_ATTESTATION =
 /** Enregistrer ou scraper exige une adresse NON VIDE et l'attestation cochée. */
 export function manualCanSave(url: string, attested: boolean): boolean {
   return attested && url.trim() !== "";
+}
+
+/** L'invitation au manuel ne se montre que si le scraper est configuré : sans
+ *  serveur, elle demanderait une adresse qui ne peut pas être récupérée. */
+export function manualPromptDue(
+  snapshot: Pick<
+    SettingsSnapshot,
+    "llmConfigured" | "serverHost" | "manualConfigured" | "manualUrl" | "manualPromptSeen"
+  >,
+): boolean {
+  const serverHost = typeof snapshot.serverHost === "string" ? snapshot.serverHost.trim() : "";
+  return (
+    snapshot.llmConfigured === true &&
+    serverHost !== "" &&
+    snapshot.manualConfigured !== true &&
+    (snapshot.manualUrl ?? "") === "" &&
+    snapshot.manualPromptSeen !== true
+  );
 }
 
 /** Le message NATIF fait foi quand il existe ; le repli est générique. */

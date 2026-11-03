@@ -4,7 +4,7 @@ import { BridgeCallError } from "../../bridge/types";
 import { useApp } from "../../ui/AppContext";
 import { Dialog } from "../../ui/Dialog";
 import { IconBook } from "../../ui/icons";
-import { MANUAL_RIGHTS_ATTESTATION, MAX_MANUAL_URL_CHARS, manualCanSave } from "./model";
+import { MANUAL_RIGHTS_ATTESTATION, MAX_MANUAL_URL_CHARS, manualCanSave, manualPromptDue } from "./model";
 
 function errorMessage(error: unknown): string {
   if (error instanceof BridgeCallError) {
@@ -14,8 +14,9 @@ function errorMessage(error: unknown): string {
   return "Manuel non enregistré : réessaie dans un instant.";
 }
 
-/** Invitation unique au manuel : seulement si l'assistant est configuré, jamais
- *  revue après enregistrement ou refus (le champ reste dans Réglages). */
+/** Invitation unique au manuel : seulement si l'assistant et un serveur sont
+ *  configurés, jamais revue après enregistrement ou refus (le champ reste dans
+ *  Réglages → Avancé). */
 export function ManualPrompt() {
   const { notify } = useApp();
   const [open, setOpen] = useState(false);
@@ -31,12 +32,7 @@ export function ManualPrompt() {
       .settings()
       .then((snapshot) => {
         if (!alive) return;
-        setOpen(
-          snapshot.llmConfigured === true &&
-            snapshot.manualConfigured !== true &&
-            (snapshot.manualUrl ?? "") === "" &&
-            snapshot.manualPromptSeen !== true,
-        );
+        setOpen(manualPromptDue(snapshot));
       })
       .catch(() => undefined);
     return () => {
@@ -100,7 +96,7 @@ export function ManualPrompt() {
     <Dialog
       open={open}
       title="Ton manuel, une seule fois"
-      description="L’assistant choisit l’ouvrage selon ta classe et la matière du devoir. Colle l’adresse d’un manuel que tu as le droit d’utiliser. Ton adresse part uniquement vers le scraper configuré dans Réglages, jamais vers l’établissement ni vers le fournisseur LLM."
+      description="L’assistant choisit l’ouvrage selon ta classe et la matière du devoir. Colle l’adresse d’un manuel que tu as le droit d’utiliser. Ton adresse part uniquement vers le scraper configuré dans Réglages → Avancé, jamais vers l’établissement ni vers le fournisseur LLM."
       icon={<IconBook size={20} />}
       busy={busy}
       onClose={dismiss}
@@ -141,7 +137,7 @@ export function ManualPrompt() {
         }}
       />
       <p id={`${inputId}-help`} className="tiny muted" style={{ margin: "6px 0 0" }}>
-        L’adresse n’est pas préremplie. Le scraper facultatif doit être renseigné dans Réglages.
+        L’adresse n’est pas préremplie. Le scraper facultatif doit être renseigné dans Réglages → Avancé.
         L’assistant cite l’extrait « Manuel : titre ».
       </p>
       <label

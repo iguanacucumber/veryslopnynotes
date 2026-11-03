@@ -161,7 +161,7 @@ export function ManualCard({ snapshot, loading }: { snapshot: SettingsSnapshot |
       <p id="manual-help" className="tiny muted" style={{ margin: "6px 0 0" }}>
         Colle l’adresse d’un manuel que tu as le droit d’utiliser, ou le catalogue de ton
         éditeur s’il l’autorise. L’assistant choisit l’ouvrage selon ta classe et la matière du
-        devoir ; la récupération passe par le scraper facultatif des réglages avancés.
+        devoir ; la récupération passe par le scraper facultatif de la section Avancé.
       </p>
       <label
         className="tiny muted"

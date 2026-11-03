@@ -22,22 +22,26 @@ describe("réglages — une seule section Assistant (#612)", () => {  const sett
   const keyCard = source("features/settings/AssistantCards.tsx");
   const manual = source("features/settings/ManualCard.tsx");
   const server = source("features/settings/ServerCard.tsx");
+  const advancedSection = source("features/settings/AdvancedSection.tsx");
 
-  test("l'ordre Apparence, Matières, Assistant, Appareil remplace la section Sécurité", () => {
+  test("l'ordre Apparence, Matières, Assistant, Avancé remplace la section Sécurité", () => {
     expect(settings).not.toContain('title="Sécurité"');
-    const order = ["Apparence", "Matières", "Assistant", "Appareil"].map((title) =>
-      settings.search(new RegExp(`<Section[^>]*title="${title}"`)),
-    );
+    const order = [
+      settings.search(/<Section[^>]*title="Apparence"/),
+      settings.search(/<Section[^>]*title="Matières"/),
+      settings.search(/<Section[^>]*title="Assistant"/),
+      settings.indexOf("<AdvancedSection"),
+    ];
     expect(order.every((index) => index > -1)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     // Une seule section Assistant : la configuration IA n'est pas éparpillée.
     expect(settings.match(/<Section[^>]*title="Assistant"/g)).toHaveLength(1);
   });
 
-  test("clé et manuel vivent dans Assistant, le scraper reste sous Appareil", () => {
-    const assistant = between(settings, 'title="Assistant"', 'title="Appareil"');
+  test("clé dans Assistant, manuel et scraper dans Avancé", () => {
+    const assistant = between(settings, 'title="Assistant"', "<AdvancedSection");
     expect(assistant).toContain("<AssistantCards");
-    expect(assistant).toContain("<ManualCard");
+    expect(assistant).not.toContain("<ManualCard");
     expect(assistant).not.toContain("<ServerCard");
     expect(keyCard).toContain('id="llm-key"');
     expect(manual).toContain('id="manual-url"');
@@ -45,17 +49,18 @@ describe("réglages — une seule section Assistant (#612)", () => {  const sett
     expect(overview).toContain("assistantStatus(configured");
     expect(overview).toContain("configured: boolean | null");
 
-    const device = settings.slice(settings.indexOf('title="Appareil"'));
-    expect(device).toContain("<ServerCard");
-    expect(device).not.toContain("<ManualCard");
+    const advanced = settings.slice(settings.indexOf("<AdvancedSection"));
+    expect(advanced).toContain("<ManualCard");
+    expect(advanced).toContain("<ServerCard");
+    expect(advanced).toContain("<SelfHostingNotice");
     expect(server).toContain('id="server-host"');
     expect(server).toContain("Scraper de manuels (facultatif)");
     expect(server).not.toContain('id="manual-url"');
   });
 
-  test("la tuile Appareil ancre vers une section qui dégage la barre", () => {
-    expect(settings).toContain('target: "reglages-appareil"');
-    expect(settings).toContain('id="reglages-appareil"');
+  test("la tuile Avancé ancre vers une section qui dégage la barre", () => {
+    expect(settings).toContain('target: "reglages-avance"');
+    expect(advancedSection).toContain('id="reglages-avance"');
     const css = source("features/settings/settings.css");
     expect(css).toContain("scroll-margin-top");
     expect(css).toContain("56px");

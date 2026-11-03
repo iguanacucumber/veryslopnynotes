@@ -6,6 +6,7 @@ import { Avatar, ErrorBox, ListRow, Loading, Page, Rows, Section } from "../../u
 import { IconBook, IconInfo, IconSettings, IconShield, IconSparkles } from "../../ui/icons";
 import { useViewNavigate } from "../../ui/viewTransition";
 import { parseProfilePayload, type Profile } from "../profile/model";
+import { AdvancedSection, SelfHostingNotice } from "./AdvancedSection";
 import { AppearanceCard } from "./AppearanceCard";
 import { AssistantCards } from "./AssistantCards";
 import { ManualCard } from "./ManualCard";
@@ -23,6 +24,7 @@ export default function SettingsScreen() {
   const [loading, setLoading] = useState(true);
   const [settingsError, setSettingsError] = useState("");
   const [reload, setReload] = useState(0);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -81,9 +83,9 @@ export default function SettingsScreen() {
       Icon: IconSparkles,
     },
     {
-      target: "reglages-appareil",
-      label: "Appareil",
-      detail: "Serveur, session",
+      target: "reglages-avance",
+      label: "Avancé",
+      detail: "Serveur, manuel",
       tone: "device",
       Icon: IconShield,
     },
@@ -145,12 +147,13 @@ export default function SettingsScreen() {
 
       <Section id="reglages-assistant" title="Assistant">
         <AssistantCards snapshot={snapshot} loading={loading} />
-        <ManualCard snapshot={snapshot} loading={loading} />
       </Section>
 
-      <Section id="reglages-appareil" title="Appareil">
+      <AdvancedSection open={advancedOpen} onToggle={() => setAdvancedOpen((open) => !open)}>
+        <SelfHostingNotice />
         <ServerCard snapshot={snapshot} loading={loading} />
-      </Section>
+        <ManualCard snapshot={snapshot} loading={loading} />
+      </AdvancedSection>
 
       <Section title="Aide">
         <Rows>

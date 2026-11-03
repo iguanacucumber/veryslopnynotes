@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { mockCall } from "../../web/src/bridge/mock";
 import { assignmentHasAssistantMaterial } from "../../web/src/features/tasks/assignments";
-import { manualCanSave, manualSaveNotice } from "../../web/src/features/settings/model";
+import { manualCanSave, manualPromptDue, manualSaveNotice } from "../../web/src/features/settings/model";
 import { readBridgeSource } from "../unit/fixtures/bridge-source";
 
 const WEB = join(import.meta.dir, "..", "..", "web", "src");
@@ -16,11 +16,23 @@ function source(path: string): string {
 describe("manuel — invitation UNE seule fois", () => {
   const prompt = source("features/settings/ManualPrompt.tsx");
 
-  test("l'invitation n'apparaît que si l'assistant est utile, et jamais deux fois", () => {
-    expect(prompt).toContain("snapshot.llmConfigured === true");
-    expect(prompt).toContain("snapshot.manualConfigured !== true");
-    expect(prompt).toContain('(snapshot.manualUrl ?? "") === ""');
-    expect(prompt).toContain("snapshot.manualPromptSeen !== true");
+  test("l'invitation attend l'assistant ET un serveur configuré", () => {
+    const base = {
+      llmConfigured: true,
+      serverHost: "scraper.exemple",
+      manualConfigured: false,
+      manualUrl: "",
+      manualPromptSeen: false,
+    };
+    expect(manualPromptDue(base)).toBe(true);
+    // Sans serveur, l'adresse ne pourrait pas être récupérée : aucune relance.
+    expect(manualPromptDue({ ...base, serverHost: "" })).toBe(false);
+    expect(manualPromptDue({ ...base, serverHost: "   " })).toBe(false);
+    expect(manualPromptDue({ ...base, llmConfigured: false })).toBe(false);
+    expect(manualPromptDue({ ...base, manualConfigured: true })).toBe(false);
+    expect(manualPromptDue({ ...base, manualUrl: "https://manuel.exemple.fr" })).toBe(false);
+    expect(manualPromptDue({ ...base, manualPromptSeen: true })).toBe(false);
+    expect(prompt).toContain("manualPromptDue(snapshot)");
   });
 
   test("« Plus tard » persiste le refus, l'adresse passe par le pont natif", () => {
@@ -30,7 +42,7 @@ describe("manuel — invitation UNE seule fois", () => {
     expect(prompt).not.toContain("localStorage");
   });
 
-  test("l'adresse part VIDE et Réglages garde le champ", () => {
+  test("l'adresse part VIDE et la section Avancé garde le champ", () => {
     expect(source("features/home/HomeScreen.tsx")).toContain("<ManualPrompt />");
     const prompt = source("features/settings/ManualPrompt.tsx");
     expect(prompt).toContain('useState("")');
