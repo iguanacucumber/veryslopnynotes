@@ -56,6 +56,19 @@ export function llmSaveError(response: { ok: boolean; message?: string }): strin
   return message !== "" ? message : "Clé refusée : vérifie qu'elle est complète.";
 }
 
+export const LOCAL_NETWORK_TITLE = "Accès au réseau local";
+
+/** Rationale AVANT la demande système : Android 17 protège les sockets LAN. */
+export const LOCAL_NETWORK_RATIONALE =
+  "Ce serveur est sur ton réseau local. Android demande une autorisation pour que l’app puisse le joindre et récupérer les manuels. Sans cette autorisation, l’adresse ne sera pas enregistrée.";
+
+/** Le refus natif (avec son chemin Réglages) fait foi ; jamais un succès muet. */
+export function serverSaveError(response: { ok: boolean; message?: string }): string {
+  if (response.ok) return "";
+  const message = (response.message ?? "").trim();
+  return message !== "" ? message : "Adresse refusée : vérifie le domaine et le port.";
+}
+
 export interface AssistantStatus {
   title: string;
   body: string;

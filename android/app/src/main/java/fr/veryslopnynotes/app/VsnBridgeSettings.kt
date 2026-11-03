@@ -5,6 +5,7 @@ import fr.veryslopnynotes.core.ManualCatalog
 import fr.veryslopnynotes.core.ManualUrl
 import fr.veryslopnynotes.core.ManualUrlResult
 import fr.veryslopnynotes.core.ServerConfig
+import fr.veryslopnynotes.core.ServerUrlResult
 import fr.veryslopnynotes.data.AssignmentsRepository
 import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.ManualDoc
@@ -45,27 +46,54 @@ internal fun VsnBridge.settings(): JSONObject {
         .put("lessonSubjects", JSONArray(lessons.subjects()))
 }
 
-internal fun VsnBridge.saveServer(p: JSONObject): JSONObject {
+internal fun VsnBridge.saveServer(p: JSONObject, requestId: String): JSONObject? {
+    val host = serverHost(p)
+    if (!BuildConfig.DEBUG && host.startsWith("http://")) {
+        return JSONObject().put("ok", false)
+            .put("message", "HTTP en clair n'existe que dans les builds de développement : utilisez https.")
+    }
+    return when (val checked = ServerConfig.validateBaseUrl(host)) {
+        is ServerUrlResult.Rejected ->
+            JSONObject().put("ok", false).put("message", checked.message)
+        is ServerUrlResult.Ok ->
+            // Android 17 : l'adresse LAN n'est écrite qu'après l'accord. La
+            // réponse est alors différée (`null`) jusqu'au retour du système.
+            if (localNetworkPermissionRequired(checked.baseUrl)) {
+                requestLocalNetworkPermission(requestId, checked.baseUrl)
+            } else {
+                completeServerSave(checked.baseUrl)
+            }
+    }
+}
+
+/** `needed` pilote la rationale AVANT de lancer la demande système. */
+internal fun VsnBridge.localNetworkStatus(p: JSONObject): JSONObject {
+    val checked = ServerConfig.validateBaseUrl(serverHost(p))
+    val needed = checked is ServerUrlResult.Ok && localNetworkPermissionRequired(checked.baseUrl)
+    return JSONObject().put("needed", needed)
+}
+
+private fun VsnBridge.serverHost(p: JSONObject): String {
     var host = bounded(p.string("host"), 300)
     if (!host.contains("://")) {
         // HTTP n'est inféré qu'en debug ; la release reste HTTPS strict (SEC-01).
         val scheme = if (BuildConfig.DEBUG) ServerConfig.schemeFor(host) else "https"
         host = "$scheme://$host"
     }
-    if (!BuildConfig.DEBUG && host.startsWith("http://")) {
-        return JSONObject().put("ok", false)
-            .put("message", "HTTP en clair n'existe que dans les builds de développement : utilisez https.")
-    }
-    return when (val result = serverStore.save(host)) {
-        is fr.veryslopnynotes.core.ServerUrlResult.Ok -> {
+    return host
+}
+
+/** Point d'écriture unique de l'adresse, appelé après la porte réseau local. */
+internal fun VsnBridge.completeServerSave(baseUrl: String): JSONObject =
+    when (val result = serverStore.save(baseUrl)) {
+        is ServerUrlResult.Ok -> {
             // Nouveau scraper = nouvelle chance pour les manuels.
             manualFailures.clear()
             JSONObject().put("ok", true)
         }
-        is fr.veryslopnynotes.core.ServerUrlResult.Rejected ->
+        is ServerUrlResult.Rejected ->
             JSONObject().put("ok", false).put("message", result.message)
     }
-}
 
 /**
  * Enregistre l'adresse du manuel puis prépare le choix :

@@ -52,6 +52,49 @@ object ServerConfig {
         if (isEmulatorHost(host)) "http" else "https"
 
     /**
+     * Hôte joignable seulement sur le réseau local : Android 17 exige
+     * `ACCESS_LOCAL_NETWORK` avant la socket. Heuristique SANS DNS (une
+     * résolution ne doit jamais partir d'un simple enregistrement) : loopback
+     * exclu, IPv4 privée/lien-local, IPv6 ULA/lien-local, `.local` ou nom à un
+     * seul label. Un domaine public reste hors de cette porte.
+     */
+    fun isLocalNetworkUrl(baseUrl: String): Boolean {
+        val sep = baseUrl.indexOf("://")
+        if (sep <= 0) return false
+        val authority = baseUrl.substring(sep + 3).substringBefore('/')
+        val host = if (authority.startsWith("[")) {
+            val end = authority.indexOf(']')
+            if (end < 0) return false
+            authority.substring(1, end)
+        } else {
+            authority.substringBefore(':')
+        }
+        return isLocalNetworkHost(host)
+    }
+
+    fun isLocalNetworkHost(host: String): Boolean {
+        val bare = if (host.startsWith("[") && host.endsWith("]")) host.substring(1, host.length - 1) else host
+        if (bare.isEmpty() || isLoopbackHost(host)) return false
+        if (isIpv4(bare)) {
+            val groups = bare.split('.')
+            val first = groups[0].toInt()
+            val second = groups[1].toInt()
+            return first == 10 ||
+                (first == 172 && second in 16..31) ||
+                (first == 192 && second == 168) ||
+                (first == 169 && second == 254)
+        }
+        if (bare.contains(':')) {
+            val head = bare.substringBefore(':').lowercase()
+            return head.startsWith("fc") || head.startsWith("fd") ||
+                head.startsWith("fe8") || head.startsWith("fe9") ||
+                head.startsWith("fea") || head.startsWith("feb")
+        }
+        val lower = bare.lowercase()
+        return !lower.contains('.') || lower.endsWith(".local")
+    }
+
+    /**
      * Valide et NORMALISE l'adresse du serveur choisi à l'exécution : la saisie
      * est libre, la contrainte est donc ici.
      *

@@ -43,6 +43,12 @@ async function serverAllowed(url: string, baseUrl: string): Promise<boolean> {
   return result.allowed;
 }
 
+/** Porte Android 17 : le VRAI `ServerConfig.isLocalNetworkUrl`, sans DNS. */
+async function localNetwork(raw: string): Promise<boolean> {
+  const result = JSON.parse(await link!.ask({ op: "localNetwork", raw })) as { local: boolean };
+  return result.local;
+}
+
 const ACCEPTED: [string, string][] = [
   ["https://notes.exemple.fr", "https://notes.exemple.fr"],
   ["https://notes.exemple.fr:8443", "https://notes.exemple.fr:8443"],
@@ -171,6 +177,33 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     }
   });
 
+  test.skipIf(skip)("réseau local : seuls les hôtes LAN déclenchent Android 17, jamais le loopback", async () => {
+    const LAN = [
+      "https://192.168.1.10:3000",
+      "https://10.1.2.3",
+      "https://172.16.0.5",
+      "https://172.31.255.1",
+      "https://169.254.1.1",
+      "https://serveur-poste",
+      "https://nas.local",
+      "https://[fe80::1]",
+      "https://[fd00::1]",
+    ];
+    const REMOTE = [
+      "http://10.0.2.2:3000",
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "https://[::1]",
+      "https://notes.exemple.fr",
+      "https://1.2.3.4",
+      "https://8.8.8.8",
+      "https://203.0.113.10",
+      "https://[2001:db8::1]",
+    ];
+    for (const raw of LAN) expect({ raw, local: await localNetwork(raw) }).toEqual({ raw, local: true });
+    for (const raw of REMOTE) expect({ raw, local: await localNetwork(raw) }).toEqual({ raw, local: false });
+  });
+
   test("store : une adresse, validée avant écriture, prefs séparées des comptes", () => {
     const store = read(join(DATA, "ServerStore.kt"));
     expect(store).toContain("class ServerStore(context: Context)");
@@ -203,7 +236,7 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     expect(bridge).toContain("private val baseUrlSeed: String = if (BuildConfig.SERVER_HOST.isEmpty())");
     expect(bridge).toContain("internal val serverStore = ServerStore(ctx)");
     expect(bridge).toContain("internal fun currentBaseUrl(): String = serverStore.baseUrl(baseUrlSeed)");
-    expect(bridge).toContain("serverStore.save(host)");
+    expect(bridge).toContain("serverStore.save(baseUrl)");
     // Aucune purge parallèle : tout passe par PairingRepository.logoutBlocking().
     expect(bridgeCode).not.toContain("clearAll(");
     expect(bridgeCode).not.toContain("sessions.clear(");

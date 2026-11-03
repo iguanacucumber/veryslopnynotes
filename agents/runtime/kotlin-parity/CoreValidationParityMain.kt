@@ -124,6 +124,12 @@ private fun driver(op: JsonValue.Obj): JsonValue = when (op.str("op")) {
         val baseUrl = op.str("baseUrl") ?: ""
         obj("allowed" to JsonValue.Bool(ServerConfig.isAllowed(url, baseUrl)))
     }
+    // Porte `ACCESS_LOCAL_NETWORK` (Android 17) : la classification est PURE,
+    // sans DNS, donc elle se teste sans appareil.
+    "localNetwork" -> {
+        val raw = op.str("raw") ?: throw IllegalArgumentException("pilote: adresse absente")
+        obj("local" to JsonValue.Bool(ServerConfig.isLocalNetworkUrl(raw)))
+    }
     else -> throw IllegalArgumentException("pilote: opération inconnue : ${op.str("op")}")
 }
 
