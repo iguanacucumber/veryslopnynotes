@@ -20,10 +20,11 @@ scraper de manuels ; son adresse se configure dans l'app (`data/ServerStore`).
 L'adresse de build n'est qu'une valeur par défaut.
 
 L'app demande **une seule fois** l'adresse du manuel de l'élève
-(`data/Manuals.kt`). Par défaut, c'est le catalogue
-`https://www.lelivrescolaire.fr/manuels` : `core/ManualCatalog.kt` devine la
-classe depuis le profil (`classLabel`) et les spécialités depuis les matières
-présentes dans les caches, puis choisit l'ouvrage de la matière du devoir. Une
+(`data/Manuals.kt`). Le champ part VIDE : l'élève saisit une adresse qu'il a le
+droit d'utiliser et coche l'attestation avant l'enregistrement. Si l'adresse
+est un catalogue, `core/ManualCatalog.kt` devine la classe depuis le profil
+(`classLabel`) et les spécialités depuis les matières présentes dans les caches,
+puis choisit l'ouvrage de la matière du devoir. Une
 matière absente de la table ne produit aucune source — jamais un manuel d'une
 autre matière. Le texte récupéré est une donnée externe, marquée Untrusted
 avant le prompt, comme le cours et la consigne.

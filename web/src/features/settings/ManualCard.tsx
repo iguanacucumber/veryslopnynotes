@@ -4,14 +4,15 @@ import type { SettingsSnapshot } from "../../bridge/types";
 import { useApp } from "../../ui/AppContext";
 import { Card } from "../../ui/components";
 import { actionMessage } from "./action";
-import { DEFAULT_MANUAL_URL, MAX_MANUAL_URL_CHARS, manualSaveNotice } from "./model";
+import { MANUAL_RIGHTS_ATTESTATION, MAX_MANUAL_URL_CHARS, manualCanSave, manualSaveNotice } from "./model";
 
 /** L'adresse part au pont natif, jamais au serveur de l'établissement ; rien n'est stocké ici. */
 export function ManualCard({ snapshot, loading }: { snapshot: SettingsSnapshot | null; loading: boolean }) {
   const { notify } = useApp();
-  // Vide tant que l'instantané n'est pas lu : l'adresse par défaut ne doit pas
-  // passer pour une valeur enregistrée (I14).
+  // Vide tant que l'instantané n'est pas lu : une adresse non enregistrée ne
+  // doit pas passer pour une valeur lue (I14).
   const [manualUrl, setManualUrl] = useState("");
+  const [manualRights, setManualRights] = useState(false);
   const [manualConfigured, setManualConfigured] = useState(false);
   const [manualAuto, setManualAuto] = useState(false);
   const [manualReady, setManualReady] = useState(false);
@@ -23,9 +24,7 @@ export function ManualCard({ snapshot, loading }: { snapshot: SettingsSnapshot |
 
   useEffect(() => {
     if (!snapshot) return;
-    setManualUrl(
-      typeof snapshot.manualUrl === "string" && snapshot.manualUrl !== "" ? snapshot.manualUrl : DEFAULT_MANUAL_URL,
-    );
+    setManualUrl(typeof snapshot.manualUrl === "string" ? snapshot.manualUrl : "");
     setManualConfigured(snapshot.manualConfigured === true);
     setManualAuto(snapshot.manualAuto === true);
     setManualReady(snapshot.manualReady === true);
@@ -39,6 +38,10 @@ export function ManualCard({ snapshot, loading }: { snapshot: SettingsSnapshot |
       setManualError("Colle l'adresse de ton manuel avant d'enregistrer.");
       return;
     }
+    if (!manualRights) {
+      setManualError("Coche l'attestation avant d'enregistrer.");
+      return;
+    }
     setManualError("");
     setManualNotice("");
     setSavingManual(true);
@@ -49,6 +52,7 @@ export function ManualCard({ snapshot, loading }: { snapshot: SettingsSnapshot |
         return;
       }
       setManualUrl(value);
+      setManualRights(false);
       setManualConfigured(true);
       setManualAuto(response.auto === true);
       setManualReady(response.ready === true);
@@ -74,7 +78,8 @@ export function ManualCard({ snapshot, loading }: { snapshot: SettingsSnapshot |
         setManualError(response.message || "Manuel non supprimé : réessaie dans un instant.");
         return;
       }
-      setManualUrl(DEFAULT_MANUAL_URL);
+      setManualUrl("");
+      setManualRights(false);
       setManualConfigured(false);
       setManualAuto(false);
       setManualReady(false);
@@ -94,8 +99,8 @@ export function ManualCard({ snapshot, loading }: { snapshot: SettingsSnapshot |
     .filter((part) => part !== "")
     .join(" · ");
   const manualStatus = manualAuto ? "Automatique" : manualReady ? "Prêt" : "Non récupéré";
-  // Instantané non lu : ni l'adresse par défaut ni « Non récupéré » ne sont
-  // des faits sur ce compte.
+  // Instantané non lu : ni une adresse ni « Non récupéré » ne sont des faits
+  // sur ce compte.
   const unread = snapshot === null && !loading;
   const blocked = loading || unread || savingManual;
 
@@ -145,6 +150,7 @@ export function ManualCard({ snapshot, loading }: { snapshot: SettingsSnapshot |
         placeholder="https://manuel.exemple.fr/chapitre"
         onChange={(event) => {
           setManualUrl(event.target.value);
+          setManualRights(false);
           setManualConfigured(false);
           setManualAuto(false);
           setManualReady(false);
@@ -153,10 +159,26 @@ export function ManualCard({ snapshot, loading }: { snapshot: SettingsSnapshot |
         }}
       />
       <p id="manual-help" className="tiny muted" style={{ margin: "6px 0 0" }}>
-        Garde l’adresse du catalogue : l’assistant choisit l’ouvrage selon ta classe et la
-        matière du devoir. Tu peux aussi coller l’adresse d’un manuel précis. La récupération
-        passe par le scraper facultatif des réglages avancés.
+        Colle l’adresse d’un manuel que tu as le droit d’utiliser, ou le catalogue de ton
+        éditeur s’il l’autorise. L’assistant choisit l’ouvrage selon ta classe et la matière du
+        devoir ; la récupération passe par le scraper facultatif des réglages avancés.
       </p>
+      <label
+        className="tiny muted"
+        style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 10, cursor: "pointer" }}
+      >
+        <input
+          type="checkbox"
+          checked={manualRights}
+          disabled={blocked}
+          style={{ flex: "none", width: 18, height: 18, margin: 0, accentColor: "var(--brand-solid)" }}
+          onChange={(event) => {
+            setManualRights(event.target.checked);
+            if (manualError) setManualError("");
+          }}
+        />
+        <span>{MANUAL_RIGHTS_ATTESTATION}</span>
+      </label>
       {manualConfigured && !manualNotice ? (
         <p
           className="tiny"
@@ -204,7 +226,7 @@ export function ManualCard({ snapshot, loading }: { snapshot: SettingsSnapshot |
         <button
           type="button"
           className="btn btn--small"
-          disabled={blocked || manualUrl.trim() === ""}
+          disabled={blocked || !manualCanSave(manualUrl, manualRights)}
           onClick={() => void saveManual()}
         >
           {savingManual ? "Enregistrement…" : "Enregistrer le manuel"}

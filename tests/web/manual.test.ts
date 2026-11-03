@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { Glob } from "bun";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { mockCall } from "../../web/src/bridge/mock";
 import { assignmentHasAssistantMaterial } from "../../web/src/features/tasks/assignments";
-import { manualSaveNotice } from "../../web/src/features/settings/model";
+import { manualCanSave, manualSaveNotice } from "../../web/src/features/settings/model";
 import { readBridgeSource } from "../unit/fixtures/bridge-source";
 
 const WEB = join(import.meta.dir, "..", "..", "web", "src");
@@ -29,15 +30,45 @@ describe("manuel — invitation UNE seule fois", () => {
     expect(prompt).not.toContain("localStorage");
   });
 
-  test("l'invitation part du catalogue et Réglages garde le champ", () => {
+  test("l'adresse part VIDE et Réglages garde le champ", () => {
     expect(source("features/home/HomeScreen.tsx")).toContain("<ManualPrompt />");
     const prompt = source("features/settings/ManualPrompt.tsx");
-    expect(prompt).toContain("useState(DEFAULT_MANUAL_URL)");
+    expect(prompt).toContain('useState("")');
+    expect(prompt).not.toContain("DEFAULT_MANUAL_URL");
     const settings = source("features/settings/ManualCard.tsx");
     expect(settings).toContain("bridge.saveManualUrl(value)");
     expect(settings).toContain("bridge.saveManualUrl(\"\")");
     expect(settings).toContain("MAX_MANUAL_URL_CHARS");
-    expect(settings).toContain("DEFAULT_MANUAL_URL");
+    expect(settings).toContain('useState("")');
+    expect(settings).not.toContain("DEFAULT_MANUAL_URL");
+  });
+
+  test("aucun catalogue d'éditeur n'est prérempli dans la WebView", () => {
+    // #961 : le défaut historique ne doit pas revenir par un import ou une copie.
+    const hits = [...new Glob("**/*.{ts,tsx}").scanSync(WEB)].filter((file) =>
+      readFileSync(join(WEB, file), "utf8").toLowerCase().includes("lelivrescolaire"),
+    );
+    expect(hits).toEqual([]);
+  });
+});
+
+describe("manuel — attestation avant enregistrement", () => {
+  test("une adresse vide ou une attestation absente bloque l'enregistrement", () => {
+    expect(manualCanSave("", true)).toBe(false);
+    expect(manualCanSave("   ", true)).toBe(false);
+    expect(manualCanSave("https://manuel.exemple.fr/chapitre", false)).toBe(false);
+    expect(manualCanSave("https://manuel.exemple.fr/chapitre", true)).toBe(true);
+  });
+
+  test("les deux écrans demandent l'attestation et la copie ne pousse plus de défaut", () => {
+    for (const file of ["features/settings/ManualCard.tsx", "features/settings/ManualPrompt.tsx"]) {
+      const text = source(file);
+      expect(text).toContain('type="checkbox"');
+      expect(text).toContain("MANUAL_RIGHTS_ATTESTATION");
+      expect(text).toContain("manualCanSave(");
+      expect(text).not.toContain("Garde l’adresse du catalogue");
+      expect(text).not.toContain("adresse par défaut");
+    }
   });
 });
 
@@ -115,7 +146,7 @@ describe("manuel — pont factice", () => {
     expect(after.manualConfigured).toBe(false);
   });
 
-  test("le catalogue par défaut active le choix automatique par classe/matière", async () => {
+  test("une adresse de catalogue saisie active le choix automatique par classe/matière", async () => {
     const saved = (await mockCall("settings.saveManualUrl", {
       url: "https://www.lelivrescolaire.fr/manuels",
     })) as { ok: boolean; auto?: boolean; ready?: boolean; level?: string; specialties?: string[] };
