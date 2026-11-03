@@ -20,6 +20,7 @@ import {
   isWebScrapeDoc,
   isWebScrapeRequest,
 } from "../../shared/contracts/api";
+import { prepareJarStore } from "./jar-store";
 import type { ManualDoc } from "./manuals";
 import { DEFAULT_AUTH_FILE, ScrapeManualsError, scrapeManuals } from "./manuals-scrape";
 import type { HostResolver } from "./ssrf";
@@ -488,6 +489,7 @@ function readPem(path: string, variable: string): string {
 export function start(
   env: Record<string, string | undefined> = Bun.env as Record<string, string | undefined>,
 ): ReturnType<typeof Bun.serve> {
+  prepareJarStore(DEFAULT_AUTH_FILE, (message) => console.log(`[server] ${message}`));
   const app = createApp();
   const port = parsePort(envValue(env, "PORT"));
   const hostname = envValue(env, "HOST") || "127.0.0.1";

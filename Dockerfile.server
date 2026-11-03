@@ -18,9 +18,10 @@ RUN bunx playwright install --with-deps chromium
 COPY server ./server
 COPY shared ./shared
 # Non privilégié : Chromium refuse de démarrer en root sans `--no-sandbox`.
-# Seul le répertoire du jar de session appartient au compte.
+# Seul le répertoire du jar de session (0700) appartient au compte.
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin vsn \
  && mkdir -p /app/playwright/.auth \
+ && chmod 700 /app/playwright/.auth \
  && chown -R vsn:vsn /app/playwright
 # HOME explicite : /root est non inscriptible, Chromium doit écrire son profil.
 ENV HOME=/home/vsn

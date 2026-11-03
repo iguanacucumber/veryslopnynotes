@@ -9,15 +9,15 @@
 // workers bloqués. Reste la fenêtre TOCTOU de la
 // résolution côté navigateur (cf. ssrf.ts).
 // Jar de session : celui du SERVEUR uniquement (I24) ; un corps qui demande
-// `authFile` est refusé.
+// `authFile` est refusé. Répertoire 0700, jar 0600, une seule sauvegarde.
 // Le scraper ne s'authentifie pas : `username`/`password` sont refusés, et une
 // page de connexion (HTTP 200) n'est jamais ingérée.
 // HTML sérialisé de façon BORNÉE dans le navigateur, borné en caractères avant
 // reparse et refusé sur un `content-length` trop grand, avec délai : jamais
 // `outerHTML` ni `page.content()` en entier.
-import { rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { load } from "cheerio";
+import { saveJar } from "./jar-store";
 import { truncateManualText } from "./manuals";
 import type { ManualDoc } from "./manuals";
 import { checkPublicHost, systemResolver } from "./ssrf";
@@ -524,43 +524,6 @@ async function readHtml(page: HtmlPage, timeoutMs: number, log: (message: string
   }
 }
 
-/**
- * Contexte Playwright réduit à la persistance du jar.
- *
- * L'écriture passe par un fichier temporaire puis `rename` : une écriture
- * interrompue ne laisse jamais un JSON tronqué à la place de la session.
- * La chaîne PROMISE est au niveau du module : les deux scrapes simultanés
- * (plafond 2) écrivent le même fichier l'un après l'autre, jamais en parallèle.
- */
-interface JarContext {
-  storageState: (options: { path: string }) => Promise<unknown>;
-}
-
-let jarWriteChain: Promise<void> = Promise.resolve();
-let jarTempSeq = 0;
-
-async function persistJar(context: JarContext, path: string): Promise<void> {
-  jarTempSeq += 1;
-  const tmp = `${path}.tmp-${process.pid}-${jarTempSeq}`;
-  try {
-    await context.storageState({ path: tmp });
-    await rename(tmp, path);
-  } catch (err) {
-    await unlink(tmp).catch(() => {});
-    throw err;
-  }
-}
-
-function saveJar(context: JarContext, path: string): Promise<void> {
-  // `then(run, run)` : une écriture précédente ratée ne bloque pas la suivante.
-  const next = jarWriteChain.then(
-    () => persistJar(context, path),
-    () => persistJar(context, path),
-  );
-  jarWriteChain = next.catch(() => {});
-  return next;
-}
-
 /** Réglages du moteur commun : libellé + session + refus de contenu non textuel. */
 export interface ScrapePageConfig {
   /** Nom symbolique (jamais une URL) : plateforme ou « web ». */
@@ -764,7 +727,7 @@ export async function scrapePage(
     }
     const text = truncateManualText(stripTags(html), 4000);
     if (jar) {
-      await saveJar(context, jar).catch(() => {
+      await saveJar(context, jar, log).catch(() => {
         log(`scrape ${config.label} -> jar non persiste`);
       });
     }

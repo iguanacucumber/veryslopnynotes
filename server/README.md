@@ -51,8 +51,10 @@ Garde-fous côté serveur (#362, #779) : seuls des hôtes publics sont visités
 (IP privée refusée, IPv4-mapped comprise), la chaîne de redirections est
 vérifiée avant le navigateur (sonde injoignable = refus) et l'URL finale
 après ; WebSocket gardés par `routeWebSocket`, service workers bloqués, sinon
-ils contourneraient `page.route`. Le jar est choisi par le SERVEUR (#538) et
-écrit par temporaire + `rename`, sérialisé entre scrapes.
+ils contourneraient `page.route`. Jar du SERVEUR (#538) préparé en 0700 au
+démarrage, temporaires nettoyés, écrit en 0600 par temporaire + `rename`,
+sérialisé, une seule sauvegarde, logs sans contenu ; cookies bornés à leur
+domaine, page web sans jar.
 
 Le nom de l'hôte est aussi RÉSOLU (#419) : un nom public qui pointe vers une
 IP interne (rebinding DNS) est refusé avant la navigation, avec un motif

@@ -715,8 +715,8 @@ describe("#779 — fermetures SSRF et bornes du scrape", () => {
       ]);
       // Le fichier final est un JSON complet, jamais une écriture tronquée.
       expect(JSON.parse(readFileSync(jar, "utf8"))).toEqual(JAR_STATE);
-      // Aucun temporaire ne survit, et les écritures ne se sont pas chevauchées.
-      expect(readdirSync(dir).sort()).toEqual(["manuals.json"]);
+      // Aucun temporaire ne survit ; la rotation garde une seule sauvegarde.
+      expect(readdirSync(dir).sort()).toEqual(["manuals.json", "manuals.json.bak"]);
       expect(state.maxConcurrentStorage).toBe(1);
     } finally {
       rmSync(dir, { recursive: true, force: true });
