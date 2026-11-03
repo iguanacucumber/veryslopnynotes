@@ -3,6 +3,8 @@
 Ce dépôt se lit d'abord : [`AGENTS.md`](AGENTS.md) donne les cinq lois et le
 workflow, [`docs/CONTEXT.md`](docs/CONTEXT.md) mène à l'invariant d'une tâche.
 Ce fichier décrit le parcours d'une contribution humaine, du fork au merge.
+La participation est régie par le
+[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) (Contributor Covenant 2.1).
 
 ## Une issue d'abord
 
