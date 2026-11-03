@@ -55,6 +55,22 @@ Commits : `<scope>: <objet>`, à l'impératif, une ligne. La PR cible `main`,
 cite `Closes #<issue>` et raconte le **pourquoi** ; le diff doit rester court
 et lisible.
 
+## DCO (sign-off)
+
+Chaque commit porte son `Signed-off-by: Nom <email>`, l'identité Git
+(`user.name`, `user.email`), qui atteste que tu peux publier la contribution
+sous MIT :
+
+```bash
+git commit -s                    # ajoute le trailer au commit
+git rebase --signoff origin/main # signe rétroactivement une branche
+```
+
+Tous les commits de la PR sont signés ; un commit nu est renvoyé. **Pas de
+CLA** : aucun formulaire à signer, le sign-off suffit.
+
+Aucun bot ne le vérifie : le relecteur contrôle le trailer avant le merge.
+
 ## Le gate avant la PR
 
 `make check` est le gate de merge : compilation Kotlin, Android Lint, tests
