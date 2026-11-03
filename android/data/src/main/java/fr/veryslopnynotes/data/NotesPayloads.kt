@@ -170,9 +170,8 @@ internal fun gradesPayload(client: Client, query: Map<String, String>): String {
         if (pid != null) snapshots[pid] = notes
         for (g in notes.grades) {
             // La période PORTÉE par la ligne prime quand elle nomme une période
-            // COURANTE. `Period.instances` est un registre global jamais vidé
-            // entre sessions : un id périmé rattacherait une note à un trimestre
-            // d'un autre compte.
+            // COURANTE. La résolution est bornée au client courant : un id
+            // périmé rattacherait une note au trimestre d'un autre compte (I16).
             val rowPeriodId = g.period?.id?.takeIf { it in currentIds } ?: pid
             val mapped = mapCoreGrade(g, seq++, rowPeriodId) ?: continue
             if (g.id.isBlank()) {
