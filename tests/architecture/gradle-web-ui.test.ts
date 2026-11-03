@@ -69,6 +69,11 @@ function harness(sdk: string): string {
   // Les entrées de la tâche.
   mkdirSync(join(dir, "web", "src"), { recursive: true });
   writeFileSync(join(dir, "web", "src", "placeholder.ts"), "export const placeholder = 1;\n");
+  writeFileSync(join(dir, "web", "index.html"), "<!doctype html>\n");
+  mkdirSync(join(dir, "web", "public"), { recursive: true });
+  writeFileSync(join(dir, "web", "public", "placeholder.txt"), "public\n");
+  mkdirSync(join(dir, "shared"), { recursive: true });
+  writeFileSync(join(dir, "shared", "placeholder.ts"), "export const placeholder = 1;\n");
   writeFileSync(join(dir, "web", "vite.config.ts"), "export default {};\n");
   // Le « build » du harnais : le bundle produit est une COPIE du lockfile.
   writeFileSync(
