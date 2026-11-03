@@ -14,6 +14,7 @@ Closes #
 - [ ] `make web-smoke` si l'interface change
 - [ ] test manuel sur téléphone si le comportement natif change
 - [ ] docs, invariants ou ADR mis à jour si une règle change
+- [ ] commits signés DCO (`git commit -s`, trailer `Signed-off-by:`)
 
 ## Données
 
