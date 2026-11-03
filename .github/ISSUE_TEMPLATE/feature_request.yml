@@ -1,0 +1,70 @@
+name: Demande de fonctionnalité
+description: Proposer une fonctionnalité ou une amélioration, sans donnée scolaire.
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Une issue = une demande, pas un support. **Ne joins aucune donnée
+        scolaire** : pas de nom, d'URL d'établissement, de note, de message,
+        de pièce jointe ni de capture non caviardée.
+
+        Une faille exploitable ne s'ouvre pas ici : utilise
+        [SECURITY.md](https://github.com/iguanacucumber/veryslopnynotes/blob/main/SECURITY.md).
+
+  - type: textarea
+    id: probleme
+    attributes:
+      label: Problème
+      description: Ce qui manque ou te gêne aujourd'hui, sans contenu scolaire.
+      placeholder: "Exemple : je ne peux pas trier les devoirs par matière."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposition
+    attributes:
+      label: Proposition
+      description: Le comportement attendu, du point de vue de l'utilisateur.
+      placeholder: "Exemple : ajouter un filtre par matière au-dessus de la liste."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternative
+    attributes:
+      label: Alternatives envisagées (facultatif)
+      description: Les autres solutions ou contournements que tu as essayés.
+
+  - type: dropdown
+    id: ecran-module
+    attributes:
+      label: Écran ou module concerné
+      description: Où la fonctionnalité prendrait place.
+      options:
+        - Accueil
+        - Emploi du temps
+        - Notes
+        - Devoirs
+        - Messages
+        - Absences et sanctions
+        - Actualités, cantine et alertes
+        - Fiches de révision et notes de cours
+        - Prof
+        - Réglages et appairage
+        - Interface web
+        - Serveur et scraper
+        - Autre ou plusieurs écrans
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: donnees
+    attributes:
+      label: Données et sécurité
+      options:
+        - label: J'ai retiré noms, URL d'établissement, notes, messages et identifiants de toute capture.
+          required: true
+        - label: Je n'ai pas ouvert de faille exploitable ici ; elle passe par SECURITY.md.
+          required: true
