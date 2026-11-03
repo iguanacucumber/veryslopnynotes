@@ -165,7 +165,11 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
     case "assignments.attachment":
       return ok({ ok: true }) as Promise<T>;
     case "messages.list":
-      return ok({ payload: JSON.stringify(fixtures.discussions) }) as Promise<T>;
+      return ok({
+        payload: JSON.stringify(fixtures.discussions),
+        fetchedAt: now,
+        stale: false,
+      }) as Promise<T>;
     case "messages.thread": {
       const all = (threads[String(p["id"])] ?? { items: [] }) as { items: unknown[] };
       const before = typeof p["before"] === "number" ? p["before"] : all.items.length;

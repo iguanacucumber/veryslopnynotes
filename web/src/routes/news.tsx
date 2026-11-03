@@ -143,7 +143,9 @@ export default function NewsRoute() {
       <p className="sr-only" role="status">
         {announcement}
       </p>
-      {resource.stale ? <StaleBadge fetchedAt={resource.fetchedAt} /> : null}
+      {resource.stale ? (
+        <StaleBadge fetchedAt={resource.fetchedAt} cause={resource.cause} onRetry={resource.refresh} />
+      ) : null}
       {error && items.length > 0 ? (
         <p className="tiny" role="status" style={{ margin: 0, color: "var(--danger-ink)" }}>
           {error}

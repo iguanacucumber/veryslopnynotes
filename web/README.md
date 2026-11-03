@@ -13,7 +13,9 @@ Android (`android/app/src/main/assets/web/`), jamais chargé depuis un serveur.
 - **Contenu Pronote = donnée.** Pas de `dangerouslySetInnerHTML`, pas de HTML
   construit depuis un payload.
 - **Offline-first.** `useResource` affiche le cache avant le réseau et expose
-  `stale` / `error`.
+  `stale` / `cause` / `error`. La cause (`offline`, `network`, `other`) et l'âge
+  réel du cache sont affichés ; le réessai recharge la même requête sans
+  masquer les données déjà lisibles.
 - **Un payload, une requête.** Le payload est rattaché à sa requête (clé +
   query) : changer de requête (période, algorithme, semaine) l'invalide —
   l'écran montre un chargement, jamais les chiffres d'une autre requête

@@ -93,7 +93,13 @@ export default function AlertsRoute() {
         </p>
       ) : null}
 
-      {resource.stale && layout !== "offline-empty" ? <StaleBadge label="analyse en cache" /> : null}
+      {resource.stale && layout !== "offline-empty" ? (
+        <StaleBadge
+          label="analyse en cache"
+          cause={resource.cause}
+          onRetry={resource.refresh}
+        />
+      ) : null}
 
       {layout === "loading" ? <Loading label="Chargement des alertes…" /> : null}
 

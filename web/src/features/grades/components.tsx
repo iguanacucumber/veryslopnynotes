@@ -7,6 +7,7 @@ import {
   IconSearch,
   IconStar,
 } from "../../ui/icons";
+import type { FreshnessCause } from "../../lib/freshness";
 import { frDateLong, relativeLongFr, subjectColor, tint } from "../../lib/format";
 import { subjectEmoji } from "../../lib/subjectVisual";
 import { EmptyState, ErrorBox, Loading, Page, SearchField, StaleBadge } from "../../ui/components";
@@ -460,6 +461,7 @@ export function GradesScreen({
   error,
   stale,
   fetchedAt,
+  cause = null,
   periodsError,
   algorithm,
   periodId,
@@ -474,6 +476,7 @@ export function GradesScreen({
   error: string | null;
   stale: boolean;
   fetchedAt: number;
+  cause?: FreshnessCause | null;
   periodsError: string | null;
   algorithm: Algorithm;
   periodId: string | null;
@@ -513,7 +516,9 @@ export function GradesScreen({
     return (
       <Page className="grades">
         <div className="grades-headline">
-          {stale && !loading ? <StaleBadge fetchedAt={fetchedAt} /> : null}
+          {stale && !loading ? (
+            <StaleBadge fetchedAt={fetchedAt} cause={cause} onRetry={onRefresh} />
+          ) : null}
           {periodsError ? <span className="grades-caption">{periodsError}</span> : null}
         </div>
 
@@ -537,7 +542,9 @@ export function GradesScreen({
   return (
     <Page className="grades">
       <div className="grades-headline">
-        {stale && !loading ? <StaleBadge fetchedAt={fetchedAt} /> : null}
+        {stale && !loading ? (
+          <StaleBadge fetchedAt={fetchedAt} cause={cause} onRetry={onRefresh} />
+        ) : null}
         {periodsError ? <span className="grades-caption">{periodsError}</span> : null}
       </div>
 

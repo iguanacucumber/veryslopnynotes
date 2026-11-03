@@ -6,6 +6,8 @@
 // changement de requête vide l'état ; la vue ne montre jamais un autre payload.
 // Le rafraîchissement d'une MÊME requête garde le cache affiché.
 
+import type { FreshnessCause } from "./freshness";
+
 export function requestId(key: string, query: string): string {
   // La clé ne contient jamais de « ? » : l'identifiant est unique et comparé
   // pour égalité, rien d'autre.
@@ -21,6 +23,9 @@ export interface ResourceStatus {
   /** Optionnel : les fixtures historiques n'ont pas le drapeau. */
   partial?: boolean;
   error: string | null;
+  /** Cause de l'échec ; `null` = pas d'échec (le cache peut seulement vieillir).
+   *  Optionnel : les fixtures historiques n'ont pas la cause. */
+  cause?: FreshnessCause | null;
   loading: boolean;
 }
 
@@ -31,6 +36,7 @@ export interface ResourceView {
   stale: boolean;
   partial: boolean;
   error: string | null;
+  cause: FreshnessCause | null;
   loading: boolean;
 }
 
@@ -41,6 +47,7 @@ const PENDING: ResourceView = {
   stale: false,
   partial: false,
   error: null,
+  cause: null,
   loading: true,
 };
 
@@ -57,7 +64,16 @@ export function canUseCached(
  *  conservé, le cache reste affiché pendant la relecture. */
 export function invalidateOnRequestChange(status: ResourceStatus, request: string): ResourceStatus {
   if (status.request === request) return status;
-  return { request, payload: null, fetchedAt: 0, stale: false, partial: false, error: null, loading: true };
+  return {
+    request,
+    payload: null,
+    fetchedAt: 0,
+    stale: false,
+    partial: false,
+    error: null,
+    cause: null,
+    loading: true,
+  };
 }
 
 /** Début de chargement : requête différente = chargement ; même requête =
@@ -77,6 +93,7 @@ export function visibleResource(status: ResourceStatus, request: string): Resour
     stale: status.stale,
     partial: status.partial ?? false,
     error: status.error,
+    cause: status.cause ?? null,
     loading: status.loading,
   };
 }

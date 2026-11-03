@@ -5,13 +5,34 @@ import android.os.Looper
 import fr.veryslopnynotes.core.SecurityAlert
 import fr.veryslopnynotes.pronote.RateLimitedError
 import org.json.JSONObject
+import java.io.IOException
 import java.time.Clock
+
+/**
+ * Cause STABLE d'une lecture non aboutie, transmise telle quelle au pont.
+ * `NETWORK` = le réseau a échoué (`IOException`) ; le web la traduit en
+ * `offline` quand l'appareil se sait hors ligne. `OTHER` = refus, session,
+ * stockage ou donnée illisible.
+ */
+enum class RefreshFailureCause(val wire: String) {
+    NETWORK("network"),
+    OTHER("other"),
+}
 
 // Jamais d'exception vers l'UI : tout échec = Failed, avec le cache si dispo.
 sealed interface RefreshOutcome {
     data class Updated(val payload: String, val fetchedAt: Long) : RefreshOutcome
-    data class OfflineFallback(val payload: String, val fetchedAt: Long, val stale: Boolean) : RefreshOutcome
-    data class Failed(val message: String, val cachedPayload: String?) : RefreshOutcome
+    data class OfflineFallback(
+        val payload: String,
+        val fetchedAt: Long,
+        val stale: Boolean,
+        val cause: RefreshFailureCause = RefreshFailureCause.OTHER,
+    ) : RefreshOutcome
+    data class Failed(
+        val message: String,
+        val cachedPayload: String?,
+        val cause: RefreshFailureCause = RefreshFailureCause.OTHER,
+    ) : RefreshOutcome
 }
 
 // Une écriture de cache ratée n'est pas « un cache illisible » : le disque a
@@ -149,7 +170,7 @@ class SyncedRepository(
                 RefreshOutcome.Updated(payload, clock())
             }
         } catch (e: NoLocalSession) {
-            cachedOrFailed(resource, query, "Aucune donnée en cache.")
+            cachedOrFailed(resource, query, "Aucune donnée en cache.", RefreshFailureCause.OTHER)
         } catch (e: RateLimitedError) {
             // Débit limité, pas une panne ni une session morte : le cache est
             // servi et le payload partiel n'a pas été écrit (il a LEVÉ).
@@ -157,24 +178,31 @@ class SyncedRepository(
                 resource,
                 query,
                 "L'établissement limite les connexions : attends une ou deux minutes, puis réessaie.",
+                RefreshFailureCause.OTHER,
             )
         } catch (e: Throwable) {
             // `Throwable` et non `Exception` : un `Error` (OOM) ne doit pas
             // remonter libre, l'écran perdrait le repli cache.
+            val cause = if (e is IOException) RefreshFailureCause.NETWORK else RefreshFailureCause.OTHER
             if (isSessionFailure(e)) {
                 // Le cache ne masque pas une session morte : Failed nu, pour
                 // renvoyer vers l'appairage.
                 DeviceAuth.reject()
-                RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null)
+                RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null, RefreshFailureCause.OTHER)
             } else {
-                cachedOrFailed(resource, query, "Aucune donnée en cache.")
+                cachedOrFailed(resource, query, "Aucune donnée en cache.", cause)
             }
         }
     }
 
     // Repli cache : seule une entrée de la MÊME requête est servie — celle
     // d'une autre semaine afficherait un écran vide sans le dire.
-    private fun cachedOrFailed(resource: String, query: String, message: String): RefreshOutcome {
+    private fun cachedOrFailed(
+        resource: String,
+        query: String,
+        message: String,
+        cause: RefreshFailureCause,
+    ): RefreshOutcome {
         val c = try {
             store.load(resource, query)
         } catch (_: Exception) {
@@ -182,9 +210,9 @@ class SyncedRepository(
         }
         val same = c?.takeIf { CachePolicy.normalizeQuery(it.query) == CachePolicy.normalizeQuery(query) }
         return if (same != null) {
-            RefreshOutcome.OfflineFallback(same.payload, same.fetchedAt, isStale(resource, same))
+            RefreshOutcome.OfflineFallback(same.payload, same.fetchedAt, isStale(resource, same), cause)
         } else {
-            RefreshOutcome.Failed(message, null)
+            RefreshOutcome.Failed(message, null, cause)
         }
     }
 
@@ -224,9 +252,10 @@ class SyncedRepository(
         } catch (e: Exception) {
             if (isSessionFailure(e)) {
                 DeviceAuth.reject()
-                RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null)
+                RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null, RefreshFailureCause.OTHER)
             } else {
-                RefreshOutcome.Failed("Relecture indisponible.", null)
+                val cause = if (e is IOException) RefreshFailureCause.NETWORK else RefreshFailureCause.OTHER
+                RefreshOutcome.Failed("Relecture indisponible.", null, cause)
             }
         }
     }
@@ -304,9 +333,10 @@ class SyncedRepository(
         } catch (e: Exception) {
             if (isSessionFailure(e)) {
                 DeviceAuth.reject()
-                RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null)
+                RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null, RefreshFailureCause.OTHER)
             } else {
-                RefreshOutcome.Failed("Tranches indisponibles.", null)
+                val cause = if (e is IOException) RefreshFailureCause.NETWORK else RefreshFailureCause.OTHER
+                RefreshOutcome.Failed("Tranches indisponibles.", null, cause)
             }
         }
     }

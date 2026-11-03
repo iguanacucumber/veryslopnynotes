@@ -10,6 +10,7 @@ import {
   SearchField,
   StaleBadge,
 } from "../../ui/components";
+import type { FreshnessCause } from "../../lib/freshness";
 import { Dialog } from "../../ui/Dialog";
 import {
   IconChevronDown,
@@ -44,6 +45,8 @@ interface ListProps {
   loading: boolean;
   error: string | null;
   stale: boolean;
+  fetchedAt?: number;
+  cause?: FreshnessCause | null;
   previews: Record<string, string>;
   onQueryChange: (query: string) => void;
   onOpen: (discussion: Discussion) => void;
@@ -59,6 +62,8 @@ export function ConversationListScreen({
   loading,
   error,
   stale,
+  fetchedAt,
+  cause = null,
   previews,
   onQueryChange,
   onOpen,
@@ -99,7 +104,9 @@ export function ConversationListScreen({
     <div className="stack">
       <div className="row row--wrap">
         <span className="grow t-body-m muted">{conversationCountLabel(discussions.length)}</span>
-        {stale ? <StaleBadge /> : null}
+        {stale ? (
+          <StaleBadge fetchedAt={fetchedAt} cause={cause} onRetry={onRefresh} />
+        ) : null}
         <button type="button" className="btn btn--ghost btn--small" onClick={onNew}>
           <IconPlus size={18} />
           Nouvelle discussion

@@ -7,6 +7,7 @@ import fr.veryslopnynotes.core.DiscussionRecipient
 import fr.veryslopnynotes.core.MessagePaging
 import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.DiscussionWriteOutcome
+import fr.veryslopnynotes.data.RefreshFailureCause
 import fr.veryslopnynotes.data.RefreshOutcome
 import org.json.JSONArray
 import org.json.JSONObject
@@ -28,14 +29,16 @@ internal fun VsnBridge.resourceCached(p: JSONObject, epoch: Long): JSONObject {
         .put("stale", repo.isStale(resource, entry))
         .put("partial", payloadPartial(entry.payload))
         .put("error", JSONObject.NULL)
+        .put("cause", JSONObject.NULL)
 }
 
-internal fun VsnBridge.emptyCached(error: String? = null): JSONObject = JSONObject()
+internal fun VsnBridge.emptyCached(error: String? = null, cause: RefreshFailureCause? = null): JSONObject = JSONObject()
     .put("payload", JSONObject.NULL)
     .put("fetchedAt", 0L)
     .put("stale", false)
     .put("partial", false)
     .put("error", error ?: JSONObject.NULL)
+    .put("cause", cause?.wire ?: JSONObject.NULL)
 
 /**
  * Échéance d'une lecture dépassée : le cache de la MÊME requête est rendu,
@@ -43,9 +46,15 @@ internal fun VsnBridge.emptyCached(error: String? = null): JSONObject = JSONObje
  * sur une promesse rejetée, et le travail réseau a déjà été annulé.
  */
 internal fun VsnBridge.deadlineOutcome(resource: String?, query: String, message: String): JSONObject {
-    if (resource == null) return emptyCached(message).put("stale", true)
+    if (resource == null) {
+        return emptyCached(message, RefreshFailureCause.NETWORK).put("stale", true)
+    }
     val cached = repo.cached(resource, query)
-    return resultJson(RefreshOutcome.Failed(message, cached?.payload), resource, query)
+    return resultJson(
+        RefreshOutcome.Failed(message, cached?.payload, RefreshFailureCause.NETWORK),
+        resource,
+        query,
+    )
 }
 
 /** Le drapeau vit DANS le payload ; le pont le remonte pour que l'écran le voie. */
@@ -70,7 +79,7 @@ internal fun VsnBridge.resourceLoad(p: JSONObject): JSONObject {
             // Un profil est une lecture réseau : l'échéance rend un résultat
             // typé vide, jamais une promesse sans données.
             if (e.code != "unavailable") throw e
-            emptyCached(e.message).put("stale", true)
+            emptyCached(e.message, RefreshFailureCause.NETWORK).put("stale", true)
         }
     }
     if (key == "periods") {
@@ -110,12 +119,16 @@ internal fun VsnBridge.resultJson(outcome: RefreshOutcome, resource: String?, qu
             .put("stale", false)
             .put("partial", payloadPartial(outcome.payload))
             .put("error", JSONObject.NULL)
+            .put("cause", JSONObject.NULL)
         is RefreshOutcome.OfflineFallback -> obj
             .put("payload", outcome.payload)
             .put("fetchedAt", outcome.fetchedAt)
             .put("stale", outcome.stale)
             .put("partial", payloadPartial(outcome.payload))
-            .put("error", "Données en cache (hors ligne).")
+            // L'âge et la cause disent l'état ; « hors ligne » n'est pas
+            // affirmé ici, car le natif ne connaît pas le réseau de l'appareil.
+            .put("error", "Données en cache.")
+            .put("cause", outcome.cause.wire)
         is RefreshOutcome.Failed -> {
             sessionOrThrow(outcome.message)
             // L'entrée de cache servie est celle de la MÊME requête.
@@ -126,6 +139,7 @@ internal fun VsnBridge.resultJson(outcome: RefreshOutcome, resource: String?, qu
                 .put("stale", true)
                 .put("partial", payloadPartial(payload))
                 .put("error", outcome.message)
+                .put("cause", outcome.cause.wire)
         }
     }
     return obj
@@ -223,13 +237,22 @@ internal fun VsnBridge.messagesList(): JSONObject {
     val obj = JSONObject()
     when (outcome) {
         is RefreshOutcome.Updated -> obj.put("payload", outcome.payload)
+            .put("fetchedAt", outcome.fetchedAt)
+            .put("stale", false)
         is RefreshOutcome.OfflineFallback -> obj.put("payload", outcome.payload)
+            .put("fetchedAt", outcome.fetchedAt)
+            .put("stale", true)
+            .put("cause", outcome.cause.wire)
         is RefreshOutcome.Failed -> {
             sessionOrThrow(outcome.message)
             // Aucun cache de la MÊME requête : l'échec est un échec, jamais un
             // succès avec zéro fil (I14).
             val cached = outcome.cachedPayload ?: throw BridgeFailure("unavailable", outcome.message)
-            obj.put("payload", cached).put("error", outcome.message)
+            obj.put("payload", cached)
+                .put("error", outcome.message)
+                .put("fetchedAt", repo.cached(CachePolicy.DISCUSSIONS, "")?.fetchedAt ?: 0L)
+                .put("stale", true)
+                .put("cause", outcome.cause.wire)
         }
     }
     return obj
