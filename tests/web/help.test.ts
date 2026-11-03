@@ -28,6 +28,7 @@ describe("aide et FAQ (#946)", () => {
       ["aide-qr", "Trouver le QR de l’établissement"],
       ["aide-pin", "Saisir le PIN"],
       ["aide-reseau", "Réseau et mode hors-ligne"],
+      ["aide-rappels", "Rappels, notifications et compte parent"],
       ["aide-camera", "Caméra et scan"],
       ["aide-accessibilite", "Accessibilité"],
       ["aide-sans-ia", "Utiliser l’app sans assistant IA"],
@@ -43,6 +44,8 @@ describe("aide et FAQ (#946)", () => {
     expect(html).toContain("Sans clé OpenRouter");
     expect(html).toContain("aucun appel");
     expect(html).toContain("hors ligne");
+    expect(html).toContain("aucun rappel");
+    expect(html).toContain("comptes parent sont hors périmètre");
     expect(html).toContain("docs/ACCESSIBILITY.md");
     expect(html).toContain("WCAG 2.2 AA");
   });

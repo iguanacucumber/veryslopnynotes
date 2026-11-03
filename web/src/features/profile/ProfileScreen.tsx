@@ -260,6 +260,14 @@ export default function ProfileScreen() {
                 </div>
               </div>
             ))}
+            <Divider />
+            <div className="list-row list-row--static">
+              <span className="grow">
+                <span className="list-row__subtitle">
+                  Lecture seule : l’app ne se connecte pas au compte parent et ne bascule pas d’un enfant à l’autre.
+                </span>
+              </span>
+            </div>
           </Rows>
         </Section>
       ) : null}

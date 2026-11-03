@@ -73,6 +73,22 @@ export default function HelpScreen() {
         </Card>
       </Section>
 
+      <Section id="aide-rappels" title="Rappels, notifications et compte parent">
+        <Card className="card--flat">
+          <p className="help-paragraph">
+            L’app n’envoie aucun rappel : ni notification push, ni notification
+            locale pour un devoir, une note ou un cours. La synchronisation de
+            fond met seulement le cache à jour ; ouvre l’écran pour voir l’état.
+          </p>
+          <ul className="help-list">
+            <li>Un rappel demanderait une nouvelle décision et la permission Android correspondante.</li>
+            <li>L’app sert un compte élève à la fois, celui du QR appairé.</li>
+            <li>Les comptes parent sont hors périmètre : aucun accès parent, aucune bascule d’un enfant à l’autre.</li>
+            <li>Les comptes liés publiés par l’établissement restent une lecture seule dans Profil.</li>
+          </ul>
+        </Card>
+      </Section>
+
       <Section id="aide-camera" title="Caméra et scan">
         <Card className="card--flat">
           <p className="help-paragraph">

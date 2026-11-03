@@ -1,7 +1,9 @@
 # PRODUCT.md — visite produit
 
 Source canonique du produit. Écrans, comportement et architecture de
-l'interface ; le système visuel vit dans [`DESIGN.md`](../DESIGN.md). Pour
+l'interface ; le système visuel vit dans [`DESIGN.md`](../DESIGN.md). Périmètre :
+compte élève uniquement, sans rappel ni notification ; comptes parent hors
+périmètre ([ADR-010](adr/010-notifications-and-account-scope.md)). Pour
 contribuer, voir `AGENTS.md`.
 
 ## Écrans et fonctionnalités
@@ -22,7 +24,7 @@ contribuer, voir `AGENTS.md`.
 | `/course-notes` | Cahier de cours | Cours mémorisés par matière (texte ou photo transcrite), réutilisés comme sources par l'assistant, avec manuel activable matière par matière. |
 | `/prof` | Professeur | Discussion par matière avec l'assistant (fil local) et exercices tirés du manuel ou du cahier, corrigés pas à pas. |
 | `/alerts` | Alertes | Contenus hostiles détectés puis neutralisés, affichés en texte brut, avec l'état de la dernière vérification. |
-| `/profile` | Profil | Compte actif, comptes liés publiés par l'établissement, changement d'appairage et déconnexion qui purge session et caches. |
+| `/profile` | Profil | Compte actif, comptes liés publiés par l'établissement en lecture seule, changement d'appairage et déconnexion qui purge session et caches. |
 | `/settings` | Réglages | Thème clair / sombre / système, 4 palettes, matières personnalisées (couleur, emoji, libellé), adresse du scraper, adresse du manuel, clé de l'assistant. |
 
 Les anciennes routes `/fiches` et `/cahier` restent des alias.
@@ -32,7 +34,7 @@ En plus des écrans :
 - **Capacités dynamiques** — les widgets et accès rapides que l'établissement ne publie pas sont masqués, au lieu d'afficher des blocs vides.
 - **Cache par ressource** — notes, devoirs, emploi du temps, actualités, cantine, vie scolaire, sanctions, messagerie, capacités et alertes ont chacun leur TTL et leur badge « périmé ». Une erreur réseau n'efface pas ce qui est déjà lisible.
 - **Cahier de cours local** — les cours sont gardés par matière sur le téléphone, puis envoyés au fournisseur avec la clé de l'assistant uniquement quand une aide est demandée. Ils sont purgés avec les données du compte.
-- **Synchronisation de fond** — WorkManager rafraîchit notes, devoirs et emploi du temps toutes les 6 h (réseau connecté, batterie suffisante) et réécrit le cache partagé avec l'interface, sans serveur ni push.
+- **Synchronisation de fond** — WorkManager rafraîchit notes, devoirs et emploi du temps toutes les 6 h (réseau connecté, batterie suffisante) et réécrit le cache partagé avec l'interface, sans serveur ni push, et sans rappel.
 - **Accessibilité** — libellés ARIA, contrastes vérifiés dans les palettes claire et sombre, `prefers-reduced-motion` respecté.
 - **Aide devoirs sourcée** — la réponse vient de la consigne, du cours du devoir et, si tu l'as enregistré une fois, d'un extrait de ton manuel ; sans source suffisante, l'assistant refuse au lieu d'inventer.
 - **Démo de développement** — réservée aux builds `debug` : « Connexion démo » ouvre l'établissement public de l'éditeur sans QR ni PIN. La release masque le bouton, refuse `pairing.pairDemo` au pont et ne restaure jamais une session de démo. Le pont factice et ses écoles fictives restent hors du bundle de production (`import.meta.env.DEV`).
