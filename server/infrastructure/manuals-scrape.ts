@@ -932,33 +932,124 @@ export function manualPageFromHtml(html: string, requested: number, baseUrl: str
   return found;
 }
 
+/** Refus de la lecture du sommaire : le motif dépend de QUI a annulé. */
+function summaryAbortError(signal: AbortSignal | undefined, caller: AbortSignal | undefined): ScrapeManualsError {
+  if (caller?.aborted) return new ScrapeManualsError("scrape annulé");
+  if (signal?.aborted) return new ScrapeManualsError("sommaire interrompu", "timeout");
+  return new ScrapeManualsError("sommaire non verifiable (reseau indisponible)", "generic");
+}
+
+/**
+ * Lit un corps de réponse EN FLUX, borné en OCTETS : `res.text()` bufferisait
+ * la réponse entière avant de mesurer, donc un sommaire chunked (sans
+ * `content-length`) pouvait remplir la mémoire. Au-delà du plafond, la lecture
+ * s'arrête et le flux est annulé.
+ */
+async function readCappedBody(
+  res: Response,
+  maxBytes: number,
+  signal: AbortSignal,
+  caller: AbortSignal | undefined,
+): Promise<string> {
+  const announced = Number(res.headers.get("content-length") ?? "");
+  if (Number.isFinite(announced) && announced > maxBytes) {
+    if (res.body) await res.body.cancel().catch(() => {});
+    throw new ScrapeManualsError("sommaire trop volumineux", "too_large");
+  }
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value || value.byteLength === 0) continue;
+      size += value.byteLength;
+      if (size > maxBytes) {
+        await reader.cancel().catch(() => {});
+        throw new ScrapeManualsError("sommaire trop volumineux", "too_large");
+      }
+      chunks.push(value);
+    }
+  } catch (err) {
+    await reader.cancel().catch(() => {});
+    if (err instanceof ScrapeManualsError) throw err;
+    throw summaryAbortError(signal, caller);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
 /**
  * Résout une page d'ouvrage avant le scrape (sommaire lisible sans JS).
  *
  * `null` = sommaire sans cette page (ou format inconnu) : l'appelant garde
  * l'adresse de départ. Un site sans sommaire lisible ne perd donc pas sa
  * source ; un manuel lelivrescolaire résout la page exacte.
+ *
+ * Redirections suivies À LA MAIN (`redirect: "manual"`) : `redirect: "follow"`
+ * laissait le client HTTP suivre une chaîne NON validée entre le pré-contrôle
+ * et la lecture (le sommaire pouvait donc atterrir sur une cible interne).
+ * Chaque saut est validé AVANT son `fetch`, et le plafond est celui de
+ * Chromium (fail-closed au-delà).
+ *
+ * Annulation : le délai ET le signal de l'appelant sont combinés
+ * (`AbortSignal.any`) — un client parti ne laisse pas le sommaire continuer.
  */
 async function resolveManualPageUrl(
   startUrl: string,
   requested: number,
   opts: ScrapeOptions,
 ): Promise<{ url: string; subject: string | null } | null> {
+  const caller = opts.signal;
+  if (caller?.aborted) throw new ScrapeManualsError("scrape annulé");
   const resolve = opts.resolveHost ?? systemResolver;
-  await assertPublicRedirectChain(startUrl, opts.timeoutMs, resolve, false);
-  const res = await fetch(startUrl, {
-    redirect: "follow",
-    signal: AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
-  });
-  if (!res.ok) throw new ScrapeManualsError(`réponse HTTP ${res.status} sur le sommaire`);
-  await assertPublicUrl(res.url, "sommaire final", resolve, false);
-  const announced = Number(res.headers.get("content-length") ?? "0");
-  if (announced > MAX_HTML_BYTES) {
-    throw new ScrapeManualsError("sommaire trop volumineux", "too_large");
+  const timeout = AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const signal = caller ? AbortSignal.any([caller, timeout]) : timeout;
+  let current = startUrl;
+  for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop += 1) {
+    await assertPublicUrl(current, "sommaire", resolve, false);
+    let res: Response;
+    try {
+      res = await fetch(current, { redirect: "manual", signal });
+    } catch {
+      throw summaryAbortError(signal, caller);
+    }
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get("location");
+      if (res.body) await res.body.cancel().catch(() => {});
+      if (!location) {
+        throw new ScrapeManualsError("sommaire : redirection sans destination", "generic");
+      }
+      let target: string;
+      try {
+        target = new URL(location, current).toString();
+      } catch {
+        throw new ScrapeManualsError("sommaire : redirection illisible", "generic");
+      }
+      if (hop === MAX_REDIRECT_HOPS) {
+        throw new ScrapeManualsError("trop de redirections (chaine non verifiee)", "private_host");
+      }
+      current = target;
+      continue;
+    }
+    if (!res.ok) {
+      if (res.body) await res.body.cancel().catch(() => {});
+      throw new ScrapeManualsError(`réponse HTTP ${res.status} sur le sommaire`);
+    }
+    const finalUrl = res.url || current;
+    await assertPublicUrl(finalUrl, "sommaire final", resolve, false);
+    const html = (await readCappedBody(res, MAX_HTML_BYTES, signal, caller)).slice(0, MAX_HTML_CHARS);
+    const url = manualPageFromHtml(html, requested, finalUrl);
+    return url === null ? null : { url, subject: manualBookSubject(html) };
   }
-  const html = (await res.text()).slice(0, MAX_HTML_CHARS);
-  const url = manualPageFromHtml(html, requested, res.url);
-  return url === null ? null : { url, subject: manualBookSubject(html) };
+  throw new ScrapeManualsError("trop de redirections (chaine non verifiee)", "private_host");
 }
 
 // Scrape manuel v1 : une page -> un ManualDoc (titre + texte).
