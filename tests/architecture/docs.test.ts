@@ -848,6 +848,80 @@ describe("modèle de menace", () => {
   });
 });
 
+describe("métadonnées du dépôt (#979)", () => {
+  const FILE = "docs/REPOSITORY.md";
+  const REPO = read(FILE);
+  const DESCRIPTION =
+    "Client Android open source pour Pronote : session locale, IA sans relais, hors-ligne d’abord. Kotlin, React, Bun.";
+  const TOPICS = [
+    "android",
+    "bun",
+    "education",
+    "kotlin",
+    "offline-first",
+    "open-source",
+    "privacy",
+    "pronote",
+    "react",
+    "typescript",
+    "webview",
+  ];
+  const section = (heading: string) => {
+    const start = REPO.indexOf(`${heading}\n`);
+    if (start === -1) return "";
+    const end = REPO.indexOf("\n## ", start + heading.length + 1);
+    return REPO.slice(start, end === -1 ? undefined : end);
+  };
+
+  test("les sections et la description sont présentes", () => {
+    for (const heading of [
+      "## Description",
+      "## Sujets",
+      "## Site",
+      "## Aperçu social",
+      "## Bonnes premières issues",
+      "## Vérification",
+    ]) {
+      expect({ heading, présente: REPO.includes(heading) }).toEqual({ heading, présente: true });
+    }
+    // Le blockquote coupe la description : on compare la prose aplatie.
+    expect(REPO.replace(/\s+/g, " ")).toContain(DESCRIPTION);
+    expect(REPO.toLowerCase()).toContain("homepage");
+    expect(REPO).toContain("vide");
+  });
+
+  test("les sujets sont ceux de GitHub et respectent son format", () => {
+    const listed = [...section("## Sujets").matchAll(/^- `([^`]+)`$/gm)].map((m) => m[1]!);
+    expect([...listed].sort()).toEqual([...TOPICS].sort());
+    expect(listed.length).toBeLessThanOrEqual(20);
+    for (const topic of listed) {
+      expect({ topic, valide: /^[a-z0-9][a-z0-9-]{0,49}$/.test(topic) }).toEqual({
+        topic,
+        valide: true,
+      });
+    }
+  });
+
+  test("exactement cinq issues distinctes sont listées", () => {
+    const numbers = [...REPO.matchAll(/^\| [1-5] \| #(\d+) \|/gm)].map((m) => m[1]!);
+    expect(numbers.length).toBe(5);
+    expect(new Set(numbers).size).toBe(5);
+    // Chaque ligne porte le label qui rend l'issue découvrable.
+    expect((REPO.match(/`good first issue`/g) ?? []).length).toBeGreaterThanOrEqual(5);
+  });
+
+  test("CONTRIBUTING renvoie vers le fichier", () => {
+    expect(read("CONTRIBUTING.md")).toContain("docs/REPOSITORY.md");
+  });
+
+  test("la vérification cite les commandes gh", () => {
+    const verification = section("## Vérification");
+    expect(verification).toContain("gh repo view");
+    expect(verification).toContain("gh api repos/iguanacucumber/veryslopnynotes/topics");
+    expect(verification).toContain('label "good first issue"');
+  });
+});
+
 describe("ADR", () => {
   test("chaque ADR déclare un statut", () => {
     const dir = join(ROOT, "docs/adr");
