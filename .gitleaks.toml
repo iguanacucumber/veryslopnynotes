@@ -1,0 +1,27 @@
+# Configuration du scan d'historique complet (CI-07).
+#
+# Le jeu par défaut de gitleaks est repris tel quel : ce fichier n'ajoute
+# AUCUNE règle et ne désactive AUCUNE règle. Il ne fait qu'exempter des
+# valeurs de test EXACTES, déjà présentes dans l'historique, pour que le scan
+# reste rouge sur tout nouveau secret.
+#
+# Les exemptions portent sur la VALEUR, jamais sur un chemin : une allowlist
+# `paths` ferait sauter le fichier entier avant analyse. Une nouvelle valeur
+# dans `tests/` ou dans la documentation vendorisée reste donc une trouvaille.
+title = "veryslopnynotes — historique complet"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Valeurs de test et exemples documentaires connus"
+regexes = [
+  '''^prod-9f3a2b8c7d6e5f4a3b2c1d0e9f8a7b6c$''',
+  '''^a1B2c3D4e5F6g7H8$''',
+  '''^Xk9mQ2vB7nL4pR8s$''',
+  '''^Xk9mQ2vB7nL4pR8sT1uV2wX3$''',
+  '''^0f1e2d3c4b5a69788796a5b4c3d2e1f0$''',
+  '''^aB3dE5fG7hJ9kL1mN2pQ4rS6tU8vW0xY$''',
+  '''^aB3dE5fG7hJ9kL1mN3pQ5rS7$''',
+  '''^test-verification-abc123$''',
+]
