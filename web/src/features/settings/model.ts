@@ -22,8 +22,14 @@ export const MAX_API_KEY_CHARS = 512;
 /** Miroir de `ManualUrl.MAX_CHARS` (core Kotlin) et du contrat scraper. */
 export const MAX_MANUAL_URL_CHARS = 2000;
 
-/** Catalogue de l'éditeur ; l'élève peut le remplacer par un manuel précis. */
-export const DEFAULT_MANUAL_URL = "https://www.lelivrescolaire.fr/manuels";
+/** Attestation exigée avant l'enregistrement : l'utilisateur répond de son droit d'usage. */
+export const MANUAL_RIGHTS_ATTESTATION =
+  "J’ai le droit d’utiliser cette adresse et je respecte les conditions du site.";
+
+/** Enregistrer ou scraper exige une adresse NON VIDE et l'attestation cochée. */
+export function manualCanSave(url: string, attested: boolean): boolean {
+  return attested && url.trim() !== "";
+}
 
 /** Le message NATIF fait foi quand il existe ; le repli est générique. */
 export function llmSaveError(response: { ok: boolean; message?: string }): string {

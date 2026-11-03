@@ -69,7 +69,7 @@ describe("réglages — une seule section Assistant (#612)", () => {  const sett
     // Seuls les états LUS disent « aucune clé » ou « actif ».
     expect(assistantStatus(false, false).title).toBe("Aucune clé");
     expect(assistantStatus(true, false).title).toBe("Assistant actif");
-    // Le manuel ne part pas de l'adresse par défaut avant lecture.
+    // Le manuel part vide avant lecture : aucune adresse préremplie.
     expect(manual).toContain('useState("")');
     expect(manual).toContain("Réglages non lus");
   });
@@ -117,7 +117,8 @@ describe("réglages — une seule section Assistant (#612)", () => {  const sett
     expect(manual).toContain("Non récupéré");
     expect(manual).toContain("bridge.saveManualUrl(value)");
     expect(manual).toContain('bridge.saveManualUrl("")');
-    expect(manual).toContain("DEFAULT_MANUAL_URL");
+    expect(manual).toContain("MANUAL_RIGHTS_ATTESTATION");
+    expect(manual).toContain("manualCanSave(");
     expect(manual).toContain("MAX_MANUAL_URL_CHARS");
   });
 });
