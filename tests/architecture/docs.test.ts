@@ -523,8 +523,8 @@ describe("versions épinglées (RELEASE.md)", () => {
 describe("carte de contexte", () => {
   test("CONTEXT.md reste sous son budget de lecture", () => {
     // Une carte qu'on relit à chaque tâche coûte plus qu'elle ne rapporte.
-    // +110 pour la déclaration d'accessibilité (#981).
-    expect({ fichier: "docs/CONTEXT.md", sousBudget: CONTEXT.length <= 2_650 }).toEqual({
+    // +110 pour la déclaration d'accessibilité (#981), +80 pour le glossaire (#1072).
+    expect({ fichier: "docs/CONTEXT.md", sousBudget: CONTEXT.length <= 2_700 }).toEqual({
       fichier: "docs/CONTEXT.md",
       sousBudget: true,
     });
@@ -920,6 +920,40 @@ describe("métadonnées du dépôt (#979)", () => {
     expect(verification).toContain("gh repo view");
     expect(verification).toContain("gh api repos/iguanacucumber/veryslopnynotes/topics");
     expect(verification).toContain('label "good first issue"');
+  });
+});
+
+describe("glossaire (#1072)", () => {
+  const FILE = "docs/GLOSSARY.md";
+  const GLOSSARY = read(FILE);
+  const REQUIRED = ["ADR", "AAB", "APK", "DCO", "ENT", "MFA", "PIN", "QR", "SSRF", "TTL", "WebView"];
+  const rows = GLOSSARY.split("\n").filter((line) => /^\| [A-Za-z]+ \|/.test(line));
+  const cells = (line: string) => line.split("|").map((cell) => cell.trim());
+  const byTerm = new Map(rows.map((line) => [cells(line)[1]!, cells(line)[2]!]));
+  const exists = (path: string) => {
+    try {
+      statSync(join(ROOT, path));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  test("chaque acronyme requis a sa ligne et sa phrase", () => {
+    for (const term of REQUIRED) {
+      expect({ term, phrase: (byTerm.get(term) ?? "").length > 20 }).toEqual({ term, phrase: true });
+    }
+  });
+
+  test("chaque définition cite un lien relatif qui résout", () => {
+    for (const term of REQUIRED) {
+      expect({ term, lien: relativeLinks(byTerm.get(term) ?? "").length > 0 }).toEqual({ term, lien: true });
+    }
+    expect({ bad: brokenDocLinks([{ path: FILE, text: GLOSSARY }], exists) }).toEqual({ bad: [] });
+  });
+
+  test("CONTEXT.md pointe vers le glossaire", () => {
+    expect(relativeLinks(CONTEXT)).toContain("GLOSSARY.md");
   });
 });
 
