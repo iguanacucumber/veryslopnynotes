@@ -29,6 +29,10 @@ Les menaces, leurs mitigations et leurs preuves sont détaillées dans
 [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) : appareil partagé, charge scolaire
 malveillante, dépendance compromise, scraper local et clé perdue.
 
+La santé d'une release se lit sans télémétrie dans
+[`docs/RELEASE-HEALTH.md`](docs/RELEASE-HEALTH.md) ; le triage et la règle de
+pause sont dans [`docs/INCIDENTS.md`](docs/INCIDENTS.md).
+
 ## Règles que le dépôt tient
 
 - **Aucun secret dans le dépôt.** Pas de clé, de session, de mot de passe, de

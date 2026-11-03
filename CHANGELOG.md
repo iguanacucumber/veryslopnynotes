@@ -22,6 +22,8 @@ la section `0.1.0` le jour du tag.
 
 - Fontes SN Pro sous-ensemblées en WOFF2 (graisses réellement utilisées,
   préchargement) et budget gzip vérifié à chaque build.
+- Santé de release documentée sans télémétrie : signaux store, CI, issues et
+  empreintes, seuils de pause/retrait et suivi d'incident.
 
 ### Sécurité
 
