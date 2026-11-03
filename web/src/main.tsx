@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { HashRouter } from "react-router-dom";
 import { App } from "./App";
+import { BackNavigation } from "./ui/BackNavigation";
 import { watchViewport } from "./lib/viewport";
 import "./styles/tokens.css";
 import "./styles/app.css";
@@ -20,6 +21,7 @@ createRoot(root).render(
   <StrictMode>
     <HashRouter>
       <App />
+      <BackNavigation />
     </HashRouter>
   </StrictMode>,
 );

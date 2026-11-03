@@ -13,6 +13,16 @@ L'interface est l'app React de `web/`, construite par Vite dans
 `app/src/main/assets/web/` et servie par la WebView (ADR-004). Aucun module
 Compose : `android/ui/` est supprimé.
 
+## Retour matériel
+
+Décidé côté JS (`web/src/ui/BackNavigation.tsx`, pur : `web/src/lib/back.ts`) :
+dialogue du dessus, puis route (`meta.back` en repli), sortie à l'accueil
+seulement. Le natif appelle `window.__vsnBack()` ; callback désactivé à
+l'accueil (`enableOnBackInvokedCallback`), donc retour prédictif système.
+
+Appareil (API 33+) : `make updateApkToPhone`, puis retour sur un dialogue
+(fermé), sur une sous-route (recule), à l'accueil (sortie animée).
+
 ## Serveur facultatif : scraper de manuels
 
 Le serveur n'est pas nécessaire pour Pronote ou l'assistant IA. Il ne sert qu'au

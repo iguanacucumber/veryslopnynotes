@@ -27,6 +27,11 @@ const val WEB_ASSET_HOST = "appassets.androidplatform.net"
 
 private const val WEB_INDEX = "web/index.html"
 
+// Le JS est seul juge du retour : dialogues, puis routes, puis accueil.
+// Toute autre valeur que "true" (JS absent, page en cours de chargement) rend
+// la main au système, qui termine l'activité sans piéger l'utilisateur.
+private const val HARDWARE_BACK_JS = "(window.__vsnBack && window.__vsnBack()) === true"
+
 // Les routes hash connues vivent dans `WebRouteState.kt` : un seul endroit de
 // vérité, lu par la WebView, l'activité et les tests.
 
@@ -64,19 +69,23 @@ class NativeWebShell(private val activity: ComponentActivity) {
 
     // Construit le pont APRÈS la WebView (il lui répond) et l'expose sous le
     // seul nom que le JS connaît. Aucune autre interface n'est ajoutée.
-    private val bridge = VsnBridge(activity, webView)
+    private val bridge = VsnBridge(activity, webView) { setBackAvailable(it) }
+
+    // Désactivé par défaut : à l'accueil, le système garde la main et joue
+    // l'animation prédictive. Le JS l'active dès qu'un dialogue ou une route
+    // peut consommer la pression.
+    private val backCallback = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            webView.evaluateJavascript(HARDWARE_BACK_JS) { handled ->
+                if (handled != "true") exitThroughSystemBack()
+            }
+        }
+    }
 
     init {
         activity.window.setBackgroundDrawable(ColorDrawable(splashColor))
         webView.addJavascriptInterface(bridge, "VSN")
-        activity.onBackPressedDispatcher.addCallback(
-            activity,
-            object : OnBackPressedCallback(true) {
-                override fun handleOnBackPressed() {
-                    if (webView.canGoBack()) webView.goBack() else activity.finish()
-                }
-            },
-        )
+        activity.onBackPressedDispatcher.addCallback(activity, backCallback)
     }
 
     val view: WebView get() = webView
@@ -98,6 +107,19 @@ class NativeWebShell(private val activity: ComponentActivity) {
             "location.hash = ${JSONObject.quote(hash)}",
             null,
         )
+    }
+
+    /** Le JS signale qu'une pression retour a une cible (dialogue ou route). */
+    internal fun setBackAvailable(available: Boolean) {
+        activity.runOnUiThread {
+            if (backCallback.isEnabled != available) backCallback.isEnabled = available
+        }
+    }
+
+    /** Le JS n'a rien consommé : la pile système reprend la main et termine. */
+    private fun exitThroughSystemBack() {
+        backCallback.isEnabled = false
+        activity.onBackPressedDispatcher.onBackPressed()
     }
 
     fun destroy() {

@@ -103,8 +103,8 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
     case "app.setTheme":
       settings = { ...settings, theme: p["theme"] as SettingsSnapshot["theme"] };
       return ok({ ok: true }) as Promise<T>;
-    case "app.back":
-      return ok({ handled: false }) as Promise<T>;
+    case "app.backState":
+      return ok({ ok: true }) as Promise<T>;
     case "session.status":
     case "session.restore":
       return ok(sessions) as Promise<T>;

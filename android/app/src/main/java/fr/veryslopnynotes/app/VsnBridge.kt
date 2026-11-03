@@ -65,7 +65,7 @@ import java.util.concurrent.TimeUnit
  * best-effort (le JS a déjà lâché la promesse).
  *
  * Fils : un fil par appel et une file LLM à part (`BridgeExecutors`, #393) —
- * le pont ne fait JAMAIS la queue, donc le bouton retour répond même quand
+ * le pont ne fait JAMAIS la queue, donc l'état du retour répond même quand
  * l'accueil charge cinq ressources.
  *
  * Secrets : la session Pronote (SessionStore) et la clé LLM (LlmKeys) ne
@@ -76,10 +76,11 @@ import java.util.concurrent.TimeUnit
 class VsnBridge(
     private val activity: ComponentActivity,
     private val webView: WebView,
+    private val onBackAvailable: (Boolean) -> Unit = {},
 ) {
     internal val ctx: Context = activity.applicationContext
     private val main = Handler(Looper.getMainLooper())
-    // #393 : un fil par appel (le pont ne fait JAMAIS la queue : `app.back`
+    // #393 : un fil par appel (le pont ne fait JAMAIS la queue : `app.backState`
     // répond même avec cinq lectures et deux appels LLM en vol) et une file
     // LLM à part (les opérations longues ne gèlent plus le pont).
     private val executors = BridgeExecutors()
@@ -336,7 +337,7 @@ class VsnBridge(
             "app.ready" -> JSONObject().put("ok", true)
             "app.theme" -> JSONObject().put("theme", theme())
             "app.setTheme" -> setTheme(p)
-            "app.back" -> back()
+            "app.backState" -> setBackState(p)
             "session.status" -> sessionStatus()
             "session.restore" -> restoreSession()
             "session.logout" -> logout()
@@ -417,11 +418,10 @@ class VsnBridge(
         return JSONObject().put("ok", true)
     }
 
-    private fun back(): JSONObject {
-        activity.runOnUiThread {
-            if (webView.canGoBack()) webView.goBack() else activity.finish()
-        }
-        return JSONObject().put("handled", true)
+    /** Le JS dit si le retour a une cible ; la décision reste côté web. */
+    private fun setBackState(p: JSONObject): JSONObject {
+        onBackAvailable(p.optBoolean("available", false))
+        return JSONObject().put("ok", true)
     }
 
     private fun sessionStatus(): JSONObject {

@@ -7,8 +7,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Le pont ne doit jamais faire la queue : un pool fixe immobilisait tous les
- * appels pendant un `await` long (20 s, 45 s pour le LLM), donc `app.back` et
- * les lectures de l'accueil gelaient. Logique pure (`java.util.concurrent`).
+ * appels pendant un `await` long (20 s, 45 s pour le LLM), donc `app.backState`
+ * et les lectures de l'accueil gelaient. Logique pure (`java.util.concurrent`).
  */
 class BridgeExecutors {
     companion object {

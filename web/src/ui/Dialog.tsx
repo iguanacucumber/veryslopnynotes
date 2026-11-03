@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { registerDialog } from "./dialogStack";
 import { IconClose } from "./icons";
 
 const FOCUSABLE =
@@ -70,6 +71,15 @@ export function Dialog({
   useEffect(() => {
     busyRef.current = busy;
   }, [busy]);
+
+  // Le retour matériel ferme le dialogue du dessus, jamais deux à la fois.
+  // Un dialogue occupé (enregistrement en cours) reste ouvert, comme Échap.
+  useEffect(() => {
+    if (!open) return;
+    return registerDialog(() => {
+      if (!busyRef.current) closeRef.current();
+    });
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
