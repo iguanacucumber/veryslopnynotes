@@ -56,7 +56,8 @@ Gradle : durée variable, jamais une preuve avant PR.
 
 Le smoke navigateur n'a ni sleep fixe ni `waitForTimeout` : chaque attente est
 un ÉVÉNEMENT (serveur qui répond, DOM stable) borné par un délai explicite, et
-chaque job porte un `timeout-minutes`. Seul le job `web-smoke` a droit à UNE
+chaque job porte un `timeout-minutes`. La suite axe/captures suit la même règle
+(un worker, horloge figée, aucun `retry`). Seul le job `web-smoke` a droit à UNE
 reprise automatique en CI ; le gate `check` n'en a AUCUNE. Les captures
 (`web-smoke-shots`) et les logs (`gate-logs`) partent en artefact 7 jours, y
 compris en échec. Deux échecs identiques = défaut, pas flake : ne pas relancer
@@ -112,7 +113,8 @@ même en échec. Non requis au ruleset, mais `ship.sh` refuse un check rouge.
 - `buildDebugApk` / `buildRelApk` / `updateApkToPhone` : Gradle, JDK/SDK requis, échec bruyant si outillage absent.
 - `runServer` : scraper de manuels HTTPS sur `127.0.0.1:8080` (TLS généré hors dépôt, jamais de repli en clair). `HOST=0.0.0.0` uniquement sur réseau de confiance.
 - `build` : image serveur Docker + scan de secrets.
-- `web-smoke` : navigateur (Chromium), hors `make check`.
+- `web-smoke` : navigateur (Chromium), hors `make check` : axe WCAG 2.0 → 2.2
+  A/AA (clair/sombre), contrastes et captures `tests/visual/__screenshots__/`.
 - `papillonRef` : frames de référence, réseau = échec bruyant, hors gate.
 
 ## Contexte Android

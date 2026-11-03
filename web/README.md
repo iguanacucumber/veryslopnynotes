@@ -25,6 +25,7 @@ Android (`android/app/src/main/assets/web/`), jamais chargé depuis un serveur.
 bun run dev:web     # Chromium + pont factice (src/bridge/mock.ts)
 bun run typecheck:web
 bun run build:web   # écrit dans android/app/src/main/assets/web/
+make web-smoke      # smoke + axe (WCAG A/AA) + captures de référence
 ```
 
 Le pont factice imite les payloads réels : les écrans se développent sans

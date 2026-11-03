@@ -370,8 +370,8 @@ describe("registre d'invariants", () => {
     const ceilings: [string, number][] = [
       // +600 pour la politique anti-flake (#924), qui appartient au build CI.
       // +1 150 pour la mesure, la marge et le seuil de couverture (#895).
-      // +1 450 pour le smoke émulateur (#891) et son caractère non bloquant.
-      ["docs/architecture/BUILD.md", 7_200],
+      // +1 450 smoke émulateur (#891), +350 axe/captures (#970). Marge : 7 600.
+      ["docs/architecture/BUILD.md", 7_600],
       // +1 000 mort du rendu (#866), +580 FLAG_SECURE (#898), +600 réseau
       // local (#896). Marge : 12 000.
       ["android/README.md", 12_000],

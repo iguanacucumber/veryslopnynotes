@@ -139,7 +139,7 @@
 }
 
 .grades-hero__scale {
-  color: var(--brand);
+  color: var(--brand-deep);
   font-size: 16px;
   line-height: 20px;
   font-weight: 500;
@@ -437,7 +437,7 @@
 .grades-latest__subject {
   flex: 1;
   min-width: 0;
-  color: color-mix(in srgb, var(--grade-ink) 60%, transparent);
+  color: var(--grade-ink);
   font-size: 16px;
   line-height: 20px;
   font-weight: 500;
@@ -459,7 +459,7 @@
 
 .grades-latest__date {
   margin: 0 14px;
-  color: color-mix(in srgb, var(--grade-ink) 60%, transparent);
+  color: var(--grade-ink);
   font-size: 15px;
   line-height: 19px;
   font-weight: 500;
@@ -484,7 +484,7 @@
 }
 
 .grades-latest__value span {
-  color: color-mix(in srgb, var(--grade-ink) 60%, transparent);
+  color: var(--grade-ink);
   font-size: 16px;
   line-height: 20px;
   font-weight: 500;

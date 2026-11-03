@@ -995,7 +995,7 @@ button.card:hover {
 
 .btn--ghost {
   background: var(--item);
-  color: var(--brand-deep);
+  color: var(--brand-solid);
   border: 0;
 }
 

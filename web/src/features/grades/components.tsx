@@ -253,7 +253,7 @@ export function LatestGrades({ groups, dark }: { groups: GradeGroup[]; dark: boo
         <IconStar size={20} />
         Nouvelles notes
       </h2>
-      <div className="h-scroll grades-latest__track">
+      <div className="h-scroll grades-latest__track" tabIndex={0} aria-label="Dernières notes">
         {latest.map((grade) => {
           const color = subjectColor(grade.subject);
           const palette = subjectTint(color, dark);
