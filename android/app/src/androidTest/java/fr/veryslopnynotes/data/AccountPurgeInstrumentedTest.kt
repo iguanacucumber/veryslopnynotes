@@ -88,6 +88,7 @@ class AccountPurgeInstrumentedTest {
 
         val webCalls = mutableListOf<String>()
         var manualNotified = false
+        val llm = EncryptedLlmKeyStore(context).also { it.save("cle-instrumentation") }
         val targets = AccountPurgeTargets(
             sessions = sessions,
             accounts = accounts,
@@ -97,7 +98,7 @@ class AccountPurgeInstrumentedTest {
             lessons = lessons,
             teacherChat = chat,
             prefs = prefs,
-            llmKeys = InMemoryLlmKeyStore(),
+            llmKeys = llm,
             serverStore = ServerStore(context, CleartextPolicy.FORBID),
             webView = WebViewAccountData(
                 readState = { webCalls.add("read_state"); true },
@@ -112,6 +113,7 @@ class AccountPurgeInstrumentedTest {
         for (store in listOf(
             AccountDataStore.SESSION,
             AccountDataStore.ACCOUNTS,
+            AccountDataStore.LLM_KEY,
             AccountDataStore.COURSE_NOTES,
             AccountDataStore.TEACHER_CHAT,
             AccountDataStore.SUBJECT_PREFS,
@@ -128,6 +130,8 @@ class AccountPurgeInstrumentedTest {
 
         assertNull(sessions.load())
         assertEquals(0, accounts.count())
+        // Relecture disque : la clé du compte déconnecté ne revient pas.
+        assertNull(EncryptedLlmKeyStore(context).apiKey())
         assertTrue(lessons.notes().isEmpty())
         assertFalse(chatFile.exists())
         assertFalse(prefsFile.exists())
@@ -143,9 +147,9 @@ class AccountPurgeInstrumentedTest {
     }
 
     /**
-     * Suppression TOTALE : la clé et le serveur, retenus à la déconnexion,
-     * partent ici. Les stores sont RELUS depuis le disque après la purge —
-     * l'équivalent d'un redémarrage (le force-stop réel est manuel).
+     * Suppression TOTALE : en plus de la purge de session, le consentement et
+     * le serveur partent. Les stores sont RELUS depuis le disque après la
+     * purge — l'équivalent d'un redémarrage (le force-stop réel est manuel).
      */
     @Test
     fun suppression_totale_efface_cle_serveur_et_session_puis_relit_le_disque() {

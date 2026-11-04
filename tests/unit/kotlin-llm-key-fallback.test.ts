@@ -141,6 +141,16 @@ describe("clé LLM — « Oublier » survit à un Keystore mort (#749)", () => {
     expect(res.nextLaunch).toBeNull();
   });
 
+  test.skipIf(skip)("une entrée mal formée sur le disque est traitée comme absente", async () => {
+    const res = await ask<{ tooLong: string | null; blank: string | null; configured: boolean }>({
+      op: "malformed",
+    });
+    // Une entrée forgée ou corrompue ne devient jamais une clé configurée.
+    expect(res.tooLong).toBeNull();
+    expect(res.blank).toBeNull();
+    expect(res.configured).toBe(false);
+  });
+
   test.skipIf(skip)("une clé invalide est refusée AVANT tout état", async () => {
     const res = await ask<{
       errors: string[];

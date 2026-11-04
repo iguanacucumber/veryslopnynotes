@@ -124,7 +124,7 @@ entrée à l’instant exact de son TTL.
 | Pièces jointes | LRU de 24 fichiers et 32 Mio par dossier, 10 Mio par fichier ; purge du compte |
 | Photos de cours | Copie locale effacée à la déconnexion et lors de la création d’une nouvelle activité ; l’original de galerie n’est pas conservé |
 | Exports | Jusqu’à « Supprimer toutes mes données » ou LRU de 24 fichiers et 32 Mio ; un export survit à une déconnexion ou à un changement de compte |
-| Clé LLM | Jusqu’à « oublier la clé » ou suppression totale |
+| Clé LLM | Jusqu’à « oublier la clé », la déconnexion, un changement de compte ou « Supprimer toutes mes données ». Elle reste chiffrée après un redémarrage tant que la session est active |
 | Consentement et attestation IA | Jusqu’au retrait ou suppression totale ; ils survivent à une déconnexion |
 | Adresse du serveur de manuels | Jusqu’à modification ou suppression totale |
 | Réglages d’interface, thème, schéma, drapeau `prompt_seen` | Jusqu’à la désinstallation ; conservés après une déconnexion et après une suppression totale |
@@ -144,13 +144,13 @@ Hors de l’appareil :
 
 ### Déconnexion et session morte
 
-La déconnexion efface la session, la liste des comptes, le cache hors-ligne, le
-cahier de cours, le fil du professeur, les préférences de matières, le contenu
-du manuel, les pièces jointes, les photos, l’état de lecture et le cache
-WebView. Elle **conserve par conception** la clé LLM, le consentement et
-l’attestation IA, l’adresse du serveur de manuels, le drapeau `prompt_seen`, les
-réglages d’interface et les exports. Une purge incomplète est signalée et interdit de
-publier le compte suivant.
+La déconnexion efface la session, la liste des comptes, la clé LLM, le cache
+hors-ligne, le cahier de cours, le fil du professeur, les préférences de
+matières, le contenu du manuel, les pièces jointes, les photos, l’état de
+lecture et le cache WebView. Elle **conserve par conception** le consentement
+et l’attestation IA, l’adresse du serveur de manuels, le drapeau `prompt_seen`,
+les réglages d’interface et les exports. Une purge incomplète est signalée et
+interdit de publier le compte suivant.
 
 ### Changement de compte
 
@@ -159,8 +159,8 @@ session et la liste des comptes. Les exports restent, comme à la déconnexion.
 
 ### « Supprimer toutes mes données »
 
-Cette action reprend la même purge et y ajoute la clé LLM, le consentement et
-l’attestation IA, l’adresse du serveur et les exports. La confirmation liste
+Cette action reprend la même purge et y ajoute le consentement et l’attestation
+IA, l’adresse du serveur et les exports. La confirmation liste
 l’inventaire complet et un échec partiel nomme les éléments restants. Après cette suppression, il
 reste les réglages d’interface, le thème, le schéma et le drapeau `prompt_seen`
 — des préférences, pas des données de compte.
@@ -289,8 +289,9 @@ Limites à connaître :
 
 Le consentement IA est un réglage de l’appareil, pas du compte : il survit à
 une déconnexion et il est effacé par « Supprimer toutes mes données ». La
-version actuelle est la **version 2** : elle inclut l’attestation d’âge ou
-d’autorisation parentale. Un changement **matériel** (catégorie de données
+version actuelle est la **version 4** : elle inclut l’attestation d’âge ou
+d’autorisation parentale et la durée de vie locale de la clé. Un changement
+**matériel** (catégorie de données
 ajoutée ou retirée, destinataire ou règle de conservation modifiée, usage
 élargi, attestation ajoutée ou modifiée) incrémente cette version et redemande
 l’accord et l’attestation ; l’IA reste désactivée jusque-là. Une reformulation
@@ -370,20 +371,25 @@ un conseil et, pour certains, avec l’établissement.
 5. **Rôle de GitHub.** DPA, sous-traitance, transferts et durée de conservation
    des issues, pull requests et logs de release.
 6. **Mineurs.** L’attestation 18+ ou autorisation parentale est requise pour
-   l’IA (version 2). Sa validation juridique, la règle d’éligibilité et la
+   l’IA (version 4). Sa validation juridique, la règle d’éligibilité et la
    mention d’âge sur le store restent ouvertes (DEC-04, issue
    [#829](https://github.com/iguanacucumber/veryslopnynotes/issues/829)).
 7. **Registre et délai des demandes.** Format, durée et responsable du registre
    minimal des demandes, sans donnée scolaire.
-8. **Exports.** La conservation d’un export après déconnexion ou changement de
+8. **Durée de vie de la clé LLM.** Le code l’efface à la déconnexion, au
+   changement de compte et à la mort de session. Cette règle conservatrice
+   convient-elle, ou une clé par appareil peut-elle survivre à la session avec
+   un verrou applicatif (DEC-04, issue
+   [#906](https://github.com/iguanacucumber/veryslopnynotes/issues/906)) ?
+9. **Exports.** La conservation d’un export après déconnexion ou changement de
    compte est une exception du code. Est-elle acceptable, ou faut-il la purger
    avec le compte ?
-9. **AIPD.** Une analyse d’impact est-elle requise ? Qui la porte : projet,
-   établissement, ou les deux ?
-10. **Scraper.** Responsabilités de l’opérateur d’une instance partagée,
+10. **AIPD.** Une analyse d’impact est-elle requise ? Qui la porte : projet,
+    établissement, ou les deux ?
+11. **Scraper.** Responsabilités de l’opérateur d’une instance partagée,
     conditions des sites sources, `robots.txt` et attribution
     ([`docs/legal/manual-scraper.md`](docs/legal/manual-scraper.md)).
-11. **Publication dans l’app.** Cette notice est le fichier de référence. Son
+12. **Publication dans l’app.** Cette notice est le fichier de référence. Son
     rendu dans l’écran À propos / Confidentialité est suivi séparément (issue
     [#847](https://github.com/iguanacucumber/veryslopnynotes/issues/847)) ; il
     doit afficher la même version.

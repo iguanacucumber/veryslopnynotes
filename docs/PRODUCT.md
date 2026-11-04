@@ -108,11 +108,12 @@ sont refusés.
   fournisseur dans l'en-tête HTTPS `Authorization`.
 - Le **profil** reste en mémoire ; les caches ne contiennent que les données
   nécessaires au fonctionnement hors-ligne.
-- Une **déconnexion** invalide la session, purge tous les caches locaux et
-  renvoie vers l'appairage : l'accueil d'un compte déconnecté n'est plus
-  accessible. « **Supprimer toutes mes données** » emporte en plus la clé de
-  l’assistant et l’adresse du serveur ; la confirmation liste tout
-  l’inventaire et un échec partiel est affiché.
+- Une **déconnexion** invalide la session, purge tous les caches locaux et la
+  clé de l’assistant, puis renvoie vers l'appairage : l'accueil d'un compte
+  déconnecté n'est plus accessible. La clé survit à un redémarrage tant que la
+  session reste active. « **Supprimer toutes mes données** » emporte en plus le
+  consentement et l'attestation IA, l'adresse du serveur et les exports ; la
+  confirmation liste tout l’inventaire et un échec partiel est affiché.
 
 ### Consentement IA versionné
 

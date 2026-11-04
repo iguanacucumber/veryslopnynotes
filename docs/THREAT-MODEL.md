@@ -56,16 +56,16 @@ transfert appareil-à-appareil, enfin l'aperçu des applications récentes.
   clair : [`SessionStore.kt`](../android/data/src/main/java/fr/veryslopnynotes/data/SessionStore.kt),
   [`LlmKeyStore.kt`](../android/data/src/main/java/fr/veryslopnynotes/data/LlmKeyStore.kt).
 - La déconnexion passe par `PairingRepository.logoutBlocking()` sous le verrou
-  de session : session, cache, artefacts hors ligne, téléchargements et liste
-  de comptes sont purgés. Une purge incomplète rend `false`, jamais un
+  de session : session, clé LLM, cache, artefacts hors ligne, téléchargements
+  et liste de comptes sont purgés. Une purge incomplète rend `false`, jamais un
   « déconnecté » mensonger :
   [`PairingRepository.kt`](../android/data/src/main/java/fr/veryslopnynotes/data/PairingRepository.kt),
   [`CacheScope.kt`](../android/data/src/main/java/fr/veryslopnynotes/data/CacheScope.kt),
   [`SessionRepair.kt`](../android/data/src/main/java/fr/veryslopnynotes/data/SessionRepair.kt).
 - « Supprimer toutes mes données » réutilise le MÊME orchestrateur
-  (`AccountPurgeMode.DELETE_ALL`) et y ajoute la clé LLM et le serveur choisi.
-  La confirmation liste l'inventaire ; un échec partiel nomme les stores
-  restants.
+  (`AccountPurgeMode.DELETE_ALL`) et y ajoute le consentement IA, le serveur
+  choisi et les exports. La confirmation liste l'inventaire ; un échec partiel
+  nomme les stores restants.
 - La bascule de compte est atomique : la purge précède la publication du
   nouveau client, et une époque invalide les écritures en vol (I16).
 - La sauvegarde est fermée deux fois : `allowBackup="false"` et des règles
@@ -340,7 +340,9 @@ OpenRouter (hors dépôt).
   donc perdu au redémarrage (I18).
 - « Oublier » efface durablement le chiffré, même quand le Keystore ne répond
   plus (`deleteSharedPreferences`) : une clé oubliée ne ressuscite pas au
-  lancement suivant.
+  lancement suivant. La clé part aussi avec la session (déconnexion, changement
+  de compte, session morte) : un appareil partagé ne dépense pas le compte
+  OpenRouter du précédent utilisateur.
 - La clé ne part que dans `Authorization`, en HTTPS, vers OpenRouter ; aucun
   secret côté serveur, et le garde de prompt refuse les formes de clé (I4).
   Le scan anti-secrets empêche un commit de clé.
@@ -350,18 +352,20 @@ OpenRouter (hors dépôt).
 
 **Risque résiduel** : il n'y a ni rotation automatique ni révocation depuis
 l'app. Une clé volée reste utilisable tant que l'utilisateur ne la révoque pas
-dans OpenRouter ; l'app peut seulement l'oublier localement. L'app n'a pas de
-verrou utilisateur : un appareil déverrouillé permet d'utiliser la clé, et il
-n'existe pas de plafond de dépense côté client — seules les limites du compte
-OpenRouter bornent l'abus. La clé est en mémoire pendant un appel ; root,
-débogage ou instrumentation peuvent la lire. La perte du Keystore est
+dans OpenRouter ; l'app peut seulement l'oublier localement. Tant que la
+session est active, l'app n'a pas de verrou utilisateur : un appareil
+déverrouillé permet d'utiliser la clé, et il n'existe pas de plafond de dépense
+côté client — seules les limites du compte OpenRouter bornent l'abus. La clé
+est en mémoire pendant un appel ; root, débogage ou instrumentation peuvent la
+lire. La perte du Keystore est
 irréversible par conception : la session et les données chiffrées ne sont pas
 récupérables, seule la ré-appairage les remplace.
 
 **Preuves** : `tests/unit/kotlin-store-health.test.ts`,
 `tests/unit/kotlin-llm-key-fallback.test.ts`,
-`tests/unit/kotlin-llm-guard.test.ts`, `tests/web/session.test.ts`,
-`tests/architecture/secret-scan.test.ts` et `tests/unit/privacy-claims.test.ts`.
+`tests/unit/kotlin-account-purge.test.ts`, `tests/unit/kotlin-llm-guard.test.ts`,
+`tests/web/session.test.ts`, `tests/architecture/secret-scan.test.ts` et
+`tests/unit/privacy-claims.test.ts`.
 
 ## Correspondance lois, invariants, ADR
 

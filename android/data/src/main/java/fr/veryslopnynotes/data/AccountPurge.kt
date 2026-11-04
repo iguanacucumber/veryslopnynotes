@@ -22,10 +22,11 @@ enum class AccountStorePolicy {
  * la purge INCOMPLÈTE : aucun appelant ne peut l'oublier en silence.
  *
  * `RETAINED` est une décision explicite pour une déconnexion ou une bascule :
- * la clé LLM et le serveur choisi appartiennent à l'utilisateur
- * (docs/PRODUCT.md), et `prompt_seen` est un réglage d'interface (Manuals.kt).
- * La suppression TOTALE demandée par l'utilisateur les emporte aussi : c'est
- * sa donnée, pas celle d'un compte. Les préférences d'apparence restent.
+ * le serveur choisi, le consentement IA et `prompt_seen` survivent au compte
+ * (docs/PRODUCT.md, Manuals.kt). La clé LLM est au contraire un credential
+ * personnel : elle part avec la session, pour qu'un appareil partagé ne
+ * dépense pas le compte OpenRouter du précédent utilisateur. La suppression
+ * TOTALE emporte aussi les stores retenus ; les préférences d'apparence restent.
  */
 enum class AccountDataStore(val id: String, val policy: AccountStorePolicy) {
     SESSION("session", AccountStorePolicy.PURGED),
@@ -40,7 +41,7 @@ enum class AccountDataStore(val id: String, val policy: AccountStorePolicy) {
     PHOTOS("photos", AccountStorePolicy.PURGED),
     READ_STATE("read_state", AccountStorePolicy.PURGED),
     WEBVIEW("webview", AccountStorePolicy.PURGED),
-    LLM_KEY("llm_key", AccountStorePolicy.RETAINED),
+    LLM_KEY("llm_key", AccountStorePolicy.PURGED),
     AI_CONSENT("ai_consent", AccountStorePolicy.RETAINED),
     SERVER_URL("server_url", AccountStorePolicy.RETAINED),
     CACHE("cache", AccountStorePolicy.PURGED),
@@ -49,7 +50,7 @@ enum class AccountDataStore(val id: String, val policy: AccountStorePolicy) {
 
     /** Une bascule remplace la session et la liste de comptes ; elle ne les efface pas. */
     fun required(mode: AccountPurgeMode): Boolean = when {
-        this == LLM_KEY || this == SERVER_URL || this == AI_CONSENT -> mode == AccountPurgeMode.DELETE_ALL
+        this == SERVER_URL || this == AI_CONSENT -> mode == AccountPurgeMode.DELETE_ALL
         policy == AccountStorePolicy.RETAINED -> false
         this == SESSION || this == ACCOUNTS -> mode != AccountPurgeMode.ACCOUNT_SWITCH
         else -> true

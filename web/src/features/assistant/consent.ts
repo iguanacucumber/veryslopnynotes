@@ -10,7 +10,7 @@ import type { AiConsentDecision } from "../../bridge/types";
  * conservation modifiée, usage élargi, attestation ajoutée ou modifiée. Une
  * reformulation seule ne compte pas.
  */
-export const AI_CONSENT_VERSION = 3;
+export const AI_CONSENT_VERSION = 4;
 
 export const AI_CONSENT_REQUIRED_MESSAGE =
   "Consentement IA requis : lis l’aperçu, atteste l’âge ou l’autorisation parentale et accepte dans Réglages > Assistant.";
@@ -83,6 +83,10 @@ export const AI_CONSENT_RETENTION_NOTE =
 
 export const AI_CONSENT_COST_NOTE =
   "Chaque demande, photo comprise, utilise tes crédits OpenRouter et peut être facturée.";
+
+/** Durée de vie locale de la clé : elle ne survit jamais à la session. */
+export const AI_KEY_LIFETIME_NOTE =
+  "La clé reste chiffrée sur cet appareil après un redémarrage tant que ta session est active. Elle est effacée à la déconnexion, au changement de compte, quand tu l’oublies ou avec « Supprimer toutes mes données ».";
 
 /** Un accord n'est valide que pour la version affichée ET l'attestation recueillie. */
 export function aiConsentGranted(

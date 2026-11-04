@@ -61,6 +61,10 @@ la section `0.1.0` le jour du tag.
 
 ### Modifié
 
+- Durée de vie de la clé IA fixée et affichée : elle reste chiffrée après un
+  redémarrage tant que la session est active, puis part à la déconnexion, au
+  changement de compte, à la mort de session ou avec « Supprimer toutes mes
+  données ». Le consentement IA passe en version 4 et redemande l’accord.
 - Licence du dépôt actée en GPL-3.0-only (ADR-008) : contributions sous la
   même licence, source correspondante publiée et dérivés Papillon crédités.
 - Statut MIT antérieur documenté : relicence au commit `2def868` (2026-11-04),

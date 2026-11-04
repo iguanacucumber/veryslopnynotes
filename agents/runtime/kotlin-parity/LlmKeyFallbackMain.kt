@@ -24,6 +24,7 @@ package fr.veryslopnynotes.llmkeyfallback
 import fr.veryslopnynotes.data.LlmKeyStore
 import fr.veryslopnynotes.data.ResilientLlmKeyStore
 import fr.veryslopnynotes.data.SecureStorage
+import fr.veryslopnynotes.data.isValidLlmKey
 import fr.veryslopnynotes.data.validatedLlmKey
 import fr.veryslopnynotes.pronote.JVal
 import fr.veryslopnynotes.pronote.Json
@@ -70,7 +71,9 @@ private class FakeSecureStore(
 
     override fun apiKey(): String? {
         if (throwOn == "read") error("Keystore indisponible")
-        return disk
+        // Même filtre que `EncryptedLlmKeyStore` : une entrée illisible ou
+        // forgée sur le disque est traitée comme absente.
+        return disk?.takeIf { isValidLlmKey(it) }
     }
 
     override fun clear() {
@@ -218,6 +221,20 @@ private class Driver {
                 "apiKey" to text(store.apiKey()),
                 "discards" to count(discards),
                 "nextLaunch" to text(FakeSecureStore().apiKey()),
+            )
+        }
+        // Une entrée mal formée sur le disque (trop longue ou blanche) n'est
+        // jamais une clé configurée : l'app échoue fermée et redemande une clé.
+        "malformed" -> {
+            val store = ResilientLlmKeyStore(FakeSecureStore()) { discardDisk() }
+            disk = "x".repeat(513)
+            val tooLong = store.apiKey()
+            disk = "   "
+            val blank = store.apiKey()
+            ok(
+                "tooLong" to text(tooLong),
+                "blank" to text(blank),
+                "configured" to JVal.Bool(store.isConfigured()),
             )
         }
         // Une clé invalide est refusée AVANT tout état : rien d'écrit, rien de

@@ -18,6 +18,7 @@ import {
   AI_CONSENT_ITEMS,
   AI_CONSENT_RETENTION_NOTE,
   AI_CONSENT_VERSION,
+  AI_KEY_LIFETIME_NOTE,
 } from "../../web/src/features/assistant/consent";
 import { BRIDGE_FILES } from "./fixtures/bridge-source";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
@@ -168,8 +169,15 @@ describe("confidentialité — consentement IA versionné et attesté (#848, #86
   test("la version de copie et la version native ne divergent pas", () => {
     const policy = source(join(CORE, "AiConsent.kt"));
     expect(policy).toContain(`const val AI_CONSENT_VERSION = ${AI_CONSENT_VERSION}`);
-    // Version 3 : la règle de rétention des photos change (endpoint ZDR).
-    expect(AI_CONSENT_VERSION).toBe(3);
+    // Version 4 : la durée de vie locale de la clé entre dans le périmètre.
+    expect(AI_CONSENT_VERSION).toBe(4);
+  });
+
+  test("la clé ne survit pas à la session, et le dit avant l'accord (#906)", () => {
+    expect(AI_KEY_LIFETIME_NOTE).toContain("redémarrage");
+    expect(AI_KEY_LIFETIME_NOTE).toContain("déconnexion");
+    expect(AI_KEY_LIFETIME_NOTE).toContain("changement de compte");
+    expect(AI_KEY_LIFETIME_NOTE).toContain("Supprimer toutes mes données");
   });
 
   test("l'attestation nomme l'âge, l'autorisation parentale et l'absence de validation juridique", () => {

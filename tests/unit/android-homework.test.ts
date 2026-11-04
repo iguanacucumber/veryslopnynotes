@@ -471,21 +471,18 @@ describe("android homework — le credential reste dans l'app", () => {
     expect(store).toMatch(/@Volatile/);
   });
 
-  test("le logout n'efface PAS la clé : c'est celle de l'utilisateur, pas une session", () => {
+  test("le logout efface la clé avec la session, sans chemin séparé", () => {
     const pairing = codeOnly(src(DATA, "PairingRepository.kt"));
     const factory = codeOnly(src(DATA, "AccountPurgeFactory.kt"));
     const purge = codeOnly(src(DATA, "AccountPurge.kt"));
-    // La SESSION est une étape purgée ; la clé LLM reste RETENUE à la
-    // déconnexion (elle n'est pas reconstructible par le serveur : un
-    // ré-appairage ne doit pas coûter une nouvelle saisie). Seule la demande
-    // explicite « supprimer toutes mes données » l'emporte.
+    // La clé est un credential personnel : elle part par l'orchestrateur de
+    // purge, pas par un oubli séparé que la déconnexion pourrait manquer.
     expect(factory).toContain("AccountDataStore.SESSION");
     expect(pairing).not.toMatch(/llmKeys|LlmKeys|LlmKeyStore/);
     expect(factory).toContain("AccountDataStore.LLM_KEY");
     expect(factory).toContain("targets.llmKeys.clear()");
-    expect(purge).toMatch(
-      /LLM_KEY\s*\|\|\s*this == SERVER_URL\s*\|\|\s*this == AI_CONSENT -> mode == AccountPurgeMode\.DELETE_ALL/,
-    );
+    expect(purge).toMatch(/LLM_KEY\("llm_key", AccountStorePolicy\.PURGED\)/);
+    expect(purge).not.toMatch(/this == LLM_KEY/);
   });
 
   test("l'aide texte porte le délai du pont (#594), comme les chemins photo", () => {
