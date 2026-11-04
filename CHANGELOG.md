@@ -145,6 +145,9 @@ la section `0.1.0` le jour du tag.
 - Statut MIT antérieur documenté : relicence au commit `2def868` (2026-11-04),
   aucun APK ni binaire public avant, droits MIT des copies déjà livrées
   préservés (#844).
+- Provenance Papillon inventoriée dans `docs/legal/PROVENANCE.md` : fichiers
+  portés ou adaptés, référence 8.6.2, attribution GPL et points non résolus ;
+  aucune revendication clean-room.
 - Version Android dérivée du tag git `vX.Y.Z` : `versionName` et `versionCode`
   monotone, repli déterministe `0.1.0`/`1` sans tag.
 - Release : le parcours public ne produit plus que l'APK sideload signé ;
