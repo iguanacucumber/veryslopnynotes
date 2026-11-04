@@ -263,7 +263,7 @@ export default function PairingScreen() {
           {replacing ? (
             <div className="card card--flat">
               <p className="tiny muted" style={{ margin: 0 }}>
-                Tes préférences et la clé de l’assistant restent sur cet appareil.
+                La clé de l’assistant et les données du compte précédent sont effacées de cet appareil ; seuls tes réglages d’apparence restent.
               </p>
               <ExportBeforePurge state={exportState} />
             </div>

@@ -87,9 +87,9 @@ describe("purge de compte — inventaire (#861)", () => {
     for (const ids of Object.values(STORE_FILES)) {
       for (const id of ids) expect(byId.has(id)).toBe(true);
     }
-    // Décisions explicites : la clé utilisateur, le serveur choisi, le drapeau
-    // d'invitation et l'apparence ne sont PAS la donnée du compte.
-    expect(byId.get("llm_key")).toBe("retained");
+    // Décisions explicites : la clé part avec la session ; le serveur choisi,
+    // le drapeau d'invitation et l'apparence ne sont PAS la donnée du compte.
+    expect(byId.get("llm_key")).toBe("purged");
     expect(byId.get("ai_consent")).toBe("retained");
     expect(byId.get("server_url")).toBe("retained");
     expect(byId.get("manual_prompt_seen")).toBe("retained");
@@ -143,7 +143,8 @@ describe("purge de compte — inventaire (#861)", () => {
       "READ_STATE",
       "WEBVIEW",
       "CACHE",
-      // La suppression TOTALE emporte aussi ces trois stores utilisateur.
+      // Clé effacée avec la session ; consentement et serveur emportés par la
+      // suppression totale, mais câblés par le même orchestrateur.
       "LLM_KEY",
       "AI_CONSENT",
       "SERVER_URL",
@@ -187,6 +188,7 @@ describe("purge de compte — exécution (#861)", () => {
     for (const id of [
       "session",
       "accounts",
+      "llm_key",
       "course_notes",
       "teacher_chat",
       "subject_prefs",
@@ -204,12 +206,22 @@ describe("purge de compte — exécution (#861)", () => {
     expect(out.calls.at(-1)).toBe("cache");
   });
 
-  test.skipIf(skip)("une bascule ne supprime ni la session neuve ni la liste de comptes", async () => {
+  test.skipIf(skip)("une bascule garde la session neuve mais efface clé et fil", async () => {
     const out = await ask({ op: "plan", mode: "ACCOUNT_SWITCH" });
     expect(out.ok).toBe(true);
     expect(out.purged).not.toContain("session");
     expect(out.purged).not.toContain("accounts");
+    // La clé et le fil du compte précédent ne suivent pas le nouveau compte.
+    expect(out.purged).toContain("llm_key");
+    expect(out.purged).toContain("teacher_chat");
     expect(out.calls.at(-1)).toBe("cache");
+  });
+
+  test.skipIf(skip)("une session morte efface aussi la clé et le fil", async () => {
+    const out = await ask({ op: "plan", mode: "SESSION_DEAD" });
+    expect(out.ok).toBe(true);
+    expect(out.purged).toContain("llm_key");
+    expect(out.purged).toContain("teacher_chat");
   });
 
   test.skipIf(skip)("suppression totale : la clé et le serveur partent AUSSI, cache EN DERNIER", async () => {
@@ -242,6 +254,6 @@ describe("purge de compte — exécution (#861)", () => {
   test.skipIf(skip)("un store retenu n'est jamais exécuté", async () => {
     const out = await ask({ op: "retained", mode: "LOGOUT" });
     expect(out.ok).toBe(true);
-    expect(out.calls).not.toContain("llm_key");
+    expect(out.calls).not.toContain("server_url");
   });
 });

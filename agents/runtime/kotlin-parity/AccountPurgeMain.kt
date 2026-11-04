@@ -159,7 +159,7 @@ private class Driver {
             val steps = AccountDataStore.entries
                 .filter { it.required(selected) }
                 .map { store -> AccountPurgeStep(store) { calls.add(store.id); true } } +
-                AccountPurgeStep(AccountDataStore.LLM_KEY) { calls.add("llm_key"); false }
+                AccountPurgeStep(AccountDataStore.SERVER_URL) { calls.add("server_url"); false }
             val result = AccountPurgePlan.of(selected, steps).purge()
             ok(
                 "ok" to JVal.Bool(result.ok),

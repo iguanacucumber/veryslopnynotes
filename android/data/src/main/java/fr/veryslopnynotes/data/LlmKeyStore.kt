@@ -11,10 +11,12 @@ import android.content.SharedPreferences
 // règle « chiffré au repos, jamais en clair, jamais journalisé » y est la même
 // que pour la session Pronote.
 //
-// Elle n'est PAS effacée au logout : c'est la clé de l'utilisateur, pas une
-// session d'établissement. Un ré-appairage (nouveau QR) ne doit pas obliger à
-// ressaisir la clé. Elle est effacée par [LlmKeyStore.clear], donc par
-// « Oublier » dans les réglages et par la désinstallation.
+// Elle est EFFACÉE avec la session (déconnexion, changement de compte, session
+// morte, suppression totale) : sur un appareil partagé, la clé du compte
+// précédent ne doit pas payer les appels du suivant. Elle survit en revanche
+// à un redémarrage ou à une mise à jour tant que la session reste active. Elle
+// est aussi effacée par [LlmKeyStore.clear] (« Oublier ») et par la
+// désinstallation.
 // ponytail: un fichier, une entrée, pas de rotation. Upgrade: plusieurs clés
 // (un fournisseur par matière) si le contrat gagne un `provider`.
 class EncryptedLlmKeyStore(context: Context) : LlmKeyStore {
@@ -35,7 +37,7 @@ class EncryptedLlmKeyStore(context: Context) : LlmKeyStore {
     }
 
     override fun apiKey(): String? =
-        prefs.getString(KEY_API_KEY, null)?.takeIf { isValidLlmKey(it) }
+        prefs.getString(KEY_API_KEY, null)?.trim()?.takeIf { isValidLlmKey(it) }
 
     override fun clear() {
         // Même raison : sans `commit()`, l'effacement pouvait ne jamais

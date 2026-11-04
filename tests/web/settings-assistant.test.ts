@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { AI_CONSENT_VERSION } from "../../web/src/features/assistant/consent";
+import { AI_CONSENT_VERSION, AI_KEY_LIFETIME_NOTE } from "../../web/src/features/assistant/consent";
 import { assistantStatus } from "../../web/src/features/settings/model";
 
 const WEB = join(import.meta.dir, "..", "..", "web", "src");
@@ -110,6 +110,15 @@ describe("réglages — une seule section Assistant (#612)", () => {  const sett
     expect(keyCard).not.toContain("ne quitte jamais cet appareil");
   });
 
+  test("la durée de vie de la clé est explicite et sans ambiguïté (#906)", () => {
+    expect(AI_KEY_LIFETIME_NOTE).toContain("redémarrage");
+    expect(AI_KEY_LIFETIME_NOTE).toContain("déconnexion");
+    expect(AI_KEY_LIFETIME_NOTE).toContain("changement de compte");
+    expect(AI_KEY_LIFETIME_NOTE).toContain("Supprimer toutes mes données");
+    // La note est affichée avant l'accord ET sur la carte de la clé.
+    expect(keyCard.match(/\{AI_KEY_LIFETIME_NOTE\}/g)).toHaveLength(2);
+  });
+
   test("le consentement précède la clé : accepter, refuser, retirer (#848)", () => {
     expect(keyCard).toContain("AI_CONSENT_ITEMS.map");
     expect(keyCard).toContain("aiConsentGranted(consent, consentVersion, ageAttested)");
@@ -208,12 +217,12 @@ describe("profil — assistant découvrable (#612)", () => {
 
   test("la copie de déconnexion correspond à ce qui est purgé (I16)", () => {
     const dialog = profile.slice(profile.indexOf('title="Se déconnecter"'));
-    // Matières personnalisées et manuel partent avec le compte ; seule la clé
-    // de l'assistant survit (OfflineCache.clearAll + Manuals.clearAccountData).
+    // Matières, manuel, clé et fil partent avec le compte (I16, #906).
     expect(dialog).toContain("matières personnalisées");
     expect(dialog).toContain("manuel enregistré");
-    expect(dialog).toContain("seule la clé de l’assistant reste");
-    expect(dialog).not.toContain("préférences et la clé");
+    expect(dialog).toContain("clé de l’assistant");
+    expect(dialog).toContain("fil du professeur IA");
+    expect(dialog).not.toContain("seule la clé de l’assistant reste");
   });
 
   test("Ressources garde les quatre entrées scolaires, sans doublon assistant", () => {

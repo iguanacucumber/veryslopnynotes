@@ -323,7 +323,7 @@ export default function ProfileScreen() {
         open={logoutAsk}
         title="Se déconnecter"
         role="alertdialog"
-        description="La session appairée est invalidée et les données scolaires en cache (notes, devoirs, messages) sont supprimées de cet appareil. Les matières personnalisées et le manuel enregistré sont aussi supprimés ; seule la clé de l’assistant reste."
+        description="La session appairée est invalidée et les données scolaires en cache (notes, devoirs, messages) sont supprimées de cet appareil. Les matières personnalisées et le manuel enregistré sont aussi supprimés, ainsi que la clé de l’assistant et le fil du professeur IA."
         busy={loggingOut}
         onClose={() => setLogoutAsk(false)}
         actions={

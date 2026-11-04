@@ -26,7 +26,7 @@ interface LlmKeyStore {
 
 /** La clé tient-elle les bornes du contrat ? (clé relue du disque : non fiable) */
 fun isValidLlmKey(secret: String): Boolean =
-    secret.isNotEmpty() && secret.length <= Homework.MAX_API_KEY_CHARS
+    secret.isNotBlank() && secret.length <= Homework.MAX_API_KEY_CHARS
 
 /**
  * Valide et nettoie la clé. Messages SANS la clé : un `require` peut finir

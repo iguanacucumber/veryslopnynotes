@@ -12,6 +12,7 @@ import {
   AI_CONSENT_REQUIRED_MESSAGE,
   AI_CONSENT_RETENTION_NOTE,
   AI_CONSENT_VERSION,
+  AI_KEY_LIFETIME_NOTE,
   aiConsentGranted,
   aiConsentNeedsReconsent,
 } from "../assistant/consent";
@@ -213,6 +214,7 @@ export function AssistantCards({ snapshot, loading }: { snapshot: SettingsSnapsh
             ))}
           </ul>
           <p className="tiny muted">{AI_CONSENT_RETENTION_NOTE}</p>
+          <p className="tiny muted">{AI_KEY_LIFETIME_NOTE}</p>
           <p className="tiny muted">{AI_CONSENT_COST_NOTE}</p>
           <AgeAttestation
             checked={attestationChecked}
@@ -253,9 +255,10 @@ export function AssistantCards({ snapshot, loading }: { snapshot: SettingsSnapsh
         <Card className="card--flat assistant-key ai">
           <strong className="assistant-key__title">Connexion OpenRouter</strong>
           <p className="assistant-key__body">
-            L’assistant utilise ton compte OpenRouter. La clé est enregistrée sur cet appareil ;
+            L’assistant utilise ton compte OpenRouter. La clé est enregistrée chiffrée sur cet appareil ;
             elle part directement au fournisseur avec chaque demande.
           </p>
+          <p className="tiny muted">{AI_KEY_LIFETIME_NOTE}</p>
           <p className="tiny muted">
             Ton attestation d’âge ou d’autorisation parentale est enregistrée avec ce consentement.
           </p>
