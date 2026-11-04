@@ -25,8 +25,7 @@ son crédit sont conservés.
 
 Aucune version binaire n'a été publiée : pas de tag ni de GitHub Release au
 2026-11-04. La fenêtre de relicence est donc encore ouverte pour l'ensemble de
-l'historique. Une copie binaire qui aurait circulé hors dépôt resterait régie
-par les termes MIT reçus avec elle ; la relicence ne révoque pas ces droits.
+l'historique.
 
 Au moment de cette décision, les notices tierces déclarent déjà GPL-3.0-only
 (#839) alors que `LICENSE` racine est encore MIT. Cet écart est transitoire et
@@ -156,8 +155,9 @@ incompatible est refusée, pas ajoutée avec une exception non écrite.
   communication ne revendique plus une copie (#843).
 - Cet ADR est une décision d'ingénierie fondée sur les textes publics des
   licences ; il ne vaut pas avis juridique et ne revendique aucune validation
-  d'un conseil. La revue juridique avant release publique reste requise, comme
-  pour le scraper de manuels.
+  d'un conseil. Preuves et ayants droit :
+  [RELICENSING.md](../legal/RELICENSING.md). La revue juridique avant release
+  publique reste requise, comme pour le scraper de manuels.
 
 ## Risques
 

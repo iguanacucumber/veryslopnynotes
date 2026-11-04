@@ -89,6 +89,9 @@ la section `0.1.0` le jour du tag.
   `vX.Y.Z-beta.N`, vérifier l'APK signé, mettre à jour vers la finale, donner un
   retour sans donnée scolaire et suivre le triage `known-issues` ; modèle
   d'issue « Retour bêta » (#969).
+- Voie de relicence MIT → GPL-3.0-only documentée : texte MIT, ayants droit
+  relevés dans Git, politique DCO et provenance Papillon en cours d'inventaire
+  (`docs/legal/RELICENSING.md`, #827) ; l'avis du conseil reste suivi en #976.
 
 ### Modifié
 
