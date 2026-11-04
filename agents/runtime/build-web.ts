@@ -8,6 +8,7 @@
 //
 // Le réessai qui réussit est SIGNALÉ : rien n'est sauté, le crash ne passe pas
 // inaperçu.
+import { copyFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describeFontBudget, measureFontBudget } from "./font-budget";
 
@@ -98,6 +99,7 @@ export function buildWeb(opts: {
             `le réessai a réussi.\n`,
         );
       }
+      copyNotices(outDir ?? DEFAULT_OUT_DIR);
       return { ok: true, attempts };
     }
     // ÉCHEC (code != 0) = déterministe, et PLAFOND atteint = coincé : rejouer
@@ -126,6 +128,13 @@ export function describeOutcome(r: BuildOutcome): string {
       return `essai ${i + 1}/${r.attempts.length} : ${cause} en ${(a.ms / 1000).toFixed(1)} s`;
     })
     .join("\n");
+}
+
+/** L'inventaire des notices est copié à côté des textes de licence : il doit
+ *  voyager DANS l'APK, pas seulement dans le dépôt. */
+function copyNotices(outDir: string): void {
+  if (!existsSync(outDir)) return;
+  copyFileSync(join(ROOT, "THIRD_PARTY_NOTICES.md"), join(outDir, "THIRD_PARTY_NOTICES.md"));
 }
 
 function sansAnsi(s: string): string {

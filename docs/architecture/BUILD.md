@@ -104,12 +104,22 @@ HTML et le logcat en artefact `emulator-instrumentation` 7 jours, même en
 Ces tests ne lisent aucun secret, aucun hôte d'établissement et aucune donnée
 scolaire : les fixtures sont des identifiants de test locaux.
 
-## Artefact release (#883)
+## Artefact release (#883, #928)
 
-`release-artifact` construit l'APK release à chaque PR et push `main` avec une
-clé ÉPHÉMÈRE générée dans le job, hors workspace. Il vérifie `apksigner`, refuse
-un certificat debug, exige `mapping.txt` + `seeds.txt` R8, et publie APK +
-mapping 7 jours. `workflow_call` le rend réutilisable par un futur job de tag.
+`release-artifact` construit l'APK release à chaque PR, push `main` et tag
+`v*` avec une clé ÉPHÉMÈRE générée dans le job, hors workspace. Il vérifie
+`apksigner`, refuse un certificat debug, exige `mapping.txt` + `seeds.txt` R8,
+et publie APK + mapping 7 jours. `workflow_call` le rend réutilisable par un
+futur job de tag.
+
+`agents/runtime/check-release-artifact.ts` vérifie ensuite l'APK lui-même :
+notices (`THIRD_PARTY_NOTICES.md` + `assets/web/licenses/`) identiques aux
+sources, aucun secret dans `assets/` ni les dex (motifs de `check-secrets`), permissions
+dans une allowlist explicite (manifeste fusionné + AndroidX/WorkManager/zxing),
+et version identique entre tag, version du paquet Android (`android-version.ts`)
+et manifeste APK. Les fixtures de `tests/unit/release-artifact.test.ts` et
+`tests/architecture/release-artifact-apk.test.ts` prouvent chaque refus sur un
+APK réel construit avec `aapt2`.
 
 ## Couverture (#895)
 

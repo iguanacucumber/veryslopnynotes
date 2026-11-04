@@ -37,6 +37,8 @@ la section `0.1.0` le jour du tag.
   possible et l'échec d'export est affiché.
 - CI : APK release construit avec une clé éphémère, signature et mapping R8
   vérifiés, APK + mapping en artefact court ; workflow réutilisable par un tag.
+- CI : assertions sur l’APK release — notices GPL/tierces embarquées, absence
+  de secret, allowlist de permissions et version tag/package/APK identique.
 - CI : release sur tag `vX.Y.Z` — build réutilisé, signature réelle depuis
   l'environnement protégé `release`, `SHA256SUMS`, archive source GPL et GitHub
   Release ; dry-run manuel sans publication, échec si un secret manque.

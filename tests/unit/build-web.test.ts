@@ -3,7 +3,7 @@
 // UNE fois une mort (jamais un échec) et nomme la cause. Les essais rejouent
 // une mort avec une fausse commande, sans payer un build Vite.
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildWeb, describeOutcome } from "../../agents/runtime/build-web";
@@ -69,6 +69,17 @@ describe("build-web : un build Vite mort ne rougit pas le gate pour rien (#516)"
     expect(describeOutcome(mort)).toContain("MORT");
     expect(describeOutcome(mort)).toContain("SIGKILL");
     expect(describeOutcome(echec)).toContain("ÉCHEC (code 2)");
+  });
+
+  test("l'inventaire des notices est copié dans la sortie du build", () => {
+    const dir = jetable();
+    try {
+      expect(buildWeb({ outDir: dir, cmd: ["true"] }).ok).toBe(true);
+      expect(existsSync(join(dir, "THIRD_PARTY_NOTICES.md"))).toBe(true);
+      expect(readFileSync(join(dir, "THIRD_PARTY_NOTICES.md"), "utf8")).toContain("# Notices de tiers");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   // Le build de l'APK passe par le MÊME helper, sinon pas de plafond ni de réessai.
