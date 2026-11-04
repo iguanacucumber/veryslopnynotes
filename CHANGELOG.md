@@ -98,6 +98,9 @@ la section `0.1.0` le jour du tag.
 
 ### Sécurité
 
+- Protection GitHub documentée et durcie : ruleset `main — gate obligatoire`
+  conservé, environnement `release` avec relecteur obligatoire et tags `v*`,
+  actions épinglées par SHA et allowlist limitée aux actions utilisées.
 - Scraper : sandbox Chromium ACTIF dans l'image, confiné par un profil seccomp
   étroit (namespaces user/PID/net seulement) et une commande Docker sans
   capabilities.
