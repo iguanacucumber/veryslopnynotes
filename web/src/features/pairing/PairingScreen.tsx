@@ -7,6 +7,7 @@ import { useApp } from "../../ui/AppContext";
 import { Card, Page } from "../../ui/components";
 import { IconCamera, IconChevronLeft, IconLock } from "../../ui/icons";
 import { STORAGE_UNAVAILABLE_MESSAGE, mustPair } from "../../lib/session";
+import { ExportBeforePurge, useExportBeforePurge } from "../settings/ExportBeforePurge";
 import {
   PIN_MAX_CHARS,
   demoErrorMessage,
@@ -59,6 +60,7 @@ export default function PairingScreen() {
       closed: sessionClosed,
     });
   const backTarget = replacing ? "/profile" : "/";
+  const exportState = useExportBeforePurge();
   const [qr, setQr] = useState<ScannedQr | null>(null);
   const [pin, setPin] = useState("");
   const [scanning, setScanning] = useState(false);
@@ -121,6 +123,7 @@ export default function PairingScreen() {
 
   async function submit(event: FormEvent): Promise<void> {
     event.preventDefault();
+    if (exportState.exporting) return;
     if (!qr) {
       setPairError("Scanne d'abord le QR affiché par ton application.");
       return;
@@ -160,6 +163,7 @@ export default function PairingScreen() {
   /** Le natif ouvre la session (le web ne parle jamais à l'établissement), puis
    *  le même câblage que l'appairage s'applique. */
   async function connectDemo(): Promise<void> {
+    if (exportState.exporting) return;
     setDemoError("");
     setDemoing(true);
     try {
@@ -249,6 +253,7 @@ export default function PairingScreen() {
               <p className="tiny muted" style={{ margin: 0 }}>
                 Tes préférences et la clé de l’assistant restent sur cet appareil.
               </p>
+              <ExportBeforePurge state={exportState} />
             </div>
           ) : null}
 
@@ -354,7 +359,7 @@ export default function PairingScreen() {
               </p>
             ) : null}
 
-            <button type="submit" className="btn" disabled={!ready || submitting || scanning}>
+            <button type="submit" className="btn" disabled={!ready || submitting || scanning || exportState.exporting}>
               {submitting ? "Connexion…" : "Ouvrir la session"}
             </button>
           </form>
@@ -378,7 +383,7 @@ export default function PairingScreen() {
                 <button
                   type="button"
                   className="btn btn--ghost btn--small"
-                  disabled={demoing || submitting || scanning}
+                  disabled={demoing || submitting || scanning || exportState.exporting}
                   onClick={() => void connectDemo()}
                 >
                   {demoing ? "Connexion…" : "Connexion démo"}

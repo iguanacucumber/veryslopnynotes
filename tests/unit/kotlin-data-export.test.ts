@@ -43,6 +43,19 @@ const FIXTURE = {
       createdAt: "2026-10-19T08:00:00Z",
     },
   ],
+  revisionSheets: [
+    {
+      id: "fiche-1",
+      examId: "exam-1",
+      subject: "Mathématiques",
+      date: "2026-10-19",
+      title: "Fiche révision Mathématiques — DS dérivées",
+      body: "Règle de puissance : (xⁿ)′ = n·xⁿ⁻¹.",
+      sources: ["Cahier : Dérivées"],
+      templateVersion: "fiche-v1",
+      createdAt: "2026-10-19T08:10:00Z",
+    },
+  ],
   teacherChat: {
     subject: "Mathématiques",
     messages: [
@@ -88,6 +101,8 @@ describe("export portable — format, manifeste, aller-retour (#857)", () => {
     expect(summary.gradeIds).toEqual(["g1", "g2"]);
     expect(summary.noteIds).toEqual(["n1"]);
     expect(summary.noteTexts).toEqual(["La dérivée de x² est 2x."]);
+    expect(summary.revisionIds).toEqual(["fiche-1"]);
+    expect(summary.revisionTitles).toEqual(["Fiche révision Mathématiques — DS dérivées"]);
     expect(summary.chatSubject).toBe("Mathématiques");
     expect(summary.chatTexts).toEqual(["Comment dériver x² ?", "Applique la règle de puissance."]);
     expect(summary.manualClass).toBe("TG2");
@@ -101,6 +116,7 @@ describe("export portable — format, manifeste, aller-retour (#857)", () => {
     );
     expect(sections.grades).toEqual({ name: "grades", count: 2, skipped: 0 });
     expect(sections.notes).toEqual({ name: "notes", count: 1, skipped: 0 });
+    expect(sections.revisionSheets).toEqual({ name: "revisionSheets", count: 1, skipped: 0 });
     expect(sections.teacherChat).toEqual({ name: "teacherChat", count: 2, skipped: 0 });
     expect(sections.manual).toEqual({ name: "manual", count: 1, skipped: 0 });
     expect(sections.subjectPrefs).toEqual({ name: "subjectPrefs", count: 1, skipped: 0 });

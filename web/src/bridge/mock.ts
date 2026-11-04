@@ -324,6 +324,7 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
         sections: [
           { name: "grades", count: 0, skipped: 0 },
           { name: "notes", count: lessons.length, skipped: 0 },
+          { name: "revisionSheets", count: revisions.length, skipped: 0 },
           { name: "teacherChat", count: teacherThread.messages.length, skipped: 0 },
           { name: "manual", count: 0, skipped: 0 },
           { name: "subjectPrefs", count: prefs.length, skipped: 0 },

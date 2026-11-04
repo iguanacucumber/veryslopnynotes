@@ -64,7 +64,13 @@ object AccountPurgeFactory {
                 DownloadedFiles.purge(targets.cacheRoot, DownloadedFiles.ATTACHMENTS)
             },
             AccountPurgeStep(AccountDataStore.EXPORTS) {
-                DownloadedFiles.purge(targets.cacheRoot, DownloadedFiles.EXPORTS)
+                // L'export demandé AVANT la déconnexion doit survivre au partage ;
+                // seule la suppression totale efface la copie exportée.
+                if (mode == AccountPurgeMode.DELETE_ALL) {
+                    DownloadedFiles.purge(targets.cacheRoot, DownloadedFiles.EXPORTS)
+                } else {
+                    true
+                }
             },
             AccountPurgeStep(AccountDataStore.PHOTOS) { deleteDir(File(targets.cacheRoot, "photos")) },
             AccountPurgeStep(AccountDataStore.READ_STATE) { targets.webView.clearReadState() },

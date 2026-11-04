@@ -5,6 +5,7 @@
 package fr.veryslopnynotes.data
 
 import fr.veryslopnynotes.core.LessonNote
+import fr.veryslopnynotes.core.RevisionSheet
 import fr.veryslopnynotes.core.TeacherChatMessage
 import fr.veryslopnynotes.core.TeacherChatSourceMeta
 import fr.veryslopnynotes.core.TeacherThread
@@ -61,6 +62,18 @@ private fun messageOf(node: JVal.Obj): TeacherChatMessage = TeacherChatMessage(
     summaryChars = ((node.fields["summaryChars"] as? JVal.Num)?.value ?: 0.0).toInt(),
 )
 
+private fun revisionOf(node: JVal.Obj): RevisionSheet = RevisionSheet(
+    id = node.str("id") ?: "",
+    examId = node.str("examId") ?: "",
+    subject = node.str("subject") ?: "",
+    date = node.str("date") ?: "",
+    title = node.str("title") ?: "",
+    body = node.str("body") ?: "",
+    sources = node.strings("sources"),
+    templateVersion = node.str("templateVersion") ?: "",
+    createdAt = node.str("createdAt") ?: "",
+)
+
 private fun chatOf(node: JVal.Obj?): TeacherThread =
     TeacherThread(
         subject = node?.str("subject") ?: "",
@@ -99,6 +112,8 @@ private fun summary(doc: ExportDocument): JVal.Obj = obj(
     "gradeIds" to arr(doc.grades.map { str(it.str("id") ?: "") }),
     "noteIds" to arr(doc.notes.map { str(it.id) }),
     "noteTexts" to arr(doc.notes.map { str(it.text) }),
+    "revisionIds" to arr(doc.revisionSheets.map { str(it.id) }),
+    "revisionTitles" to arr(doc.revisionSheets.map { str(it.title) }),
     "chatSubject" to str(doc.teacherChat.subject),
     "chatTexts" to arr(doc.teacherChat.messages.map { str(it.text) }),
     "manualClass" to str(doc.manual?.classLabel ?: ""),
@@ -120,6 +135,7 @@ private fun driver(op: JVal.Obj): JVal = when (op.str("op")) {
             exportedAt = op.str("exportedAt") ?: "2026-11-03T00:00:00Z",
             grades = op.strings("grades"),
             notes = op.arr("notes").map { noteOf(it) },
+            revisionSheets = op.arr("revisionSheets").map { revisionOf(it) },
             teacherChat = chatOf(op.obj("teacherChat")),
             manual = manualOf(op.obj("manual")),
             subjects = op.arr("subjects").map { subjectOf(it) },
