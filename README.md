@@ -3,13 +3,13 @@
 <p align="center"><strong>Ton Pronote. Ta session. Rien que toi.</strong></p>
 
 <p align="center">
-  <a href="android/README.md">App Android</a> ·
-  <a href="web/README.md">Interface React</a> ·
-  <a href="server/README.md">Scraper</a> ·
-  <a href="docs/RELEASE.md">Build & release</a> ·
-  <a href="docs/architecture/INVARIANTS.md">Invariants (I1–I36)</a> ·
-  <a href="docs/CONTEXT.md">Carte de contexte</a> ·
-  <a href="AGENTS.md">Contribuer</a>
+  <a href="#installer">Installer</a> ·
+  <a href="#mettre-à-jour">Mettre à jour</a> ·
+  <a href="#compatibilité">Compatibilité</a> ·
+  <a href="#assistant-ia-et-vie-privée">IA et vie privée</a> ·
+  <a href="#support-et-sécurité">Support</a> ·
+  <a href="#développer">Développer</a> ·
+  <a href="#licence-et-source">Licence</a>
 </p>
 
 <p align="center">
@@ -18,137 +18,172 @@
   <a href="https://bun.sh"><img alt="Bun 1.4.4" src="https://img.shields.io/badge/bun-1.4.4-f9f1de.svg"></a>
 </p>
 
-veryslopnynotes est un client Android open source pour Pronote : l'app parle
-**directement à l'établissement depuis le téléphone**, aucun serveur
-intermédiaire ne voit la session, et tout contenu externe — cours, devoirs,
-messages, manuels — est une **donnée**, jamais une instruction. Le serveur du
-dépôt est facultatif : il ne sert qu'au scraper de manuels.
+veryslopnynotes est un client Android open source pour Pronote, pensé pour les
+élèves : notes, devoirs, emploi du temps, vie scolaire, messages, actualités,
+cantine, fiches de révision et aide aux devoirs, sur le téléphone. L'app parle
+**directement à l'établissement** ; aucun serveur intermédiaire ne voit la
+session. La session Pronote et la clé de l'assistant sont chiffrées sur
+l'appareil, et l'app reste lisible hors-ligne après une première
+synchronisation.
 
 > Projet indépendant, non affilié à Pronote / Index Éducation ni à Papillon /
-> Association Papillon. Port Kotlin du protocole
-> [`pronotets`](https://www.npmjs.com/package/pronotets) (MIT), avec un compte
-> et une autorisation de l'établissement — à vérifier chez toi.
+> Association Papillon, ni à OpenRouter ou à un établissement. Pronote et Index
+> Éducation sont des marques de leurs titulaires. Port Kotlin du protocole
+> [`pronotets`](https://www.npmjs.com/package/pronotets) (MIT), à utiliser avec
+> un compte autorisé et dans le cadre fixé par l'établissement.
 
-## Ce qui distingue l'app
+## Installer
 
-- **Session locale** : QR + PIN lus dans l'app, jeton chiffré sur l'appareil,
-  purgé à la déconnexion ([ADR-003](docs/adr/003-client-direct.md)).
-- **Aucun relais** : seul `android/pronote/` contacte l'établissement ; ni
-  session ni clé OpenRouter ne passent par un serveur du projet.
-- **IA sans outils** : clé chiffrée localement, contenu externe délimité et
-  marqué non fiable avant tout prompt ([I4–I6](docs/architecture/INVARIANTS.md)).
-- **Hors-ligne d'abord** : cache + TTL par ressource, cache affiché avant le
-  réseau, périmètre signalé.
-- **WebView sans réseau** : CSP `connect-src 'none'`, aucun `fetch`, pont
-  natif allowlisté ([ADR-004](docs/adr/004-webview.md)).
+**Aucune release n'est publiée à ce jour** : le projet est en développement
+(`versionName` `0.1.0`), et aucun APK, tag ni lien de téléchargement n'existe
+encore. La page [Releases](https://github.com/iguanacucumber/veryslopnynotes/releases)
+sera la seule source officielle.
 
-## Démarrage rapide
+Quand une release signée sera publiée, installer l'APK revient à :
 
-Prérequis : **Bun 1.4.4** ; pour l'APK, **JDK 17–21** + **SDK Android 37** ;
-pour la parité TS ↔ Kotlin, **`kotlinc`** et un `java` dans le `PATH` — sans
-eux `make check` **échoue** (un gate vert sans Kotlin exécuté est un faux
-vert ; `make check-fast` saute la compilation Android et l'audit réseau, mais
-exécute la parité quand l'outillage est là — boucle interne, pas une preuve
-avant PR).
+1. Télécharger l'APK joint à la release, pas une copie trouvée ailleurs.
+2. Vérifier le SHA-256 du fichier et l'empreinte du certificat de signature.
+   La release publie les deux valeurs attendues ; `apksigner` vient des
+   Build-Tools du SDK Android.
+
+```bash
+sha256sum veryslopnynotes-<version>.apk
+apksigner verify --print-certs veryslopnynotes-<version>.apk
+```
+
+3. Comparer les valeurs affichées à celles de la release. Si l'une diffère,
+   ne pas installer le fichier et le signaler via un Advisory privé.
+
+Android accepte le sideload après autorisation des sources inconnues.
+N'installer qu'un APK **release signé** : un APK debug, ou un build release
+sans clé (repli debug), n'est pas une release officielle et ne pourra pas
+recevoir les mises à jour publiées.
+
+## Mettre à jour
+
+L'app ne vérifie pas elle-même les mises à jour. Deux voies, toujours avec un
+APK release signé par le même certificat :
+
+- **Manuel** : télécharger la nouvelle release et l'installer par-dessus.
+- **Obtainium (facultatif)** : ajouter l'URL du dépôt ; Obtainium interroge
+  GitHub et propose les releases avec APK. Ce n'est pas un service du projet.
+
+Android refuse une mise à jour dont le certificat diffère. Ne jamais passer
+d'un APK debug à un APK release par-dessus : la migration exige une
+désinstallation.
+
+### Désinstaller efface les données
+
+**Une désinstallation efface les données locales** : session Pronote, cache,
+clé OpenRouter et conversations IA, pièces jointes, préférences. Une migration
+debug → release exige cette désinstallation, donc cette perte. Depuis
+Réglages, exporter d'abord une copie (l'export n'est pas réimportable dans
+l'app), puis ressaisir le QR/PIN et la clé.
+
+Mise à jour sans perte : garder le même certificat. Debug → debug avec
+`make updateApkToPhone` ; release → release en installant l'APK par-dessus.
+
+## Compatibilité
+
+- **Android 8.0+ (API 26)**, cible API 37 ; iOS, desktop et navigateur seul ne
+  sont pas pris en charge.
+- **WebView système Chromium 100+** (mars 2022). En dessous, l'app affiche un
+  écran natif qui nomme le minimum et la version détectée, sans charger la
+  WebView ni planter.
+- **QR + PIN uniquement** : pas d'identifiant/mot de passe, pas de SSO d'ENT,
+  pas de double authentification (MFA). L'établissement doit exposer un QR.
+- **Pas de rappels ni de notifications** ; une synchronisation de fond
+  silencieuse rafraîchit le cache environ toutes les 6 h.
+- **Compte élève uniquement** : l'app sert un compte à la fois ; les comptes
+  parent sont hors périmètre, sans accès aux enfants depuis un compte parent.
+
+Matrice complète, versions et marche à suivre :
+[`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md). Accessibilité :
+[`docs/ACCESSIBILITY.md`](docs/ACCESSIBILITY.md).
+
+## Assistant IA et vie privée
+
+L'assistant est **facultatif**. Sans consentement explicite (versionné) et
+sans clé, aucun appel n'est fait. L'écran demande aussi une attestation :
+18 ans ou plus, ou autorisation du représentant légal avec un compte
+OpenRouter géré par un adulte.
+
+- **Ta clé, ton compte** : la clé OpenRouter est stockée chiffrée sur
+  l'appareil et envoyée directement à OpenRouter, jamais à un serveur du
+  projet. Chaque demande consomme tes crédits OpenRouter et peut être
+  facturée.
+- **Ce qui peut partir** : question, cours, extraits de manuel ou de page,
+  pièces jointes, photos et historique du fil, selon l'aperçu de consentement.
+  Les messages Pronote ne font pas partie des sources IA.
+- **Limites** : OpenRouter et les fournisseurs qu'il route peuvent conserver
+  les demandes selon leurs politiques ; l'app ne peut le garantir. Une
+  réponse peut être fausse, incomplète ou inventée. Elle est traitée comme
+  une donnée : aucun envoi, aucune validation et aucune modification ne se
+  font sans ton geste.
+- **Local** : les données scolaires ne passent par un serveur du projet ni
+  par un relais ; la session reste sur l'appareil. Pas de compte chez le
+  projet, pas de publicité, pas de télémétrie, pas de rapport de crash
+  automatique. Les données de compte se purgent à la déconnexion ; « Supprimer
+  toutes mes données » emporte aussi le consentement IA, l'adresse du scraper
+  et les exports.
+- **Flux réseau** : l'app contacte l'établissement, OpenRouter seulement si tu
+  utilises l'IA, et le scraper facultatif si tu le configures. GitHub sert au
+  téléchargement d'une release, pas à l'app.
+
+Détail : [`PRIVACY.md`](PRIVACY.md), [`TERMS.md`](TERMS.md) et
+[`docs/legal/DATA-MAP.md`](docs/legal/DATA-MAP.md). Le scraper de manuels est
+un serveur séparé, facultatif, à garder sur la boucle locale ou derrière un
+proxy authentifié : [`server/README.md`](server/README.md).
+
+## Support et sécurité
+
+Le support passe **uniquement par GitHub Issues** : question d'usage, bug,
+incompatibilité ou demande d'accessibilité. Aucun courriel, chat ou message
+privé n'est publié. Une issue est publique : n'y mets jamais de donnée
+scolaire, de QR/PIN, de session, de clé ni de capture non caviardée. Le
+diagnostic exporté (Réglages → Aide) aide sans contenu scolaire.
+
+- **Support et problèmes connus** :
+  [`docs/SUPPORT.md`](docs/SUPPORT.md) et
+  [ouvrir une issue](https://github.com/iguanacucumber/veryslopnynotes/issues/new/choose).
+- **Faille de sécurité ou secret exposé** : jamais une issue publique ; passe
+  par les [GitHub Security Advisories](https://github.com/iguanacucumber/veryslopnynotes/security/advisories/new)
+  ([`SECURITY.md`](SECURITY.md)). Le projet ne publie ni courriel, ni clé PGP,
+  ni `security.txt`.
+
+## Développer
+
+Prérequis : **Bun 1.4.4** ; **JDK 17–21** + **SDK Android 37** pour l'APK ;
+**`kotlinc`** et un `java` dans le `PATH` pour la parité TS ↔ Kotlin. Sans cet
+outillage, `make check` échoue : le gate ne simule pas un vert. `make
+check-fast` saute `android-compile` et `audit` — boucle interne, pas une
+preuve avant PR.
 
 ```bash
 bun install
-bun run dev:web       # Chromium + pont factice (src/bridge/mock.ts)
-make check            # toutes les vérifications, en parallèle
-make buildDebugApk    # APK debug -> android/app/build/outputs/apk/debug/
-make updateApkToPhone # construire puis installer en conservant les données
-make buildRelApk      # APK release (signé ; custom si STORE_FILE)
+bun run dev:web       # interface + pont factice, sans téléphone
+make check            # gate complet
+make buildDebugApk    # APK debug
+make updateApkToPhone # installe le debug en conservant les données
+make buildRelApk      # APK release signé (clé hors dépôt)
 ```
 
-L'interface React est reconstruite avant Gradle (`preBuild` →
-`bun run build:web`) : un build APK sans `bun` échoue bruyamment plutôt que
-d'embarquer une UI absente. Détails : [`android/README.md`](android/README.md),
-[`web/README.md`](web/README.md), [`docs/RELEASE.md`](docs/RELEASE.md).
+Parcours de contribution, DCO et gate : [`CONTRIBUTING.md`](CONTRIBUTING.md),
+[`AGENTS.md`](AGENTS.md),
+[`docs/architecture/BUILD.md`](docs/architecture/BUILD.md). Build et signature :
+[`docs/RELEASE.md`](docs/RELEASE.md). Modules :
+[`android/README.md`](android/README.md), [`web/README.md`](web/README.md),
+[`server/README.md`](server/README.md). Carte des docs et invariants
+(I1–I36) : [`docs/CONTEXT.md`](docs/CONTEXT.md),
+[`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md).
 
-## Installer et mettre à jour l'APK
+## Licence et source
 
-Aucune release n'est encore publiée. Dès qu'une release taguée joindra un APK
-à la page [Releases](https://github.com/iguanacucumber/veryslopnynotes/releases),
-deux voies de mise à jour existent — les deux exigent une signature identique
-à celle de l'app installée : Android refuse une mise à jour signée avec une
-autre clé, et désinstaller efface les données locales.
-
-- **Manuel** : télécharger l'APK et l'installer par-dessus l'app.
-- **Obtainium (facultatif)** : ajouter l'URL du dépôt et suivre les releases
-  avec APK. Obtainium interroge GitHub périodiquement ; l'app, elle, ne fait
-  aucune vérification de mise à jour.
-
-### Migration debug → release : désinstaller, donc perdre les données
-
-Un APK **debug** et un APK **release signé avec la clé de release** ont des
-certificats différents : Android refuse d'installer l'un par-dessus l'autre.
-La migration debug → release exige donc de **désinstaller l'app**, ce qui
-**efface les données locales** : session Pronote, cache, clé OpenRouter et
-conversations IA, pièces jointes, préférences. Exportez d'abord vos données
-depuis les réglages si vous voulez en garder une copie (l'export n'est pas
-réimportable dans l'app), puis ressaisissez le QR/PIN et la clé.
-
-Mise à jour sans perte : garder le même certificat — debug → debug avec
-`make updateApkToPhone`, release → release en installant l'APK par-dessus.
-Le canal bêta ne part que de builds signés en release, jamais d'un APK debug :
-un appareil qui suit la bêta ne doit pas dépendre d'un build debug antérieur.
-Un build release construit sans clé (repli debug) ne convient ni à la bêta ni
-à une mise à jour d'un APK release.
-
-## Scraper de manuels (facultatif)
-
-```bash
-make runServer                 # HTTPS sur 127.0.0.1:8080 (boucle locale)
-ALLOW_PUBLIC=1 SCRAPER_TOKEN=... make runServer HOST=0.0.0.0  # derrière un proxy
-```
-
-TLS obligatoire (certificat auto-signé hors dépôt, ou `TLS_CERT_FILE` et
-`TLS_KEY_FILE` fournis), jamais de repli en clair ; l'adresse du manuel se
-règle une fois dans l'app. Boucle locale = sans authentification. Toute
-autre interface est REFUSÉE sans `ALLOW_PUBLIC=1` et exige `SCRAPER_TOKEN`
-(`Authorization: Bearer`) : à garder sur la boucle locale ou derrière un proxy
-authentifié ([I8](docs/architecture/INVARIANTS.md)). Routes, limites et
-catalogue : [`server/README.md`](server/README.md).
-
-## Configuration, structure, docs
-
-- Configuration et apports humains (QR, clé OpenRouter, manuel) :
-  [`docs/HUMAN_INPUTS.md`](docs/HUMAN_INPUTS.md).
-- Structure : `android/` (APK, pont natif, modules), `web/` (React embarqué),
-  `server/` (scraper), `shared/contracts/` (routes + validateurs),
-  `agents/` (harnais), `tests/`, `docs/`.
-- Flux Pronote : `web (pont) → android/pronote/ → établissement`. Le serveur
-  n'y est pas ; règles : [`INVARIANTS.md`](docs/architecture/INVARIANTS.md),
-  décisions : [`docs/adr/`](docs/adr/), écrans : [`docs/PRODUCT.md`](docs/PRODUCT.md).
-
-## Contribuer
-
-Parcours humain (fork, PR, gate, signature) :
-[`CONTRIBUTING.md`](CONTRIBUTING.md). Règles et workflow :
-[`AGENTS.md`](AGENTS.md). Support et problèmes connus :
-[`docs/SUPPORT.md`](docs/SUPPORT.md).
-
-## État et limites
-
-Projet en développement (`versionName` `0.1.0`), aucune release publiée.
-Compatibilité : Android 8.0+ (API 26) avec **WebView système Chromium 100+**,
-QR + PIN uniquement, MFA non prise en charge ; seuil, détection et matrice :
-[`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
-Limites assumées : accès Pronote dépendant de l'établissement et du QR ;
-assistant IA inactif sans clé OpenRouter ; pas de rappels, compte élève
-uniquement ; scraper sans authentification sur la boucle locale, jamais public
-sans jeton ; pas de compte Pronote réel dans la suite par défaut (fixtures
-synthétiques et états hors-ligne).
-Accessibilité : [`docs/ACCESSIBILITY.md`](docs/ACCESSIBILITY.md).
-
-## Licence
-
-GPL-3.0-only — voir [`LICENSE`](LICENSE). Copyright (c) 2026
-veryslopnynotes contributors. Le projet a été sous MIT jusqu'au 2026-11-04 ;
-aucun binaire public n'a été publié. Si un binaire a circulé, ses droits MIT
-subsistent ([ADR-008 §5](docs/adr/008-relicense-gpl.md)). Port du protocole
-Pronote crédité à `pronotets` (MIT) ; les règles et conventions reprises de
-Papillon (GPL-3.0, Association Papillon) restent créditées à leurs auteurs.
-Notices : [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+Code et contributions sous **GPL-3.0-only** ; le code source complet est ce
+dépôt public, sans composant propriétaire. Voir [`LICENSE`](LICENSE) et
+[ADR-008](docs/adr/008-relicense-gpl.md). Le port du protocole Pronote est
+crédité à `pronotets` (MIT) ; les règles et conventions reprises de Papillon
+(GPL-3.0, Association Papillon) restent créditées à leurs auteurs, sans
+affiliation. Notices tierces : [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 <!-- vim: set tw=80: -->
