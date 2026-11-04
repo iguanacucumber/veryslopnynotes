@@ -66,6 +66,13 @@ describe("export PDF de fiche : le corps entier et ses sources (#412)", () => {
     expect(res.lines.length).toBeGreaterThan(60);
   });
 
+  test.skipIf(skip)("l'export PDF porte l'étiquette IA visible", async () => {
+    const res = JSON.parse(
+      await ask({ op: "pdfLines", body: "Rappel du cours.", sources: CANONICAL }),
+    ) as Lines;
+    expect(res.lines.join("\n")).toContain("IA — à vérifier");
+  });
+
   test.skipIf(skip)("le corps du modèle est rendu ENTIER, pas plafonné", async () => {
     // Un corps numéroté : chaque ligne doit se retrouver dans l'export. Une
     // ligne perdue = une fiche tronquée en silence.

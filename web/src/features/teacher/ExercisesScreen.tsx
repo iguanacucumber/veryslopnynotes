@@ -3,6 +3,7 @@ import type { ExerciseHelpMode, ExerciseItem, ExerciseProposal, TeacherMessage }
 import { Card, EmptyState, ErrorBox, Loading, Page, PageHeading, Section } from "../../ui/components";
 import { IconBook, IconCamera, IconImage, IconSparkles } from "../../ui/icons";
 import { MarkdownBody } from "../revisions/MarkdownBody";
+import { AiOutputLabel, AiReportButton } from "../assistant/AiOutput";
 import {
   EXERCISE_MODES,
   exerciseDifficultyLabel,
@@ -264,6 +265,7 @@ export function ExercisesView({
               ) : null}
               {help.message ? (
                 <div className="exercise-answer">
+                  <AiOutputLabel />
                   <MarkdownBody text={help.message.text} />
                   {help.message.sources.length > 0 ? (
                     <div className="teacher-bubble__citations">
@@ -281,6 +283,9 @@ export function ExercisesView({
                       <span className="teacher-unsourced__badge">non sourcée</span>
                     </p>
                   )}
+                  <div className="ai-actions">
+                    <AiReportButton />
+                  </div>
                 </div>
               ) : null}
               {help.refusal ? (

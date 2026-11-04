@@ -130,6 +130,61 @@
   letter-spacing: 0.01em;
 }
 
+/* Étiquette visible de toute sortie de modèle : le texte porte l'état, jamais
+   la seule couleur. Elle reste dans le DOM pour la copie et l'impression. */
+.ai-output-label {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 22px;
+  padding: 1px 9px;
+  border: 1px solid var(--ai-line-strong);
+  border-radius: 100px;
+  background: var(--ai-bubble);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 17px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.ai-report {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ai-report--open {
+  flex-basis: 100%;
+}
+
+.ai-report__panel {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--ai-line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.ai-report__panel p {
+  margin: 0 0 8px;
+}
+
+.ai-report__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ai-report-error {
+  display: inline-block;
+  color: var(--danger-ink);
+}
+
 .ai-turn__body {
   min-width: 0;
   color: var(--ink);

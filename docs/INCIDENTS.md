@@ -300,3 +300,40 @@ actions, décision de retrait, preuve de clôture. Consigner dans une issue de
 suivi : date, scénario, rôles, décisions, lacunes, propriétaire et issue de suite.
 Une lacune devient une issue ; trois échecs identiques suivent la règle
 d'invariant. Sans cette trace, l'exercice n'est pas une preuve.
+
+## Signalement d'une sortie IA
+
+Toute sortie écrite par un modèle porte l'étiquette visible « IA — à vérifier »
+et une action « Signaler » : aide devoirs, fiches de révision, professeur,
+exercices et brouillon de photo du cahier. L'étiquette suit la réponse copiée et
+l'export PDF d'une fiche ; elle reste dans le DOM pour l'impression.
+
+« Signaler » réutilise le diagnostic borné de Réglages → Aide → Exporter un
+diagnostic. L'aperçu des champs exacts s'affiche avant tout partage, puis
+l'utilisateur choisit lui-même une application dans le sélecteur Android. Rien
+n'est envoyé automatiquement, aucun réseau n'est appelé par l'interface.
+
+Le fichier ne contient que des champs d'état fermés : version de l'app, version
+et API Android, version de la WebView, dernier code d'erreur, ressource, niveau
+de classe grossier, état de session et liste des familles exclues. Il ne contient
+ni question, ni réponse, ni source, ni nom, ni adresse, ni note, ni message, ni
+jeton, ni clé, ni QR, ni PIN. Un champ hors allowlist devient « unknown ».
+
+Triage d'un signalement de sortie IA :
+
+1. Demander la version, l'écran et les étapes ; le diagnostic fournit la version
+   et le dernier code d'erreur. Ne jamais demander de capture non caviardée, de
+   nom d'établissement, de note ou de message scolaire.
+2. P0 si la sortie expose des données d'un autre compte, un secret, une adresse
+   ou une pièce jointe non demandée : traiter comme une fuite et appliquer la
+   procédure « Clé exposée » ou « Mauvaise release ».
+3. P1 si l'étiquette ou l'action de signalement manque sur une version publiée,
+   ou si la sortie présente une consigne dangereuse comme un fait.
+4. P2 pour une réponse fausse, une source inventée ou une citation qui ne
+   correspond pas ; corriger le prompt, la validation ou le rendu avant la
+   release suivante.
+5. P3 pour le ton, la verbosité ou une réponse inutile ; consigner dans
+   `known-issues` si le modèle épinglé en est la cause.
+
+Une reproduction qui exige le contenu réel se fait avec une consigne et un cours
+synthétiques, jamais avec les données de l'élève.

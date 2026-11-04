@@ -13,6 +13,7 @@ import {
 } from "../../ui/components";
 import { IconBook, IconChevronRight, IconDownload } from "../../ui/icons";
 import { useViewNavigate } from "../../ui/viewTransition";
+import { AiOutputLabel, AiReportButton } from "../assistant/AiOutput";
 import { MarkdownBody } from "./MarkdownBody";
 import {
   revisionDateLabel,
@@ -208,6 +209,7 @@ export function RevisionSheetsScreen() {
                         <h3 className="revision-card__title">{sheet.title}</h3>
                       </div>
                       <span className="revision-card__meta">{sheetMeta(sheet)}</span>
+                      <AiOutputLabel className="revision-card__ai" />
                     </div>
                   </div>
 
@@ -243,6 +245,7 @@ export function RevisionSheetsScreen() {
                       <IconDownload size={16} />
                       {exporting === sheet.id ? "Export…" : "PDF"}
                     </button>
+                    <AiReportButton className="btn btn--ghost btn--small" />
                   </div>
 
                   {opened ? (
