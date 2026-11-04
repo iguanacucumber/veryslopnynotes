@@ -10,6 +10,7 @@ const ROOT = join(import.meta.dir, "..", "..");
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 const WORKFLOW = read(".github/workflows/release.yml");
 const RELEASE_DOC = read("docs/RELEASE.md");
+const README = read("README.md");
 
 describe("CI : release sur tag (#931)", () => {
   test("déclenché par un tag v*, avec dry-run manuel, jamais par une PR", () => {
@@ -71,6 +72,31 @@ describe("CI : release sur tag (#931)", () => {
     expect(WORKFLOW).toContain("archive/refs/tags/");
     expect(WORKFLOW).toContain("tree/%s");
     expect(WORKFLOW).toContain("GPL-3.0-only");
+  });
+
+  test("bêta : format -beta.N, pré-release conditionnelle, mêmes gates", () => {
+    // Le canal est dérivé du tag AVANT le build, et un tag hors
+    // vX.Y.Z / vX.Y.Z-beta.N échoue au lieu de publier autre chose.
+    expect(WORKFLOW).toContain("prerelease=$prerelease");
+    expect(WORKFLOW).toContain("-beta\\.[0-9]+$");
+    expect(WORKFLOW).toContain("attendu vX.Y.Z ou vX.Y.Z-beta.N");
+    expect(WORKFLOW).toContain('if [ "$PRERELEASE" = "true" ]');
+    expect(WORKFLOW).toContain('flags+=(--prerelease)');
+    expect(WORKFLOW).toContain('"${flags[@]}"');
+    // Une pré-release ne contourne ni la signature réelle ni les checksums.
+    expect(WORKFLOW).toContain("environment: release");
+    expect(WORKFLOW).toContain("CN=Android Debug");
+    expect(WORKFLOW).toContain("sha256sum -c SHA256SUMS");
+    expect(WORKFLOW).toContain("git archive");
+    expect(WORKFLOW).toContain("GPL-3.0-only");
+    expect(WORKFLOW).not.toContain("pull_request");
+    // Notes : section de la future finale, ou section beta exacte.
+    expect(WORKFLOW).toContain('base="${VERSION%%-*}"');
+    expect(RELEASE_DOC).toContain("Canal bêta");
+    expect(RELEASE_DOC).toContain("pré-release");
+    expect(RELEASE_DOC).toContain("désinstallation");
+    expect(README).toContain("Canal bêta");
+    expect(README).toContain("downgrade");
   });
 
   test("permissions minimales et actions épinglées", () => {

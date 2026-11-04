@@ -406,8 +406,9 @@ describe("registre d'invariants", () => {
       ["server/README.md", 9_600],
       ["shared/contracts/README.md", 1_000],
       // +500 loopback/digest (#921), +900 deep links (SEC-10), +200 démo (#873),
-      // +900 version dérivée des tags (#927), +900 budget de taille APK (#974).
-      ["docs/RELEASE.md", 10_400],
+      // +900 version dérivée des tags (#927), +900 budget de taille APK (#974),
+      // +1 400 canal bêta (#936).
+      ["docs/RELEASE.md", 11_800],
       ["docs/HUMAN_INPUTS.md", 4_500],
       // +500 pour la suppression totale et le compte élève (#853/#832),
       // +750 pour le consentement IA versionné (#860),
