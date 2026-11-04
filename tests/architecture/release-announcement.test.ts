@@ -121,12 +121,46 @@ describe("kit d'annonce v1.0.0 (#978)", () => {
     }
     for (const terme of [
       "docs/RELEASE-CHECKLIST.md",
+      "docs/RELEASE-WAIVERS.md",
+      "docs/legal/SIGNOFF.md",
+      "docs/BETA.md",
+      "docs/DOGFOOD.md",
+      "#919",
       "#976",
       "#972",
       "#969",
+      "#965",
       "#982",
       "Ne pas annoncer si",
       "page de release GitHub réelle et signée",
+    ]) {
+      expect({ terme, présent: FLAT.includes(terme) }).toEqual({ terme, présent: true });
+    }
+  });
+
+  test("les preuves de release existantes sont liées, pas seulement nommées", () => {
+    const links = relativeLinks(DOC);
+    for (const lien of [
+      "RELEASE-CHECKLIST.md",
+      "RELEASE-WAIVERS.md",
+      "legal/SIGNOFF.md",
+      "BETA.md",
+      "DOGFOOD.md",
+    ]) {
+      expect({ lien, présent: links.includes(lien) }).toEqual({ lien, présent: true });
+    }
+  });
+
+  test("les gates humains restants et les champs de signature vides sont explicites", () => {
+    for (const terme of [
+      "gates humains restants",
+      "champs de signature restent **vides**",
+      "Un agent ne remplit ni ne signe",
+      "responsable de release",
+      "mainteneur de garde",
+      "mainteneur sécurité",
+      "deux signatures humaines distinctes",
+      "champs de signature et leurs preuves **vides**",
     ]) {
       expect({ terme, présent: FLAT.includes(terme) }).toEqual({ terme, présent: true });
     }

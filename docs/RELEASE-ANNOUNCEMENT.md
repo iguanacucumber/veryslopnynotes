@@ -13,12 +13,20 @@
 La version visée est `1.0.0` ; le tag attendu est `v1.0.0`. Aucun tag ni aucune
 release ne doivent être supposés existants tant que les valeurs de publication
 ne sont pas remplies. Le texte ci-dessous ne devient publiable qu'après la
-checklist signée de `docs/RELEASE-CHECKLIST.md` (#956,
+checklist signée de [`docs/RELEASE-CHECKLIST.md`](RELEASE-CHECKLIST.md) (#956,
 PR [#1138](https://github.com/iguanacucumber/veryslopnynotes/pull/1138)), le
 sign-off juridique de [#976](https://github.com/iguanacucumber/veryslopnynotes/issues/976)
 et la clôture des bloqueurs de [#972](https://github.com/iguanacucumber/veryslopnynotes/issues/972).
 La règle de lancement de [#982](https://github.com/iguanacucumber/veryslopnynotes/issues/982)
 s'applique sans exception.
+
+Les documents de preuve existent déjà dans le dépôt, mais les lier ne vaut pas
+preuve : [`docs/RELEASE-CHECKLIST.md`](RELEASE-CHECKLIST.md) (checklist et
+signatures), [`docs/RELEASE-WAIVERS.md`](RELEASE-WAIVERS.md) (dérogations),
+[`docs/legal/SIGNOFF.md`](legal/SIGNOFF.md) (dossier juridique),
+[`docs/BETA.md`](BETA.md) (bêta privée) et [`docs/DOGFOOD.md`](DOGFOOD.md)
+(dogfood interne) gardent leurs champs de signature et leurs preuves **vides**
+tant qu'une décision humaine réelle n'a pas eu lieu.
 
 1. Remplir le tableau « Valeurs de publication » avec les valeurs réellement
    publiées, jamais avec une valeur déduite ou recopiée d'un APK tiers.
@@ -215,26 +223,48 @@ Issue épinglée `[known-issues] <tag>`, label `bug`.
 
 ## Checklist avant publication
 
-La checklist signée `docs/RELEASE-CHECKLIST.md` (#956) est l'autorité : ses
-16 sections, leurs champs propriétaire/date/preuve et sa règle « Ne pas livrer
-si » doivent être complets avant de reprendre ce texte. Ce kit ne duplique pas
-ses preuves ; il ajoute les contrôles propres à l'annonce.
+La checklist signée [`docs/RELEASE-CHECKLIST.md`](RELEASE-CHECKLIST.md) (#956,
+PR [#1138](https://github.com/iguanacucumber/veryslopnynotes/pull/1138)) est
+l'autorité : ses 16 sections, leurs champs propriétaire/date/preuve, sa table de
+signatures et sa règle « Ne pas livrer si » doivent être complets avant de
+reprendre ce texte. Les champs de signature restent **vides** : responsable de
+release, mainteneur de garde et, si requis, mainteneur sécurité. Un agent ne
+remplit ni ne signe ces champs, pas plus que les blocs vides de
+[`docs/RELEASE-WAIVERS.md`](RELEASE-WAIVERS.md) et de
+[`docs/legal/SIGNOFF.md`](legal/SIGNOFF.md).
+
+Les gates humains restants, à satisfaire avant publication, sont exactement :
+
+- [ ] [#919](https://github.com/iguanacucumber/veryslopnynotes/issues/919) —
+      signature : le build release échoue sans vraie clé, sans repli debug ;
+      `apksigner` prouve un certificat autre que `CN=Android Debug`, et la
+      checklist §7 et §9 porte la preuve de signature.
+- [ ] [#976](https://github.com/iguanacucumber/veryslopnynotes/issues/976) —
+      sign-off : les sept sections de
+      [`docs/legal/SIGNOFF.md`](legal/SIGNOFF.md) passent de `pending` à
+      `signed` ; les blocs de signature et le journal sont remplis par les
+      humains habilités, la copie est archivée et l'issue est close.
+- [ ] [#972](https://github.com/iguanacucumber/veryslopnynotes/issues/972) —
+      dérogations : chaque `tier:L` est close ; chaque `tier:B` est close ou
+      approuvée dans [`docs/RELEASE-WAIVERS.md`](RELEASE-WAIVERS.md) avec deux
+      signatures humaines distinctes, risque, atténuation, propriétaire,
+      expiration et preuve, sans bloc d'approbation vide ni dérogation expirée ;
+      la checklist #956 est signée par deux humains.
+- [ ] [#969](https://github.com/iguanacucumber/veryslopnynotes/issues/969) —
+      bêta : la bêta privée décrite dans [`docs/BETA.md`](BETA.md) a eu lieu
+      avec ses preuves, l'issue est close et l'issue `[known-issues]` de la
+      version est tenue à jour.
+- [ ] [#965](https://github.com/iguanacucumber/veryslopnynotes/issues/965) —
+      dogfood : les 14 jours consécutifs de [`docs/DOGFOOD.md`](DOGFOOD.md) sur
+      le même téléphone réel sont consignés, la checklist est signée et l'issue
+      est close.
+- [ ] [#982](https://github.com/iguanacucumber/veryslopnynotes/issues/982) :
+      la règle de lancement est satisfaite ; aucun `tier:L` n'est encore ouvert.
+
+Le reste de la checklist porte les preuves de publication :
 
 - [ ] `docs/RELEASE-CHECKLIST.md` existe, est la version signée, et chaque étape
       porte un propriétaire, une date et une preuve liée.
-- [ ] [#976](https://github.com/iguanacucumber/veryslopnynotes/issues/976) :
-      `docs/legal/SIGNOFF.md` ne contient plus aucun `pending` ; la copie
-      signée est archivée et la revue juridique est close.
-- [ ] [#972](https://github.com/iguanacucumber/veryslopnynotes/issues/972) :
-      chaque issue `tier:L` est close ; chaque issue `tier:B` est close ou
-      dérogée dans `docs/RELEASE-WAIVERS.md`, avec deux signatures humaines
-      distinctes, risque, atténuation, propriétaire, expiration et preuve.
-      Aucune dérogation expirée.
-- [ ] [#969](https://github.com/iguanacucumber/veryslopnynotes/issues/969) :
-      la bêta privée a eu lieu, l'issue est close et l'issue
-      `[known-issues]` de la version est tenue à jour.
-- [ ] [#982](https://github.com/iguanacucumber/veryslopnynotes/issues/982) :
-      la règle de lancement est satisfaite ; aucun `tier:L` n'est encore ouvert.
 - [ ] `make check` est vert sur le commit qui portera le tag ; les jobs
       `release-artifact`, `licenses` et `apk-size` sont verts.
 - [ ] `CHANGELOG.md` : `## [Unreleased]` a été renommé
@@ -277,9 +307,17 @@ ses preuves ; il ajoute les contrôles propres à l'annonce.
   est ouvert, ou un `tier:B` n'est ni clos ni dérogé avec les deux signatures,
   les champs obligatoires et une preuve. Une dérogation expirée ne compte pas.
 - `docs/RELEASE-CHECKLIST.md` est absent, non signé, incomplet, ou une étape
-  n'a ni propriétaire, ni date, ni preuve.
+  n'a ni propriétaire, ni date, ni preuve. Une signature vide de responsable de
+  release, de mainteneur de garde ou, si requis, de mainteneur sécurité suffit
+  à bloquer.
+- [#919](https://github.com/iguanacucumber/veryslopnynotes/issues/919) reste
+  ouvert : le build retombe sur la signature debug sans vraie clé, ou aucune
+  empreinte release n'est publiée.
 - La bêta privée [#969](https://github.com/iguanacucumber/veryslopnynotes/issues/969)
   n'a pas eu lieu ; l'absence de retour n'est pas une preuve de succès.
+- Le dogfood interne [#965](https://github.com/iguanacucumber/veryslopnynotes/issues/965)
+  n'a pas eu lieu, le journal de 14 jours manque, ou sa checklist n'est pas
+  signée.
 - Il n'existe pas de **page de release GitHub réelle et signée**. Un tag local,
   un brouillon de release, un artifact CI ou un APK envoyé en pièce jointe ne
   compte pas.
@@ -308,9 +346,13 @@ ses preuves ; il ajoute les contrôles propres à l'annonce.
 
 - Procédure de release et build : [`RELEASE.md`](RELEASE.md)
 - Clé, signature et empreintes : [`SIGNING.md`](SIGNING.md)
-- Dérogations et bloqueurs : [`RELEASE-WAIVERS.md`](RELEASE-WAIVERS.md)
-- Checklist signée (à merger) : `docs/RELEASE-CHECKLIST.md` (#956)
-- Bêta privée et sortie vers la finale : [`BETA.md`](BETA.md)
+- Checklist, signatures et preuves : [`RELEASE-CHECKLIST.md`](RELEASE-CHECKLIST.md)
+  (#956)
+- Dérogations et bloqueurs : [`RELEASE-WAIVERS.md`](RELEASE-WAIVERS.md) (#972)
+- Dossier juridique et vie privée : [`legal/SIGNOFF.md`](legal/SIGNOFF.md)
+  (#976)
+- Bêta privée et sortie vers la finale : [`BETA.md`](BETA.md) (#969)
+- Dogfood interne de 14 jours : [`DOGFOOD.md`](DOGFOOD.md) (#965)
 - Santé de release, signaux et retrait : [`RELEASE-HEALTH.md`](RELEASE-HEALTH.md)
 - Support et problèmes connus : [`SUPPORT.md`](SUPPORT.md)
 - Compatibilité : [`COMPATIBILITY.md`](COMPATIBILITY.md)
