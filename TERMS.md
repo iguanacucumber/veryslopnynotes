@@ -15,7 +15,8 @@ d’assistant.
 En installant ou en utilisant l’app, tu acceptes ces conditions dans leur
 version publiée avec ta release, sans renoncer aux droits de la licence du code.
 Elles ne remplacent ni le règlement de ton établissement, ni les conditions de
-Pronote ou d’OpenRouter, ni cette licence (section 6).
+Pronote ou d’OpenRouter, ni cette licence (section 6). Les données traitées et
+tes droits sont décrits dans la [notice de confidentialité](PRIVACY.md).
 
 ## 2. Usage personnel et autorisation
 

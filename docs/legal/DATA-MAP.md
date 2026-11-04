@@ -56,6 +56,7 @@ de l'app n'est sauvegardée ni transférée par Android : `allowBackup="false"` 
 | Session Pronote | URL du client, identifiant, jeton tourné, UUID d'appareil, identifiant client, URL d'établissement | `EncryptedSharedPreferences` `session` (AES256-SIV/GCM via Keystore) | Ouvrir et restaurer la session sans rescanner le QR | Exécution du contrat / intérêt légitime de sécurité | Jusqu'à déconnexion, session morte ou suppression totale ; pas d'expiration automatique. Le jeton est remplacé à chaque rotation ; le PIN du QR n'est jamais persisté | Établissement (requêtes authentifiées) ; jamais le projet |
 | Comptes appairés | Identifiants de compte et compte courant (pas de nom, classe, photo ni jeton) | `SharedPreferences` `accounts`, en clair | Multi-compte et bascule | Exécution du contrat | Jusqu'à déconnexion ou suppression totale ; 8 comptes au plus, identifiant ≤ 64 caractères | Aucun |
 | Clé LLM | Clé OpenRouter | `EncryptedSharedPreferences` `llm_keys` (Keystore) | Appeler le fournisseur choisi | Consentement / exécution du service demandé | Jusqu'à « oublier la clé » ou suppression totale ; pas d'expiration automatique | OpenRouter, dans l'en-tête `Authorization` uniquement |
+| Consentement et attestation IA | Décision (accord, refus, retrait), version acceptée, attestation d'âge ou d'autorisation parentale | `SharedPreferences` `ai_consent`, en clair | Prouver l'accord et l'attestation avant tout appel IA | Consentement (preuve de l'accord) | Jusqu'au retrait ou suppression totale ; conservé à la déconnexion | Aucun |
 | Cache hors-ligne | Notes, devoirs, emploi du temps, actualités, menus, absences/retards, sanctions, capacités, liste des fils, alertes de sécurité | `filesDir/offline/cache_<ressource>_<empreinte>.txt`, en clair ; en-tête horodatage + requête, puis payload | Affichage hors-ligne et reprise rapide | Exécution du contrat / intérêt légitime (continuité du service) | TTL de fraîcheur de 15 min à 24 h selon la ressource (tableau ci-dessous). Une entrée périmée est supprimée à la prochaine écriture de la même ressource, pas par une tâche planifiée ; purge de compte sinon. Plafond global 2 Mio, 512 Kio par payload | Aucun ; le payload vient de l'établissement |
 | Messages Pronote | Liste des fils (identifiants, participants, dates, non-lus) ; corps des messages | Liste dans le cache `discussions` (15 min) ; corps d'un fil **en mémoire seule**, jamais écrit sur disque | Lire et répondre dans l'app | Exécution du contrat | Liste : TTL 15 min / purge de compte. Corps : mémoire, effacé à la déconnexion ou à la mort du processus. Aucune donnée de messagerie n'est réinjectée dans l'IA | Établissement ; jamais OpenRouter |
 | Cahier de cours | Notes de cours par matière (titre, texte, date), 64 au plus | `filesDir/offline/course-notes.json`, en clair (ancien `cahier.json` migré) | Garder les cours et les donner comme sources à l'IA | Consentement / exécution du service demandé | Jusqu'à suppression par l'utilisateur, déconnexion ou suppression totale ; pas de purge par ancienneté | OpenRouter uniquement quand une aide IA est demandée |
@@ -150,8 +151,9 @@ Il n'existe pas de tâche qui supprime une entrée à l'instant exact de son TTL
 session, liste des comptes, cache hors-ligne, cahier de cours, fil professeur,
 préférences matières, manuel (contenu du compte), pièces jointes, photos, état
 de lecture et cache WebView (hors thème et schéma). Elle **conserve par
-conception** : la clé LLM, l'adresse du serveur de manuels, le drapeau
-`prompt_seen`, les réglages d'interface et les exports. Une purge incomplète
+conception** : la clé LLM, le consentement et l'attestation IA, l'adresse du
+serveur de manuels, le drapeau `prompt_seen`, les réglages d'interface et les
+exports. Une purge incomplète
 rend `false` et interdit de publier le compte suivant.
 
 ### Changement de compte
@@ -164,7 +166,7 @@ compte est refusée (I16). Les exports restent, comme à la déconnexion.
 ### « Supprimer toutes mes données »
 
 `AccountPurgeMode.DELETE_ALL` reprend le même orchestrateur et y ajoute la clé
-LLM, l'adresse du serveur et les exports. La confirmation affiche l'inventaire
+LLM, le consentement et l'attestation IA, l'adresse du serveur et les exports. La confirmation affiche l'inventaire
 complet et un échec partiel nomme les stores restants
 (`web/src/features/settings/deleteAll.ts`, `DeleteAllCard.tsx`). Restent après
 cette suppression : les réglages d'interface (`settings`, thème/schéma) et le
@@ -257,7 +259,10 @@ Points de vigilance :
   documents d'identité si l'utilisateur les choisit.
 - L'autorisation parentale ou de l'établissement, l'âge minimal et la mention
   « public adolescent » sont des décisions humaines, pas des constantes du
-  code. L'app ne vérifie pas l'âge et ne bloque pas un mineur non accompagné.
+  code. Pour l'IA, une attestation déclarative 18+ ou autorisation parentale
+  est exigée avant l'enregistrement de la clé (version 2) ; elle ne vérifie pas
+  l'âge et ne remplace pas la décision juridique (DEC-04). L'app ne bloque pas
+  l'usage non-IA par un mineur non accompagné.
 - Un représentant légal peut exercer les droits sur l'appareil (export,
   suppression, retrait de la clé) et auprès de l'établissement. Pour GitHub, le
   compte est la seule identité vérifiable.
@@ -329,9 +334,10 @@ décision, le périmètre et le responsable de cette AIPD restent ouverts.
 7. **Exports.** La conservation d'un export après déconnexion ou changement de
    compte est une exception de code. Est-elle acceptable, ou faut-il la purger
    avec le compte ?
-8. **Mineurs.** Âge minimal, information des représentants légaux, mention
-   d'âge sur le store, et éventuel consentement renforcé : décision produit et
-   juridique.
+8. **Mineurs.** Attestation 18+ ou autorisation parentale en place pour l'IA
+   (version 2) ; validation juridique, âge minimal, information des
+   représentants légaux et mention d'âge sur le store restent à trancher
+   (DEC-04).
 9. **AIPD.** Une AIPD projet est-elle requise ? Qui la porte : projet,
    établissement, les deux ? Le crible ci-dessus doit être daté et signé.
 10. **Scraper.** Responsabilités de l'opérateur d'une instance partagée,
@@ -339,9 +345,10 @@ décision, le périmètre et le responsable de cette AIPD restent ouverts.
     ([manual-scraper.md](manual-scraper.md)).
 11. **Registre DSR.** Format, durée et responsable du registre minimal des
     demandes, sans donnée scolaire.
-12. **Politique publique.** Rédiger une politique de confidentialité et des
-    conditions d'utilisation à partir de cette carte, sans promettre plus que
-    le code ne fait.
+12. **Politique publique.** La notice de confidentialité est rédigée dans
+    [`PRIVACY.md`](../../PRIVACY.md) et les conditions d’utilisation dans
+    [`TERMS.md`](../../TERMS.md) ; elles restent à valider par le conseil, sans
+    promettre plus que le code ne fait.
 
 ## Références de code
 
