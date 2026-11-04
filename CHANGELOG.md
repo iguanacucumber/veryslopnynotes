@@ -108,6 +108,10 @@ la section `0.1.0` le jour du tag.
 
 ### Modifié
 
+- Kit d'annonce v1.0.0 relié aux preuves de release existantes : checklist,
+  dérogations, dossier juridique, bêta et dogfood ; les gates humains restants
+  (#919, #976, #972, #969, #965) et les champs de signature vides sont nommés
+  sans inventer tag, date, checksum, empreinte ni URL (#978).
 - Règle d’éligibilité de l’assistant IA consignée (ADR-009) : consentement
   versionné, attestation 18+ ou autorisation parentale et clé fournie par
   l’utilisateur, toutes trois requises ; IA désactivée sinon, retrait qui
