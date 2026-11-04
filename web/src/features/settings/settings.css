@@ -207,6 +207,18 @@
   font-weight: 650;
 }
 
+.assistant-consent__list {
+  margin: 10px 0 8px;
+  padding-left: 20px;
+  color: var(--secondary);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.assistant-consent__list li + li {
+  margin-top: 4px;
+}
+
 /* Teinte d'alerte : l'ouvrage est enregistré mais pas encore récupéré. */
 .settings-manual__status--warn {
   border-color: color-mix(in srgb, var(--danger) 35%, transparent);

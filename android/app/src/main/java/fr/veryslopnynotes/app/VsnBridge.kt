@@ -25,6 +25,7 @@ import fr.veryslopnynotes.data.AccountPurgeFactory
 import fr.veryslopnynotes.data.AccountPurgeRunner
 import fr.veryslopnynotes.data.AccountPurgeTargets
 import fr.veryslopnynotes.data.AccountStore
+import fr.veryslopnynotes.data.AiConsentStore
 import fr.veryslopnynotes.data.AssignmentsRepository
 import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.ClientQueue
@@ -200,6 +201,8 @@ class VsnBridge(
     internal val profileRepo = ProfileRepository()
     internal val accounts = AccountStore(ctx, sessions)
     internal val llmKeys = LlmKeys.get(ctx)
+    /** PRV-04 : consentement IA persistant, porte d'entrée de TOUT appel. */
+    internal val aiConsent = AiConsentStore(ctx)
     /** #855 : dernier échec borné et aperçu figé du diagnostic de support. */
     internal val diagnosticState = DiagnosticState()
     internal val diagnosticPreview = DiagnosticPreviewStore()
@@ -253,6 +256,7 @@ class VsnBridge(
                 prefs = prefsRepo,
                 llmKeys = llmKeys,
                 serverStore = serverStore,
+                clearAiConsent = { aiConsent.clear() },
                 webView = WebViewAccountData(
                     readState = { clearWebViewReadState() },
                     cache = { clearWebViewCache() },
@@ -584,6 +588,7 @@ class VsnBridge(
             "lessons.addPhoto" -> lessonsAddPhoto(p, epoch)
             "data.export" -> dataExport(p, epoch)
             "llm.status" -> JSONObject().put("configured", llmKeys.isConfigured())
+            "llm.setConsent" -> setAiConsent(p)
             "llm.saveKey" -> saveLlmKey(p)
             "llm.forgetKey" -> {
                 llmKeys.clear()
@@ -1116,6 +1121,9 @@ class VsnBridge(
      */
     internal fun llmForCall(epoch: Long, timeoutMs: Long): OpenRouterLlm {
         ensureCurrent(epoch)
+        // Défense en profondeur : même un futur appelant qui aurait lu la clé
+        // avant ne peut pas ouvrir de socket sans consentement à jour.
+        if (!aiConsent.allowsAi()) throw BridgeFailure("consent", AI_CONSENT_REQUIRED_MESSAGE)
         val llm = OpenRouterLlm(timeoutMs = timeoutMs)
         RequestScope.current()?.onCancel(llm::cancel)
         return llm

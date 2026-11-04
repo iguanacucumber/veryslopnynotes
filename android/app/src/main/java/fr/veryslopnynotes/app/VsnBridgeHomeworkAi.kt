@@ -44,6 +44,9 @@ import fr.veryslopnynotes.app.BridgeTimeouts.HOMEWORK_LLM_TIMEOUT_MS
 // --- LLM -------------------------------------------------------------------
 
 internal fun VsnBridge.saveLlmKey(p: JSONObject): JSONObject {
+    // Aucune clé ne s'enregistre avant l'accord explicite : sinon l'interface
+    // pourrait activer un assistant que l'utilisateur n'a pas encore accepté.
+    aiConsentRefusal()?.let { return it }
     val key = p.string("key").trim()
     if (key.length < OpenRouterLlm.MIN_API_KEY_CHARS) {
         return JSONObject().put("ok", false).put("message", "Clé LLM trop courte.")
@@ -68,6 +71,8 @@ internal fun VsnBridge.saveLlmKey(p: JSONObject): JSONObject {
 }
 
 internal fun VsnBridge.askHomework(p: JSONObject, epoch: Long, requestId: String? = null): JSONObject {
+    // AVANT toute lecture de devoir : `loadAssignments` peut sortir en réseau.
+    aiConsentRefusal()?.let { return it }
     val id = bounded(p.string("assignmentId"), 128)
     if (id.isEmpty()) throw BridgeFailure("bad_request", "Devoir introuvable.")
     // #369 : la semaine AFFICHÉE : le devoir demandé peut venir d'une
@@ -373,6 +378,7 @@ internal fun VsnBridge.attachmentFile(
  * gardé, sortie validée. Aucune clé = source illisible explicite.
  */
 internal fun VsnBridge.imageAttachmentText(file: File, epoch: Long): AttachmentTextResult {
+    if (aiConsentRefusal() != null) return AttachmentTextResult.Unreadable("consentement_ia")
     val apiKey = llmKeys.apiKey()?.trim().orEmpty()
     if (apiKey.length < OpenRouterLlm.MIN_API_KEY_CHARS) {
         return AttachmentTextResult.Unreadable("image_vision_indisponible")
@@ -442,6 +448,7 @@ internal fun VsnBridge.refusalJson(
  * enregistrement du corrigé, aucun effet métier (I7).
  */
 internal fun VsnBridge.solveHomeworkPhoto(p: JSONObject, epoch: Long, requestId: String? = null): JSONObject {
+    aiConsentRefusal()?.let { return it }
     val id = bounded(p.string("assignmentId"), 128)
     if (id.isEmpty()) throw BridgeFailure("bad_request", "Devoir introuvable.")
     val week = bounded(p.string("weekStart"), 10)
@@ -546,6 +553,7 @@ internal fun VsnBridge.solveHomeworkPhoto(p: JSONObject, epoch: Long, requestId:
  * donnée (I6).
  */
 internal fun VsnBridge.generateRevision(p: JSONObject, epoch: Long): JSONObject {
+    aiConsentRefusal()?.let { return it }
     val id = bounded(p.string("assignmentId"), 128)
     val store = revisions ?: throw BridgeFailure("unavailable", "Stockage des fiches indisponible.")
     // #369 comme l'aide devoirs (#596) : la semaine AFFICHÉE. Le repli

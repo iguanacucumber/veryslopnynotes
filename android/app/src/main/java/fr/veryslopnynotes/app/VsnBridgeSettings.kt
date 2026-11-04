@@ -1,5 +1,6 @@
 package fr.veryslopnynotes.app
 
+import fr.veryslopnynotes.core.AiConsentDecision
 import fr.veryslopnynotes.core.Assignment
 import fr.veryslopnynotes.core.ManualCatalog
 import fr.veryslopnynotes.core.ManualUrl
@@ -28,11 +29,16 @@ import fr.veryslopnynotes.app.VsnBridge.Companion.MANUAL_RETRY_MS
 
 internal fun VsnBridge.settings(): JSONObject {
     val known = knownSubjects()
+    val consent = aiConsent.record()
     return JSONObject()
         .put("theme", theme())
         // Hôte seul, jamais une URL de session ni un jeton.
         .put("serverHost", currentBaseUrl().substringAfter("://").trimEnd('/').take(300))
         .put("llmConfigured", llmKeys.isConfigured())
+        // Décision et version : l'interface ne déduit jamais un accord d'une
+        // simple présence de clé (PRV-04).
+        .put("aiConsent", consent.decision.wire)
+        .put("aiConsentVersion", consent.version)
         .put("accountCount", accounts.count())
         // Adresse du manuel : réglage saisi par l'utilisateur, jamais un secret.
         .put("manualUrl", manuals.url() ?: "")
@@ -47,6 +53,59 @@ internal fun VsnBridge.settings(): JSONObject {
         // vide n'est pas une erreur : elle dit « aucune source connue ».
         .put("manualSubjects", JSONArray(known.filter { manualAvailableForSubject(it, known) }))
         .put("lessonSubjects", JSONArray(lessons.subjects()))
+}
+
+internal const val AI_CONSENT_REQUIRED_MESSAGE =
+    "Consentement IA requis : lis l’aperçu des données et accepte dans Réglages > Assistant."
+
+/** Refus JSON commun aux chemins IA : aucune clé lue, aucun réseau avant l'accord. */
+internal fun VsnBridge.aiConsentRefusal(): JSONObject? =
+    if (aiConsent.allowsAi()) {
+        null
+    } else {
+        JSONObject()
+            .put("ok", false)
+            .put("code", "consent")
+            .put("message", AI_CONSENT_REQUIRED_MESSAGE)
+    }
+
+/**
+ * Point d'écriture UNIQUE du consentement. Un retrait persiste d'abord le
+ * refus, puis efface la clé et le fil du professeur : même si un effacement
+ * échoue, la porte IA est déjà fermée et l'échec est DIT.
+ */
+internal fun VsnBridge.setAiConsent(p: JSONObject): JSONObject {
+    val decision = AiConsentDecision.fromWire(bounded(p.string("decision"), 16))
+    if (decision == AiConsentDecision.NONE) {
+        return JSONObject().put("ok", false).put("message", "Choix IA invalide.")
+    }
+    if (!aiConsent.decide(decision)) {
+        return JSONObject().put("ok", false).put("message", "Consentement non enregistré : réessaie dans un instant.")
+    }
+    val record = aiConsent.record()
+    val result = JSONObject()
+        .put("ok", true)
+        .put("decision", record.decision.wire)
+        .put("version", record.version)
+    if (decision != AiConsentDecision.WITHDRAWN) return result
+
+    val keyCleared = try {
+        llmKeys.clear()
+        !llmKeys.isConfigured()
+    } catch (_: Exception) {
+        false
+    }
+    val chatCleared = try {
+        teacherChat.clear()
+    } catch (_: Exception) {
+        false
+    }
+    result.put("keyCleared", keyCleared).put("chatCleared", chatCleared)
+    if (!keyCleared || !chatCleared) {
+        result.put("ok", false)
+            .put("message", "Consentement retiré, mais la clé ou le fil du professeur n’a pas pu être effacé.")
+    }
+    return result
 }
 
 internal fun VsnBridge.saveServer(p: JSONObject, requestId: String): JSONObject? {

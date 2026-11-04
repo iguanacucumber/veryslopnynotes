@@ -38,7 +38,7 @@ val BRIDGE_METHODS = setOf(
     "lessons.list", "lessons.load", "lessons.save", "lessons.delete", "lessons.setManual",
     "lessons.addPhoto",
     "data.export",
-    "llm.status", "llm.saveKey", "llm.forgetKey", "llm.askHomework",
+    "llm.status", "llm.setConsent", "llm.saveKey", "llm.forgetKey", "llm.askHomework",
     "llm.solvePhoto", "llm.generateRevision", "llm.teacherTurn",
     "exercises.propose", "exercises.help",
     "teacher.load", "teacher.save", "teacher.delete",

@@ -18,6 +18,8 @@ class AccountPurgeTargets(
     val prefs: SubjectPrefsRepository,
     val llmKeys: LlmKeyStore,
     val serverStore: ServerStore,
+    /** PRV-04 : « tout supprimer » efface aussi le consentement IA. */
+    val clearAiConsent: () -> Boolean = { true },
     val webView: WebViewAccountData = WebViewAccountData(),
     /** États du pont qui ne sont pas des stores (adresses de manuel essayées). */
     val onManualPurged: () -> Unit = {},
@@ -79,6 +81,13 @@ object AccountPurgeFactory {
                 try {
                     targets.llmKeys.clear()
                     !targets.llmKeys.isConfigured()
+                } catch (_: Exception) {
+                    false
+                }
+            },
+            AccountPurgeStep(AccountDataStore.AI_CONSENT) {
+                try {
+                    targets.clearAiConsent()
                 } catch (_: Exception) {
                     false
                 }

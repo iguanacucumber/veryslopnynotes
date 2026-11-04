@@ -108,6 +108,19 @@ describe("réglages — une seule section Assistant (#612)", () => {  const sett
     expect(keyCard).not.toContain("ne quitte jamais cet appareil");
   });
 
+  test("le consentement précède la clé : accepter, refuser, retirer (#848)", () => {
+    expect(keyCard).toContain("AI_CONSENT_ITEMS.map");
+    expect(keyCard).toContain("aiConsentGranted(consent, consentVersion)");
+    expect(keyCard).toContain("!consentGranted");
+    expect(keyCard).toContain('decideConsent("granted")');
+    expect(keyCard).toContain('decideConsent("refused")');
+    expect(keyCard).toContain('decideConsent("withdrawn")');
+    expect(keyCard).toContain("bridge.setAiConsent");
+    // Le champ de clé n'existe que dans la branche « accord donné ».
+    expect(keyCard.indexOf("{consentGranted ? (")).toBeLessThan(keyCard.indexOf('id="llm-key"'));
+    expect(keyCard.indexOf('id="llm-key"')).toBeLessThan(keyCard.indexOf("Retirer mon consentement"));
+  });
+
   test("les matières personnalisées chargent avant d'affirmer qu'il n'y en a aucune (#804)", () => {
     const card = source("features/settings/SubjectPrefsCard.tsx");
     expect(card).toContain("Lecture des matières…");

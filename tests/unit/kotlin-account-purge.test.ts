@@ -51,6 +51,7 @@ const STORE_FILES: Record<string, string[]> = {
   "Manuals.kt": ["manual", "manual_prompt_seen"],
   "DownloadedFiles.kt": ["attachments", "exports"],
   "LlmKeyStore.kt": ["llm_key"],
+  "AiConsentStore.kt": ["ai_consent"],
   "ServerStore.kt": ["server_url"],
   "WebViewAccountData.kt": ["webview"],
   // `app` — téléchargements, photos, préférences d'apparence.
@@ -89,6 +90,7 @@ describe("purge de compte — inventaire (#861)", () => {
     // Décisions explicites : la clé utilisateur, le serveur choisi, le drapeau
     // d'invitation et l'apparence ne sont PAS la donnée du compte.
     expect(byId.get("llm_key")).toBe("retained");
+    expect(byId.get("ai_consent")).toBe("retained");
     expect(byId.get("server_url")).toBe("retained");
     expect(byId.get("manual_prompt_seen")).toBe("retained");
     expect(byId.get("ui_prefs")).toBe("retained");
@@ -141,8 +143,9 @@ describe("purge de compte — inventaire (#861)", () => {
       "READ_STATE",
       "WEBVIEW",
       "CACHE",
-      // La suppression TOTALE emporte aussi ces deux stores utilisateur.
+      // La suppression TOTALE emporte aussi ces trois stores utilisateur.
       "LLM_KEY",
+      "AI_CONSENT",
       "SERVER_URL",
     ]) {
       expect({ id, wired: wired.has(id) }).toEqual({ id, wired: true });

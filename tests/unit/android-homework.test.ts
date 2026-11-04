@@ -483,7 +483,9 @@ describe("android homework — le credential reste dans l'app", () => {
     expect(pairing).not.toMatch(/llmKeys|LlmKeys|LlmKeyStore/);
     expect(factory).toContain("AccountDataStore.LLM_KEY");
     expect(factory).toContain("targets.llmKeys.clear()");
-    expect(purge).toMatch(/LLM_KEY\s*\|\|\s*this == SERVER_URL -> mode == AccountPurgeMode\.DELETE_ALL/);
+    expect(purge).toMatch(
+      /LLM_KEY\s*\|\|\s*this == SERVER_URL\s*\|\|\s*this == AI_CONSENT -> mode == AccountPurgeMode\.DELETE_ALL/,
+    );
   });
 
   test("l'aide texte porte le délai du pont (#594), comme les chemins photo", () => {

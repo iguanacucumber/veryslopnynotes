@@ -2,20 +2,26 @@ import { useApp } from "../../ui/AppContext";
 import { Card, Divider } from "../../ui/components";
 import { IconBook, IconChevronRight, IconSparkles } from "../../ui/icons";
 import { useViewNavigate } from "../../ui/viewTransition";
+import type { AiConsentDecision } from "../../bridge/types";
+import { AI_CONSENT_VERSION } from "../assistant/consent";
 import { AiCostReminder } from "../assistant/notices";
 import { assistantStatus } from "./model";
 
 export function AssistantOverviewCard({
   configured,
   loading,
+  consent = "granted",
+  consentVersion = AI_CONSENT_VERSION,
 }: {
   /** `null` = état non lu (échec du pont), jamais « pas de clé ». */
   configured: boolean | null;
   loading: boolean;
+  consent?: AiConsentDecision | null;
+  consentVersion?: number;
 }) {
   const { storageUnavailable } = useApp();
   const navigate = useViewNavigate();
-  const status = assistantStatus(configured, storageUnavailable, loading);
+  const status = assistantStatus(configured, storageUnavailable, loading, consent, consentVersion);
   return (
     <Card className="card--flat assistant-overview ai">
       <div className="assistant-overview__head">

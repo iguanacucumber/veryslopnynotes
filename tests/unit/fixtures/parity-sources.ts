@@ -82,6 +82,9 @@ export const PRODUCTION_SOURCES: string[] = [
   // #628 : l'assembleur de contexte unique (priorité, budgets, dédup,
   // troncature signalée, refus vide). Fichier PUR : le harnais l'EXÉCUTE.
   join(CORE, "AiContext.kt"),
+  // PRV-04 : version et décision du consentement IA. Fichier PUR : le harnais
+  // EXÉCUTE l'accord versionné et le refus persistant.
+  join(CORE, "AiConsent.kt"),
   join(CORE, "AiPrompts.kt"),
   join(CORE, "Assignment.kt"),
   // #631 : ordre des sources d'un devoir (consigne, TOUS les cours, pièces

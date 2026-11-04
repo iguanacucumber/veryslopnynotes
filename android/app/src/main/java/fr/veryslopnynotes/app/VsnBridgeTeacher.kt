@@ -106,6 +106,7 @@ internal fun VsnBridge.exercisesPropose(p: JSONObject): JSONObject {
  * Pronote, aucune écriture.
  */
 internal fun VsnBridge.exercisesHelp(p: JSONObject, epoch: Long = SessionEpoch.current()): JSONObject {
+    aiConsentRefusal()?.let { return it }
     val subject = bounded(p.string("subject"), TeacherChat.MAX_SUBJECT_CHARS)
     if (subject.isEmpty()) {
         return JSONObject().put("ok", false).put("message", "Choisis une matière.")
@@ -234,6 +235,7 @@ internal fun VsnBridge.exercisesHelp(p: JSONObject, epoch: Long = SessionEpoch.c
  * marquée `unsourced` (jamais masquée).
  */
 internal fun VsnBridge.teacherTurn(p: JSONObject, epoch: Long = SessionEpoch.current()): JSONObject {
+    aiConsentRefusal()?.let { return it }
     val subject = bounded(p.string("subject"), TeacherChat.MAX_SUBJECT_CHARS)
     if (subject.isEmpty()) {
         return JSONObject().put("ok", false).put("message", "Choisis une matière.")
