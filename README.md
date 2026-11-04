@@ -77,6 +77,23 @@ autre clé, et désinstaller efface les données locales.
   avec APK. Obtainium interroge GitHub périodiquement ; l'app, elle, ne fait
   aucune vérification de mise à jour.
 
+### Migration debug → release : désinstaller, donc perdre les données
+
+Un APK **debug** et un APK **release signé avec la clé de release** ont des
+certificats différents : Android refuse d'installer l'un par-dessus l'autre.
+La migration debug → release exige donc de **désinstaller l'app**, ce qui
+**efface les données locales** : session Pronote, cache, clé OpenRouter et
+conversations IA, pièces jointes, préférences. Exportez d'abord vos données
+depuis les réglages si vous voulez en garder une copie (l'export n'est pas
+réimportable dans l'app), puis ressaisissez le QR/PIN et la clé.
+
+Mise à jour sans perte : garder le même certificat — debug → debug avec
+`make updateApkToPhone`, release → release en installant l'APK par-dessus.
+Le canal bêta ne part que de builds signés en release, jamais d'un APK debug :
+un appareil qui suit la bêta ne doit pas dépendre d'un build debug antérieur.
+Un build release construit sans clé (repli debug) ne convient ni à la bêta ni
+à une mise à jour d'un APK release.
+
 ## Scraper de manuels (facultatif)
 
 ```bash
