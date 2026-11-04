@@ -9,6 +9,10 @@ la section `0.1.0` le jour du tag.
 
 ### Ajouté
 
+- Journal de dogfood (`docs/DOGFOOD-LOG.md`) : modèle vierge de 14 jours avec
+  build, appareil, WebView, parcours, hors-ligne, IA, mise à jour, erreurs,
+  sévérité et décision ; signature finale et bannière sans donnée scolaire
+  (#965).
 - Protocole de dogfood interne (`docs/DOGFOOD.md`) : 14 jours sur un téléphone
   réel, données de démonstration et synthétiques uniquement, journal quotidien,
   triage P0/P1, règle d'arrêt et checklist signée ; aucun résultat ni

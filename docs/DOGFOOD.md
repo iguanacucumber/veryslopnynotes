@@ -49,7 +49,8 @@ pas signée, l'issue #965 reste ouverte. Aucun participant n'est nommé d'avance
 ## Journal quotidien
 
 Une entrée par jour, même un jour sans usage. Le journal vit dans un
-commentaire de #965 ou dans un fichier lié, sans donnée scolaire.
+commentaire de #965 ou dans un fichier lié, sans donnée scolaire. Le modèle
+vierge est [`DOGFOOD-LOG.md`](DOGFOOD-LOG.md).
 
 | Champ | Contenu attendu |
 |---|---|
@@ -134,6 +135,7 @@ signature ni aucun résultat n'est prérempli dans ce document.
 
 ## Voir aussi
 
+[`DOGFOOD-LOG.md`](DOGFOOD-LOG.md) pour le journal vierge,
 [`QA-MATRIX.md`](QA-MATRIX.md) pour les preuves appareil,
 [`INCIDENTS.md`](INCIDENTS.md) pour le triage et les runbooks,
 [`RELEASE-HEALTH.md`](RELEASE-HEALTH.md) pour les seuils sans télémétrie.
