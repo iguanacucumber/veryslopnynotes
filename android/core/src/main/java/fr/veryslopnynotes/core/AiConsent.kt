@@ -4,7 +4,12 @@ package fr.veryslopnynotes.core
 // version, la décision et la lecture d'un enregistrement sont exécutées par la
 // parité, sans Android. Le stockage vit dans `data/AiConsentStore.kt`.
 
-/** Version du texte et du périmètre acceptés. Une version inconnue = refus. */
+/**
+ * Version du texte ET du périmètre acceptés. À incrémenter pour tout changement
+ * MATÉRIEL : catégorie de données ajoutée ou retirée, destinataire ou règle de
+ * conservation modifiée, usage élargi. Une reformulation sans effet sur les
+ * données ne change pas la version. Une version inconnue = refus.
+ */
 const val AI_CONSENT_VERSION = 1
 
 enum class AiConsentDecision(val wire: String) {
@@ -24,6 +29,10 @@ data class AiConsentRecord(val decision: AiConsentDecision, val version: Int) {
     /** Seul un accord explicite à la version courante autorise un appel IA. */
     val allowsAi: Boolean
         get() = decision == AiConsentDecision.GRANTED && version == AI_CONSENT_VERSION
+
+    /** Un accord d'une autre version doit être redemandé, jamais réutilisé. */
+    val needsReconsent: Boolean
+        get() = decision == AiConsentDecision.GRANTED && version != AI_CONSENT_VERSION
 }
 
 /** Enregistrement illisible, inconnu ou d'une autre version = aucun accord. */

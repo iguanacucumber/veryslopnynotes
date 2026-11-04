@@ -80,9 +80,19 @@
 <a id="i35"></a>
 
 ## I35 — Le cours complet et les pièces jointes arrivent à l'IA, bornés et sans HTML rendu
-- Invariant : les sources IA d'un devoir = consigne, tous les cours de la même matière + jour et pièces jointes extraites localement. Une pièce est résolue par le client local, téléchargée dans le cache du compte (borné, purgé avec lui), lue sans réseau : texte/markdown, HTML désinfecté, PDF texte, image via le chemin vision. Bornes déclarées, toute coupe signalée. Format illisible ou MIME exécutable → source nommée « (illisible) » avec sa raison. OCR d'un PDF scanné indisponible et dit. Le texte reste Untrusted.
+- Invariant : les sources IA d'un devoir = consigne, tous les cours de la même matière + jour et pièces jointes extraites localement. Une pièce est résolue par le client local, téléchargée dans le cache du compte (borné, purgé avec lui), lue sans réseau : texte/markdown, HTML désinfecté, PDF texte, image via le chemin vision. Bornes déclarées, toute coupe signalée. Format illisible ou MIME exécutable → source nommée « (illisible) » avec sa raison. OCR d'un PDF scanné indisponible et dit. Texte Untrusted.
 - Test : `tests/unit/attachment-text.test.ts`
 - Commande : `make check`.
 - Emplacement : `android/data/AttachmentText.kt`,
   `android/core/AssignmentContext.kt`, `android/core/Assignment.kt`,
   `android/app/VsnBridge.kt`.
+
+<a id="i36"></a>
+
+## I36 — Un accord IA ne vaut que pour la version courante
+- Invariant : la décision et la version acceptées sont enregistrées ensemble ; seul `granted` à `AI_CONSENT_VERSION` autorise un appel. Un changement matériel (catégorie de données, destinataire, rétention, usage) incrémente la version et redemande l’accord ; une reformulation seule ne le fait pas. Un accord d’une autre version, un refus, un retrait ou un enregistrement illisible n’autorise rien et n’est jamais réutilisé. Refuser ou retirer garde l’IA désactivée ; le retrait persiste avant d’effacer clé et fil.
+- Test : `tests/unit/ai-consent-migration.test.ts`, `tests/unit/privacy-claims.test.ts`, `tests/web/settings-assistant.test.ts`.
+- Commande : `make check`.
+- Emplacement : `android/core/AiConsent.kt`, `android/data/AiConsentStore.kt`,
+  `android/app/VsnBridgeSettings.kt`, `web/src/features/assistant/consent.ts`,
+  `web/src/features/settings/AssistantCards.tsx`.

@@ -32,6 +32,7 @@ private class Driver {
                 "decision" to JVal.Str(record.decision.wire),
                 "version" to JVal.Num(record.version.toDouble()),
                 "allowsAi" to JVal.Bool(record.allowsAi),
+                "needsReconsent" to JVal.Bool(record.needsReconsent),
             )
         }
         // Écrit puis relit : c'est le stockage versionné, pas un état en mémoire.
@@ -52,6 +53,7 @@ private class Driver {
                 "decision" to JVal.Str(record.decision.wire),
                 "version" to JVal.Num(record.version.toDouble()),
                 "allowsAi" to JVal.Bool(record.allowsAi),
+                "needsReconsent" to JVal.Bool(record.needsReconsent),
             )
         }
         else -> throw IllegalArgumentException("pilote: opération inconnue : ${op.str("op")}")

@@ -9,7 +9,7 @@ import type {
   SubjectPref,
   SubjectSaveResult,
 } from "../../bridge/types";
-import { AI_CONSENT_VERSION, aiConsentGranted } from "../assistant/consent";
+import { AI_CONSENT_VERSION, aiConsentGranted, aiConsentNeedsReconsent } from "../assistant/consent";
 
 export type Theme = "SYSTEM" | "LIGHT" | "DARK";
 
@@ -111,6 +111,12 @@ export function assistantStatus(
       return {
         title: "Consentement retiré",
         body: "L’assistant est désactivé et la clé a été effacée. Tu peux redonner ton accord dans cette section.",
+      };
+    }
+    if (aiConsentNeedsReconsent(consent, consentVersion)) {
+      return {
+        title: "Consentement IA à renouveler",
+        body: "Le texte ou le périmètre de l’accord a changé : ton ancien accord n’est pas réutilisé et l’assistant reste désactivé tant que tu n’as pas relu l’aperçu et accepté à nouveau.",
       };
     }
     return {

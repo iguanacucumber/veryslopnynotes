@@ -11,6 +11,7 @@ import {
   AI_CONSENT_REQUIRED_MESSAGE,
   AI_CONSENT_RETENTION_NOTE,
   aiConsentGranted,
+  aiConsentNeedsReconsent,
 } from "../assistant/consent";
 import { AI_MODEL_NOTE } from "../assistant/notices";
 import { AssistantOverviewCard } from "./AssistantOverviewCard";
@@ -19,14 +20,15 @@ import { MAX_API_KEY_CHARS, llmSaveError } from "./model";
 
 type ConsentAction = "granted" | "refused" | "withdrawn";
 
-function consentHeading(decision: AiConsentDecision | null, loading: boolean): string {
+function consentHeading(decision: AiConsentDecision | null, loading: boolean, version: number): string {
   if (decision === null) return loading ? "Lecture du consentement IA…" : "Consentement IA non lu";
   if (decision === "refused") return "Assistant IA désactivé";
   if (decision === "withdrawn") return "Consentement retiré";
+  if (aiConsentNeedsReconsent(decision, version)) return "Consentement IA à renouveler";
   return "Avant d’activer l’assistant IA";
 }
 
-function consentBody(decision: AiConsentDecision | null, loading: boolean): string {
+function consentBody(decision: AiConsentDecision | null, loading: boolean, version: number): string {
   if (decision === null) {
     return loading
       ? "L’état du consentement IA est en cours de lecture."
@@ -34,6 +36,9 @@ function consentBody(decision: AiConsentDecision | null, loading: boolean): stri
   }
   if (decision === "refused" || decision === "withdrawn") {
     return "Ton choix est enregistré sur cet appareil : aucun appel IA n’est possible tant que tu n’acceptes pas. Tu peux revenir sur ce choix à tout moment.";
+  }
+  if (aiConsentNeedsReconsent(decision, version)) {
+    return "Le texte ou le périmètre de l’accord a changé depuis ta dernière acceptation. Ton ancien accord n’est pas réutilisé : l’assistant reste désactivé tant que tu n’as pas relu l’aperçu et accepté à nouveau.";
   }
   return "L’assistant est facultatif et reste désactivé tant que tu n’as pas accepté. Voici exactement ce qui quitte l’appareil quand tu l’utilises.";
 }
@@ -154,8 +159,8 @@ export function AssistantCards({ snapshot, loading }: { snapshot: SettingsSnapsh
 
       {!consentGranted ? (
         <Card className="card--flat assistant-key ai">
-          <strong className="assistant-key__title">{consentHeading(consent, loading)}</strong>
-          <p className="assistant-key__body">{consentBody(consent, loading)}</p>
+          <strong className="assistant-key__title">{consentHeading(consent, loading, consentVersion)}</strong>
+          <p className="assistant-key__body">{consentBody(consent, loading, consentVersion)}</p>
           <ul className="assistant-consent__list">
             {AI_CONSENT_ITEMS.map((item) => (
               <li key={item.key}>

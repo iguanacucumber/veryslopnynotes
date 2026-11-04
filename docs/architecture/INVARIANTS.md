@@ -40,6 +40,7 @@ invariant, détail par thème. Format, ajout et retrait :
 | I33 | La sauvegarde Android n'emporte jamais les payloads en clair. | `tests/architecture/backup.test.ts` | [`I33`](invariants/donnees.md#i33) |
 | I34 | Une seule version Kotlin : catalogue = classpath racine = CI. | `tests/architecture/gradle-versions.test.ts` | [`I34`](invariants/build.md#i34) |
 | I35 | Cours complet et pièces jointes extraites localement, bornées, sans HTML rendu. | `tests/unit/attachment-text.test.ts` | [`I35`](invariants/ia.md#i35) |
+| I36 | Un accord IA ne vaut que pour la version courante ; changement matériel = nouvel accord, refus/illisible = IA désactivée. | `tests/unit/ai-consent-migration.test.ts` | [`I36`](invariants/ia.md#i36) |
 
 ## Retirés
 
