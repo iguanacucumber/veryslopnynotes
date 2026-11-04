@@ -68,8 +68,9 @@ appareil.
 
 ## Voir aussi
 
-[`COMPATIBILITY.md`](COMPATIBILITY.md) pour les limites produit et
-[`BUILD.md`](architecture/BUILD.md) pour le gate et sa reprise en CI.
+[`COMPATIBILITY.md`](COMPATIBILITY.md) pour les limites produit,
+[`DOGFOOD.md`](DOGFOOD.md) pour le protocole de dogfood interne sur téléphone
+réel et [`BUILD.md`](architecture/BUILD.md) pour le gate et sa reprise en CI.
 
 ## Mise à jour d'une ligne
 

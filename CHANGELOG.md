@@ -9,6 +9,10 @@ la section `0.1.0` le jour du tag.
 
 ### Ajouté
 
+- Protocole de dogfood interne (`docs/DOGFOOD.md`) : 14 jours sur un téléphone
+  réel, données de démonstration et synthétiques uniquement, journal quotidien,
+  triage P0/P1, règle d'arrêt et checklist signée ; aucun résultat ni
+  participant revendiqué (#965).
 - Client Android Pronote : QR + PIN lus dans l'app, session chiffrée sur
   l'appareil et purgée à la déconnexion.
 - Interface React embarquée, hors-ligne d'abord : cache + TTL par ressource,
