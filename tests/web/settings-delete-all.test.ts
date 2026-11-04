@@ -18,7 +18,10 @@ function kotlinDeleteAllIds(): string[] {
   );
   const entries = [...purge.matchAll(/^\s+([A-Z_]+)\("([^"]+)", AccountStorePolicy\.(\w+)\)/gm)];
   return entries
-    .filter(([, name, , policy]) => policy === "PURGED" || name === "LLM_KEY" || name === "SERVER_URL")
+    .filter(
+      ([, name, , policy]) =>
+        policy === "PURGED" || name === "LLM_KEY" || name === "AI_CONSENT" || name === "SERVER_URL",
+    )
     .map(([, , id]) => id!);
 }
 
@@ -46,6 +49,7 @@ describe("réglages — suppression totale (#853)", () => {
       "WebView",
       "lecture",
       "Clé",
+      "Consentement",
       "Serveur",
     ]) {
       expect(text).toContain(word);

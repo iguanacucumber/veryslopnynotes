@@ -4,6 +4,7 @@ import {
   DEFAULT_TIMEOUT_MS,
   MAX_PARALLEL_READS,
   resourceTimeoutMs,
+  type AiConsentResult,
   type AiContextSourceMeta,
   type BridgeError,
   type BridgeMethod,
@@ -353,6 +354,8 @@ export const bridge = {
   shareDiagnostic: () => call<DiagnosticShareResult>("diagnostics.share"),
 
   llmStatus: () => call<{ configured: boolean }>("llm.status"),
+  setAiConsent: (decision: "granted" | "refused" | "withdrawn") =>
+    call<AiConsentResult>("llm.setConsent", { decision }),
   saveLlmKey: (key: string) => call<{ ok: boolean; message?: string }>("llm.saveKey", { key }),
   forgetLlmKey: () => call<{ ok: true }>("llm.forgetKey"),
   askHomework: (

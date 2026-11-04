@@ -121,6 +121,7 @@ internal fun VsnBridge.lessonsSetManual(p: JSONObject): JSONObject {
  * vision, puis supprimée. Le plafond natif évite un fil pendu pour toujours.
  */
 internal fun VsnBridge.lessonsAddPhoto(p: JSONObject, epoch: Long = SessionEpoch.current()): JSONObject {
+    aiConsentRefusal()?.let { return it }
     val subject = bounded(p.string("subject"), LessonNote.MAX_SUBJECT_CHARS)
     if (subject.isEmpty()) return JSONObject().put("ok", false).put("message", "Choisis une matière.")
     ensureCurrent(epoch)

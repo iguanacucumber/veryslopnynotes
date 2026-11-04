@@ -3,20 +3,22 @@
 // prouver : Kotlin EXÉCUTÉ par la parité quand le comportement est pur,
 // manifeste/Intent/journaux lus à la source quand seul Android les porte.
 //
-// GAP connu : le consentement de premier usage (#848) n'existe pas encore.
-// La garde prouvée ici est celle de la CLÉ : sans clé, aucun envoi IA. Le
-// suivi du consentement reste #848, et #943 le nomme dans son commentaire.
+// PRV-04 (#848) : le consentement de premier usage est désormais une porte
+// native (version, refus, retrait) ; les preuves ci-dessous couvrent le
+// stockage ET l'absence de lecture de clé/appel réseau avant l'accord.
 import { afterAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { listFiles } from "../../agents/runtime/check-architecture";
 import { codeOnly } from "../../agents/runtime/source-guards";
+import { AI_CONSENT_ITEMS, AI_CONSENT_RETENTION_NOTE, AI_CONSENT_VERSION } from "../../web/src/features/assistant/consent";
 import { BRIDGE_FILES } from "./fixtures/bridge-source";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
 
 const ANDROID = join(ROOT, "android");
 const APP = join(ANDROID, "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
 const DATA = join(ANDROID, "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
+const CORE = join(ANDROID, "core", "src", "main", "java", "fr", "veryslopnynotes", "core");
 const MANIFEST = join(ANDROID, "app", "src", "main", "AndroidManifest.xml");
 const DEBUG_MANIFEST = join(ANDROID, "app", "src", "debug", "AndroidManifest.xml");
 const RULES = join(ANDROID, "app", "src", "main", "res", "xml", "data_extraction_rules.xml");
@@ -25,6 +27,7 @@ const SESSION_DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "Session
 const DOWNLOADS_DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "DownloadedFilesMain.kt");
 const EXPORT_DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "DataExportMain.kt");
 const SECURE_DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "SecureWindowParityMain.kt");
+const CONSENT_DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "AiConsentMain.kt");
 
 const skip = parityToolchain.skipReason !== null;
 
@@ -32,11 +35,13 @@ let sessionLink: ParityLink | null = null;
 let downloadsLink: ParityLink | null = null;
 let exportLink: ParityLink | null = null;
 let secureLink: ParityLink | null = null;
+let consentLink: ParityLink | null = null;
 if (!skip) {
   sessionLink = await parityToolchain.openParityLink(SESSION_DRIVER);
   downloadsLink = await parityToolchain.openParityLink(DOWNLOADS_DRIVER);
   exportLink = await parityToolchain.openParityLink(EXPORT_DRIVER);
   secureLink = await parityToolchain.openParityLink(SECURE_DRIVER);
+  consentLink = await parityToolchain.openParityLink(CONSENT_DRIVER);
 }
 
 afterAll(async () => {
@@ -150,6 +155,143 @@ describe("confidentialité — aucun envoi IA sans clé (#943)", () => {
       expect(guard).toBeLessThan(body.indexOf("send("));
     });
   }
+});
+
+describe("confidentialité — consentement IA au premier usage (#848)", () => {
+  test("la version de copie et la version native ne divergent pas", () => {
+    const policy = source(join(CORE, "AiConsent.kt"));
+    expect(policy).toContain(`const val AI_CONSENT_VERSION = ${AI_CONSENT_VERSION}`);
+    expect(AI_CONSENT_VERSION).toBe(1);
+  });
+
+  test("la copie liste les huit catégories et ne promet pas l'effacement chez le fournisseur", () => {
+    expect(AI_CONSENT_ITEMS.map((item) => item.key)).toEqual([
+      "prompt",
+      "notes",
+      "attachments",
+      "photos",
+      "manual",
+      "chat",
+      "key",
+      "provider",
+    ]);
+    const copy = [AI_CONSENT_ITEMS.map((item) => `${item.label} ${item.detail}`).join(" "), AI_CONSENT_RETENTION_NOTE].join(" ");
+    expect(copy).toContain("OpenRouter");
+    expect(copy).toContain("clé");
+    // Le code ne peut pas prouver une rétention nulle : aucune promesse de ce type.
+    expect(copy).not.toMatch(/aucune? (?:conservation|rétention)|zéro rétention|zéro conservation|jamais conserv/i);
+    expect(AI_CONSENT_RETENTION_NOTE).toContain("peuvent conserver");
+    expect(copy).toContain("1600 px");
+  });
+
+  test.skipIf(skip)("un accord est versionné, un refus et un retrait persistent", async () => {
+    const granted = await ask(consentLink!, { op: "roundtrip", decision: "granted" });
+    expect(granted).toEqual({
+      encoded: `granted:${AI_CONSENT_VERSION}`,
+      decision: "granted",
+      version: AI_CONSENT_VERSION,
+      allowsAi: true,
+    });
+
+    // Une acceptation d'une AUTRE version ne vaut pas accord.
+    const stale = await ask(consentLink!, { op: "roundtrip", decision: "granted", version: AI_CONSENT_VERSION + 1 });
+    expect(stale.allowsAi).toBe(false);
+    expect(stale.decision).toBe("granted");
+    expect((await ask(consentLink!, { op: "parse", raw: "granted:999" })).allowsAi).toBe(false);
+
+    const refused = await ask(consentLink!, { op: "roundtrip", decision: "refused" });
+    expect(refused).toMatchObject({ decision: "refused", version: AI_CONSENT_VERSION, allowsAi: false });
+
+    const withdrawn = await ask(consentLink!, { op: "roundtrip", decision: "withdrawn" });
+    expect(withdrawn).toMatchObject({ decision: "withdrawn", version: AI_CONSENT_VERSION, allowsAi: false });
+
+    // Enregistrement illisible ou forgé : aucun accord, jamais un défaut permissif.
+    for (const raw of ["", "granted", ":1", "granted:", "peut-être:1", "none:1"]) {
+      const parsed = await ask(consentLink!, { op: "parse", raw });
+      expect({ raw, allowsAi: parsed.allowsAi }).toEqual({ raw, allowsAi: false });
+    }
+  });
+
+  test("chaque chemin IA vérifie le consentement AVANT la clé, le client ou le réseau", () => {
+    // Découverte sur le disque : un futur chemin IA sans porte échoue ici.
+    const FUNC = /(?:^|\n)\s*(?:internal|private|public)\s+fun\s+(?:VsnBridge\.)?([A-Za-z0-9_]+)\s*\(/g;
+    const offenders: string[] = [];
+    let guarded = 0;
+    for (const file of BRIDGE_FILES) {
+      const code = source(join(APP, file));
+      for (const match of code.matchAll(FUNC)) {
+        const body = bracesBody(code, code.indexOf("{", match.index ?? 0));
+        const keyRead = body.indexOf("llmKeys.apiKey()");
+        const providerCall = body.indexOf("llmForCall");
+        if (keyRead < 0 && providerCall < 0) continue;
+        guarded += 1;
+        const consent = body.indexOf("aiConsentRefusal");
+        if (consent < 0 || (keyRead >= 0 && consent > keyRead) || (providerCall >= 0 && consent > providerCall)) {
+          offenders.push(`${file}:${match[1]}`);
+        }
+      }
+    }
+    expect(guarded).toBeGreaterThanOrEqual(7);
+    expect({ offenders }).toEqual({ offenders: [] });
+
+    // L'enregistrement de clé et la fabrique du client ont leur propre porte.
+    const keySaver = functionBody(source(join(APP, "VsnBridgeHomeworkAi.kt")), "internal fun VsnBridge.saveLlmKey(");
+    expect(keySaver.indexOf("aiConsentRefusal")).toBeGreaterThan(-1);
+    expect(keySaver.indexOf("aiConsentRefusal")).toBeLessThan(keySaver.indexOf('p.string("key")'));
+
+    const client = functionBody(source(join(APP, "VsnBridge.kt")), "internal fun llmForCall(");
+    expect(client.indexOf("aiConsent.allowsAi()")).toBeGreaterThan(-1);
+    expect(client.indexOf("aiConsent.allowsAi()")).toBeLessThan(client.indexOf("OpenRouterLlm("));
+
+    // Les chemins qui lisent le devoir ou le contexte AVANT la clé : la porte
+    // doit précéder ces lectures, qui peuvent sortir en réseau (manuel, pièces).
+    const homework = source(join(APP, "VsnBridgeHomeworkAi.kt"));
+    for (const [signature, networkCall] of [
+      ["internal fun VsnBridge.askHomework(", "loadAssignments("],
+      ["internal fun VsnBridge.solveHomeworkPhoto(", "loadAssignments("],
+      ["internal fun VsnBridge.generateRevision(", "loadAssignments("],
+    ] as const) {
+      const body = functionBody(homework, signature);
+      expect({ signature, consentAvant: body.indexOf("aiConsentRefusal") < body.indexOf(networkCall) }).toEqual({
+        signature,
+        consentAvant: true,
+      });
+    }
+    const teacher = source(join(APP, "VsnBridgeTeacher.kt"));
+    for (const signature of ["internal fun VsnBridge.teacherTurn(", "internal fun VsnBridge.exercisesHelp("] as const) {
+      const body = functionBody(teacher, signature);
+      expect({ signature, consentAvant: body.indexOf("aiConsentRefusal") < body.indexOf("aiContextForSubject") }).toEqual({
+        signature,
+        consentAvant: true,
+      });
+    }
+    const lessons = functionBody(source(join(APP, "VsnBridgeLessons.kt")), "internal fun VsnBridge.lessonsAddPhoto(");
+    expect(lessons.indexOf("aiConsentRefusal")).toBeLessThan(lessons.indexOf("awaitPhoto"));
+  });
+
+  test("le retrait persiste AVANT d'effacer la clé et le fil du professeur", () => {
+    const settings = source(join(APP, "VsnBridgeSettings.kt"));
+    const body = functionBody(settings, "internal fun VsnBridge.setAiConsent(");
+    const persist = body.indexOf("aiConsent.decide(");
+    expect(persist).toBeGreaterThan(-1);
+    expect(persist).toBeLessThan(body.indexOf("llmKeys.clear()"));
+    expect(persist).toBeLessThan(body.indexOf("teacherChat.clear()"));
+    // Un échec d'effacement ne se masque pas derrière un succès.
+    expect(body).toContain('put("ok", false)');
+    expect(body).toContain("keyCleared");
+    expect(body).toContain("chatCleared");
+  });
+
+  test("le stockage natif est durable, fail-closed et sans journal", () => {
+    const store = source(join(DATA, "AiConsentStore.kt"));
+    expect(store).toContain("parseAiConsent");
+    expect(store).toContain("prefs ?: return false");
+    expect(store).toContain("prefs?.getString");
+    // `commit()` synchrone : un force-stop ne doit pas perdre un refus/retrait.
+    expect(store).not.toMatch(/\.apply\(\)/);
+    expect(store.match(/\.commit\(\)/g)).toHaveLength(2);
+    expect(store).not.toMatch(/Log\.|println|printStackTrace/);
+  });
 });
 
 describe("confidentialité — ni clé ni session dans les journaux (#943)", () => {
@@ -360,7 +502,7 @@ describe("confidentialité — la purge efface les artefacts (#943)", () => {
     // destination ; l'ÉTAPE est celle qui compte pour l'ordre.
     const cache = factory.indexOf("AccountPurgeStep(AccountDataStore.CACHE)");
     expect(cache).toBeGreaterThan(-1);
-    for (const id of ["ATTACHMENTS", "EXPORTS", "PHOTOS"]) {
+    for (const id of ["ATTACHMENTS", "EXPORTS", "PHOTOS", "AI_CONSENT"]) {
       const step = factory.indexOf(`AccountPurgeStep(AccountDataStore.${id})`);
       expect({ id, présent: step > -1 }).toEqual({ id, présent: true });
       expect({ id, avantCache: step < cache }).toEqual({ id, avantCache: true });

@@ -76,6 +76,11 @@ export const DELETE_ALL_ARTIFACTS: readonly DeleteAllArtifact[] = [
     detail: "Clé OpenRouter chiffrée sur l’appareil",
   },
   {
+    id: "ai_consent",
+    label: "Consentement IA",
+    detail: "Accord versionné et aperçu des données accepté",
+  },
+  {
     id: "server_url",
     label: "Serveur de manuels",
     detail: "Adresse du scraper auto-hébergé",

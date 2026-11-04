@@ -60,6 +60,7 @@ export const BRIDGE_METHODS = [
   "lessons.addPhoto",
   "data.export",
   "llm.status",
+  "llm.setConsent",
   "llm.saveKey",
   "llm.forgetKey",
   "llm.askHomework",
@@ -226,7 +227,7 @@ export interface ResourceResult {
 }
 
 export interface BridgeError {
-  code: "auth_required" | "bad_request" | "unavailable" | "unknown" | "stale_session";
+  code: "auth_required" | "bad_request" | "consent" | "unavailable" | "unknown" | "stale_session";
   message: string;
 }
 
@@ -273,6 +274,19 @@ export interface DeleteAllResult {
 /** Taille du texte : `SYSTEM` suit le réglage Android, sinon choix explicite. */
 export type TextSizeChoice = "SYSTEM" | "100" | "125" | "150";
 
+/** Décision de consentement IA persistée par le natif (PRV-04). */
+export type AiConsentDecision = "none" | "granted" | "refused" | "withdrawn";
+
+export interface AiConsentResult {
+  ok: boolean;
+  decision?: AiConsentDecision;
+  version?: number;
+  /** Effacements du retrait : `false` = la donnée est encore sur l'appareil. */
+  keyCleared?: boolean;
+  chatCleared?: boolean;
+  message?: string;
+}
+
 export interface TextSizeState {
   size: TextSizeChoice;
   /** Zoom effectif appliqué par la WebView, en pourcentage (50–200). */
@@ -283,6 +297,10 @@ export interface SettingsSnapshot {
   theme: "SYSTEM" | "LIGHT" | "DARK";
   serverHost: string;
   llmConfigured: boolean;
+  /** Décision de consentement IA enregistrée (`none` = jamais demandé). */
+  aiConsent: AiConsentDecision;
+  /** Version du texte/périmètre accepté ; 0 = aucun enregistrement lisible. */
+  aiConsentVersion: number;
   accountCount: number;
   /** Adresse du manuel saisie une fois ("" = aucun manuel). */
   manualUrl: string;

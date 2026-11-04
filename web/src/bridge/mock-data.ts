@@ -467,6 +467,8 @@ export const INITIAL_SETTINGS: SettingsSnapshot = {
   theme: "SYSTEM",
   serverHost: "10.0.2.2:3000",
   llmConfigured: false,
+  aiConsent: "none",
+  aiConsentVersion: 0,
   accountCount: 3,
   manualUrl: "",
   manualConfigured: false,

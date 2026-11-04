@@ -2,7 +2,14 @@
 // et emoji. Aucune règle réseau ici, seulement ce qui peut être dit avant
 // l'écriture.
 
-import type { ManualSaveResult, SettingsSnapshot, SubjectPref, SubjectSaveResult } from "../../bridge/types";
+import type {
+  AiConsentDecision,
+  ManualSaveResult,
+  SettingsSnapshot,
+  SubjectPref,
+  SubjectSaveResult,
+} from "../../bridge/types";
+import { AI_CONSENT_VERSION, aiConsentGranted } from "../assistant/consent";
 
 export type Theme = "SYSTEM" | "LIGHT" | "DARK";
 
@@ -80,7 +87,37 @@ export function assistantStatus(
   configured: boolean | null,
   storageUnavailable: boolean,
   loading = false,
+  consent: AiConsentDecision | null = "granted",
+  consentVersion = AI_CONSENT_VERSION,
 ): AssistantStatus {
+  // Le consentement précède la clé : une clé présente ne rend pas l'IA active
+  // si l'accord manque, a été retiré ou vise une version périmée (PRV-04).
+  if (consent === null) {
+    return loading || configured === null
+      ? { title: "Lecture du consentement…", body: "L’état du consentement IA est en cours de lecture." }
+      : {
+          title: "Consentement IA inconnu",
+          body: "Les réglages n’ont pas pu être lus : on ne sait pas si l’IA est autorisée sur cet appareil.",
+        };
+  }
+  if (!aiConsentGranted(consent, consentVersion)) {
+    if (consent === "refused") {
+      return {
+        title: "Assistant IA désactivé",
+        body: "Tu as refusé le consentement IA : aucun appel n’est possible. Tu peux changer d’avis dans cette section.",
+      };
+    }
+    if (consent === "withdrawn") {
+      return {
+        title: "Consentement retiré",
+        body: "L’assistant est désactivé et la clé a été effacée. Tu peux redonner ton accord dans cette section.",
+      };
+    }
+    return {
+      title: "Consentement IA à donner",
+      body: "L’assistant reste désactivé tant que tu n’as pas accepté l’aperçu des données envoyées.",
+    };
+  }
   if (configured === null) {
     return loading
       ? { title: "Lecture de la clé…", body: "L’état de la clé de l’assistant est en cours de lecture." }

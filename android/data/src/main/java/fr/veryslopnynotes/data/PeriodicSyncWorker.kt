@@ -158,8 +158,8 @@ class PeriodicSyncWorker(
                 teacherChat = FileTeacherChatStore(File(offline, "teacher_chat.json")),
                 prefs = SubjectPrefsRepository(FileSubjectPrefsStore(File(offline, "subject_prefs.json"))),
                 llmKeys = LlmKeys.get(applicationContext),
-                // Le job ne demande jamais DELETE_ALL ; le câblage reste réel.
                 serverStore = ServerStore(applicationContext, CleartextPolicy.FORBID),
+                clearAiConsent = { AiConsentStore(applicationContext).clear() },
             ),
         )
     }

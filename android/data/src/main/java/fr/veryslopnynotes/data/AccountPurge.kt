@@ -41,6 +41,7 @@ enum class AccountDataStore(val id: String, val policy: AccountStorePolicy) {
     READ_STATE("read_state", AccountStorePolicy.PURGED),
     WEBVIEW("webview", AccountStorePolicy.PURGED),
     LLM_KEY("llm_key", AccountStorePolicy.RETAINED),
+    AI_CONSENT("ai_consent", AccountStorePolicy.RETAINED),
     SERVER_URL("server_url", AccountStorePolicy.RETAINED),
     CACHE("cache", AccountStorePolicy.PURGED),
     UI_PREFS("ui_prefs", AccountStorePolicy.RETAINED),
@@ -48,7 +49,7 @@ enum class AccountDataStore(val id: String, val policy: AccountStorePolicy) {
 
     /** Une bascule remplace la session et la liste de comptes ; elle ne les efface pas. */
     fun required(mode: AccountPurgeMode): Boolean = when {
-        this == LLM_KEY || this == SERVER_URL -> mode == AccountPurgeMode.DELETE_ALL
+        this == LLM_KEY || this == SERVER_URL || this == AI_CONSENT -> mode == AccountPurgeMode.DELETE_ALL
         policy == AccountStorePolicy.RETAINED -> false
         this == SESSION || this == ACCOUNTS -> mode != AccountPurgeMode.ACCOUNT_SWITCH
         else -> true
