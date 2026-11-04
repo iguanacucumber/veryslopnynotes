@@ -49,6 +49,9 @@ la section `0.1.0` le jour du tag.
   empreintes, seuils de pause/retrait et suivi d'incident.
 - Installation et mises à jour documentées : Obtainium facultatif depuis les
   releases GitHub, mise à jour manuelle de l'APK et continuité de signature.
+- Migration debug → release documentée : certificats différents, désinstallation
+  obligatoire et données locales effacées, canal bêta réservé aux builds signés
+  en release.
 - Runbooks d'incident : rupture de protocole, mauvaise release, clé exposée et
   incompatibilité d'établissement, avec triage, communication, correctif et
   retrait.
