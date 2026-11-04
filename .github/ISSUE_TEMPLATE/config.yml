@@ -1,5 +1,8 @@
 blank_issues_enabled: true
 contact_links:
+  - name: Support et problèmes connus
+    url: https://github.com/iguanacucumber/veryslopnynotes/blob/main/docs/SUPPORT.md
+    about: Canal unique, délais, diagnostic et issue épinglée [known-issues].
   - name: Signaler une faille de sécurité
     url: https://github.com/iguanacucumber/veryslopnynotes/security/advisories/new
     about: Canal privé ; ne publie jamais une faille exploitable en issue.

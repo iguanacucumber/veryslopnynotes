@@ -226,6 +226,22 @@ export default function HelpScreen() {
           </p>
         </Card>
       </Section>
+
+      <Section id="aide-support" title="Support et problèmes connus">
+        <Card className="card--flat">
+          <p className="help-paragraph">
+            GitHub Issues est le seul canal de support : aucune adresse de
+            courriel n’est publiée. Le processus complet, les délais et les
+            données à ne jamais joindre sont dans <code>docs/SUPPORT.md</code>.
+          </p>
+          <ul className="help-list">
+            <li>Avant d’ouvrir un bug, lis l’issue épinglée <code>[known-issues] vX.Y.Z</code> et <code>docs/COMPATIBILITY.md</code>.</li>
+            <li>Indique la version de l’app, Android, la WebView, l’écran, les étapes et le message exact, sans aucune donnée scolaire.</li>
+            <li>Réglages → Aide → Exporter un diagnostic prépare un fichier local : l’aperçu montre les champs exacts, rien n’est envoyé automatiquement et tu choisis l’application dans le sélecteur Android.</li>
+            <li>Une faille exploitable ou un secret exposé passe par GitHub Security Advisories, jamais par une issue publique.</li>
+          </ul>
+        </Card>
+      </Section>
     </Page>
   );
 }
