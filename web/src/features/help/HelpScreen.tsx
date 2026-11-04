@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { AI_VISION_RETENTION_NOTE } from "../assistant/consent";
 import { Card, Page, Section } from "../../ui/components";
 
 /** Aide statique et hors ligne : aucune lecture du pont, aucun appel réseau. */
@@ -160,7 +161,9 @@ export default function HelpScreen() {
           </p>
           <ul className="help-list">
             <li>La clé n’est jamais envoyée à l’établissement ni à un serveur du projet.</li>
-            <li>OpenRouter facture à l’usage, avec des crédits prépayés (achat minimum de 5 $ au moment de la rédaction) ; le prix dépend du modèle et des jetons envoyés.</li>
+            <li>OpenRouter facture à l’usage, avec des crédits prépayés (achat minimum de 5 $ au moment de la rédaction) ; le prix dépend du modèle et des jetons envoyés. Une photo est un appel facturé comme un autre.</li>
+            <li>{AI_VISION_RETENTION_NOTE}</li>
+            <li>Les demandes texte suivent la politique de ton compte OpenRouter : elles peuvent être conservées ou servir à l’entraînement. L’app ne peut pas garantir leur suppression chez le fournisseur.</li>
             <li>L’app ne connaît pas ton solde et ne peut pas recharger ton compte : gère les crédits sur OpenRouter.</li>
             <li>OpenRouter exige d’avoir au moins 18 ans. Si tu es mineur, un adulte responsable doit ouvrir le compte et gérer la clé ; ne lui emprunte pas sa clé sans son accord.</li>
             <li>Garde la clé secrète : toute personne qui l’a peut consommer tes crédits. En cas de fuite, révoque-la sur OpenRouter et enregistre-en une nouvelle.</li>

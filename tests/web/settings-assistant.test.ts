@@ -118,6 +118,9 @@ describe("réglages — une seule section Assistant (#612)", () => {  const sett
     expect(keyCard).toContain('decideConsent("refused")');
     expect(keyCard).toContain('decideConsent("withdrawn")');
     expect(keyCard).toContain("bridge.setAiConsent");
+    // Coût et rétention sont affichés AVANT l'acceptation.
+    expect(keyCard).toContain("AI_CONSENT_RETENTION_NOTE");
+    expect(keyCard).toContain("AI_CONSENT_COST_NOTE");
     // Le champ de clé n'existe que dans la branche « accord donné ».
     expect(keyCard.indexOf("{consentGranted ? (")).toBeLessThan(keyCard.indexOf('id="llm-key"'));
     expect(keyCard.indexOf('id="llm-key"')).toBeLessThan(keyCard.indexOf("Retirer mon consentement"));

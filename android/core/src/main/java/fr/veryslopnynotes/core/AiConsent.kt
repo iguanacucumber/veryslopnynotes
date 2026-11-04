@@ -12,7 +12,7 @@ package fr.veryslopnynotes.core
  * ajoutée ou modifiée. Une reformulation sans effet sur les données ne change
  * pas la version. Une version inconnue = refus.
  */
-const val AI_CONSENT_VERSION = 2
+const val AI_CONSENT_VERSION = 3
 
 enum class AiConsentDecision(val wire: String) {
     NONE("none"),

@@ -11,23 +11,26 @@ const DATA = join(import.meta.dir, "..", "..", "android/data/src/main/java/fr/ve
 
 const src = (dir: string, file: string) => codeOnly(readFileSync(join(dir, file), "utf8"));
 
-// Catalogue de RÉFÉRENCE en dur (relevé du 2026-10-25, aucun réseau en test) :
+// Catalogue de RÉFÉRENCE en dur (relevé du 2026-11-04, aucun réseau en test) :
 // un modèle doit aussi ACCEPTER les images, sinon chaque photo partait en 400.
-// Pour la rafraîchir : curl -s https://openrouter.ai/api/v1/models | jq -r '.data[].id'
+// Pour la rafraîchir : curl -s https://openrouter.ai/api/v1/models.
 const IMAGE_MODELS = new Set([
-  "dots-studio/dots-3-note-preview:free",
-  "google/gemma-4-31b-it:free",
-  "google/gemma-4-26b-a4b-it:free",
+  "qwen/qwen3-vl-30b-a3b-instruct",
+  "qwen/qwen3-vl-30b-a3b-thinking",
+  "google/gemini-2.5-flash",
 ]);
-const KNOWN_MODELS = [
+const FREE_NON_ZDR_MODELS = [
   "dots-studio/dots-3-note-preview:free",
   "google/gemma-4-31b-it:free",
   "google/gemma-4-26b-a4b-it:free",
-  "google/gemma-4-31b-it",
   "minimax/minimax-m3.1-flash:free",
   "nvidia/nemotron-3-super-120b-a12b:free",
   "nvidia/nemotron-3.5-lightning:free",
   "liquid/lfm-2.5-2.6b:free",
+];
+const KNOWN_MODELS = [
+  "qwen/qwen3-vl-30b-a3b-instruct",
+  "qwen/qwen3-vl-30b-a3b-thinking",
   "google/gemini-3.8-flash",
   "google/gemini-2.5-flash",
 ];
@@ -67,6 +70,16 @@ describe("android LLM — modèle par défaut au catalogue (#359)", () => {
     expect(vision).toMatch(/^[a-z0-9][a-z0-9.-]*\/[a-z0-9][a-z0-9.:-]*$/);
     // Il accepte VRAIMENT les images : un modèle texte seul échoue sur chaque photo.
     expect(IMAGE_MODELS).toContain(vision!);
+    // Payant et ZDR : un suffixe `:free` ouvrait la porte à l'entraînement.
+    expect(vision!).not.toContain(":free");
+  });
+
+  test("l'allowlist exclut les anciens modèles gratuits et non-ZDR", () => {
+    const kotlin = src(DATA, "LlmPolicy.kt");
+    expect(kotlin).not.toMatch(/PINNED_(?:TEXT|VISION)_MODEL\s*=\s*"[^"]*:free"/);
+    for (const id of FREE_NON_ZDR_MODELS) {
+      expect(kotlin).not.toContain(id);
+    }
   });
 
   test("la liste de référence est elle-même plausible (tripwire)", () => {

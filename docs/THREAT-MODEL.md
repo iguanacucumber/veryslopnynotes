@@ -149,10 +149,12 @@ contenu est ensuite traité par l'IA ou rendu dans la WebView.
 **Risque résiduel** : les délimiteurs et la validation rendent l'injection
 coûteuse, pas impossible. Un texte hostile peut encore orienter le contenu
 pédagogique de la réponse ou produire une réponse trompeuse bien formée. Les
-données nécessaires à l'IA (question, cours, pièces jointes) sont envoyées à
-OpenRouter : le fournisseur les voit, même si la clé et la session restent
-locales. Un parseur PDF/HTML ou un navigateur a toujours une surface
-d'exécution ; les bornes réduisent l'amplitude, pas une faille zéro-day. Une
+données nécessaires à l'IA (question, cours, pièces jointes, photos) sont
+envoyées à OpenRouter : le fournisseur les voit, même si la clé et la session
+restent locales. Les photos passent par un endpoint ZDR sans collecte imposé
+par la requête ; le texte dépend de la politique du compte OpenRouter. Un
+parseur PDF/HTML ou un navigateur a toujours une surface d'exécution ; les
+bornes réduisent l'amplitude, pas une faille zéro-day. Une
 pièce jointe ouverte dans un lecteur externe via le `FileProvider` sort du
 contrôle de l'app.
 
