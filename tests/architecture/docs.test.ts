@@ -377,7 +377,8 @@ describe("registre d'invariants", () => {
       fichier: "Makefile",
       sousBudget: true,
     });
-    expect({ fichier: "README.md", sousBudget: README.length <= 5_500 }).toEqual({
+    // +800 pour l'installation et les mises à jour Obtainium (#973).
+    expect({ fichier: "README.md", sousBudget: README.length <= 6_300 }).toEqual({
       fichier: "README.md",
       sousBudget: true,
     });

@@ -41,6 +41,8 @@ la section `0.1.0` le jour du tag.
   préchargement) et budget gzip vérifié à chaque build.
 - Santé de release documentée sans télémétrie : signaux store, CI, issues et
   empreintes, seuils de pause/retrait et suivi d'incident.
+- Installation et mises à jour documentées : Obtainium facultatif depuis les
+  releases GitHub, mise à jour manuelle de l'APK et continuité de signature.
 
 ### Sécurité
 
