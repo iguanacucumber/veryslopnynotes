@@ -12,6 +12,14 @@ un changement se fait dans l'interface ou par `gh api`, puis ici.
 350 caractères maximum côté GitHub ; celle-ci reste courte pour être lisible
 dans les résultats de recherche.
 
+## Licence
+
+GitHub détecte « GNU General Public License v3.0 » depuis
+[`LICENSE`](../LICENSE) ; la licence exacte du dépôt est `GPL-3.0-only`
+([ADR-008](adr/008-relicense-gpl.md)). `package.json` porte le même
+identifiant SPDX et son champ `repository` pointe le remote GitHub réel, sans
+URL inventée ni `homepage`.
+
 ## Sujets
 
 - `android`
@@ -74,14 +82,14 @@ et laisse `make check-fast` vert. Une issue = une branche = une PR.
 Depuis la racine du dépôt, avec un token qui lit les métadonnées :
 
 ```bash
-gh repo view --json description,homepageUrl,repositoryTopics
+gh repo view --json description,homepageUrl,repositoryTopics,licenseInfo
 gh api repos/iguanacucumber/veryslopnynotes/topics
 gh issue list --state open --label "good first issue" --limit 20 \
   --json number,title,labels
 ```
 
-Attendu : la description ci-dessus, `homepageUrl: ""`, les 11 sujets, et
-exactement cinq issues ouvertes portant le label.
+Attendu : la description ci-dessus, `homepageUrl: ""`, la licence GPL-3.0, les
+11 sujets, et exactement cinq issues ouvertes portant le label.
 
 Les commandes d'écriture, si le token le permet :
 
