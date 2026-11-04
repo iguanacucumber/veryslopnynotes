@@ -155,6 +155,14 @@ describe("workflow apk-size (#974)", () => {
     expect(WORKFLOW).toContain("bun test tests/unit/apk-size-budget.test.ts");
   });
 
+  test("un commit antérieur au budget retombe sur la baseline de main", () => {
+    expect(WORKFLOW).toContain("Repli budget de main");
+    expect(WORKFLOW).toContain("contents/apk-size-baseline.json?ref=$DEFAULT_BRANCH");
+    expect(WORKFLOW).toContain("contents/agents/runtime/apk-size.ts?ref=$DEFAULT_BRANCH");
+    // Un seul fichier présent = suppression, pas ancienneté : échec explicite.
+    expect(WORKFLOW).toContain("Budget APK incomplet");
+  });
+
   test("permissions read-only et actions épinglées", () => {
     expect(WORKFLOW).toMatch(/^permissions:\n {2}contents: read\n {2}actions: read$/m);
     expect(WORKFLOW).not.toMatch(/^\s+\w[\w-]*:\s*write\s*$/m);
