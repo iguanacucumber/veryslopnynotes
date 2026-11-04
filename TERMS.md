@@ -74,7 +74,8 @@ gère le compte et la clé.
 Avant d’enregistrer une clé, l’app demande une attestation explicite : avoir
 18 ans ou plus, ou disposer de l’autorisation de son représentant légal avec un
 compte OpenRouter géré par un adulte. L’app ne vérifie pas cette attestation ;
-sans elle, aucun appel IA n’est possible. Ce texte attend encore une revue
+sans elle, aucun appel IA n’est possible. La règle est consignée dans
+[ADR-009](docs/adr/009-ai-eligibility.md) ; ce texte attend encore une revue
 juridique.
 
 ## 6. Licence du logiciel

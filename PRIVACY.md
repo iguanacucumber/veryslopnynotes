@@ -376,8 +376,10 @@ un conseil et, pour certains, avec l’établissement.
 5. **Rôle de GitHub.** DPA, sous-traitance, transferts et durée de conservation
    des issues, pull requests et logs de release.
 6. **Mineurs.** L’attestation 18+ ou autorisation parentale est requise pour
-   l’IA (version 4). Sa validation juridique, la règle d’éligibilité et la
-   mention d’âge sur le store restent ouvertes (DEC-04, issue
+   l’IA (version 4) ; la règle et la copie sont consignées dans
+   [ADR-009](docs/adr/009-ai-eligibility.md). Le conseil doit encore trancher
+   entre 18 ans stricts et l’alternative d’autorisation parentale, et valider
+   la mention d’âge sur le store (DEC-04, issue
    [#829](https://github.com/iguanacucumber/veryslopnynotes/issues/829)).
 7. **Registre et délai des demandes.** Format, durée et responsable du registre
    minimal des demandes, sans donnée scolaire.
