@@ -124,6 +124,9 @@ val buildWebUi = tasks.register<Exec>("buildWebUi") {
     // Le lockfile décide des versions RÉSOLUES : sans cette entrée, Gradle dit
     // UP-TO-DATE et l'APK embarque un bundle périmé.
     inputs.file(rootProject.projectDir.parentFile.resolve("bun.lock"))
+    // Copié dans les assets par build-web.ts : une notice modifiée doit
+    // refaire le bundle, sinon l'APK garde l'ancien inventaire.
+    inputs.file(rootProject.projectDir.parentFile.resolve("THIRD_PARTY_NOTICES.md"))
     outputs.dir(projectDir.resolve("src/main/assets/web"))
 }
 tasks.named("preBuild") { dependsOn(buildWebUi) }

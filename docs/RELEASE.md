@@ -119,7 +119,8 @@ artefact.
    l'affiche dans la WebView locale (ADR-004). Les notices de licence tierces
    (`web/public/licenses/` : GPL de l'app, MIT, Apache-2.0, SN Pro OFL,
    Papicons MIT) sont copiées dans `assets/web/licenses/` et voyagent donc
-   avec l'APK ; l'inventaire versionné est `THIRD_PARTY_NOTICES.md`.
+   avec l'APK ; l'inventaire versionné `THIRD_PARTY_NOTICES.md` est copié dans
+   `assets/web/THIRD_PARTY_NOTICES.md`.
    Produit un APK signé :
    `android/app/build/outputs/apk/release/app-release.apk` (sideload).
 
@@ -134,6 +135,16 @@ artefact.
 2. Vérifier : `apksigner verify --print-certs <apk>`, empreinte égale à celle
    publiée ([SIGNING.md](SIGNING.md)), aucune clé/secret dans l'artefact,
    `git status` propre (APK ignoré `*.apk`).
+
+La CI `release-artifact` rejoue ces contrôles sur l'APK :
+`agents/runtime/check-release-artifact.ts` refuse le certificat debug, une
+notice absente ou altérée (`assets/web/THIRD_PARTY_NOTICES.md` et
+`assets/web/licenses/`), un secret dans les assets ou les dex, une permission
+hors allowlist, et une version incohérente entre le tag, la version du paquet
+Android (`agents/runtime/android-version.ts`, qui fixe `versionName` et
+`versionCode`) et le manifeste de l'APK. Le tag d'une release porte donc
+exactement la version du paquet (`v0.1.0` pour `0.1.0`,
+`v0.1.0-beta.1` pour `0.1.0-beta.1`).
 
 ## Budget de taille APK (#974)
 

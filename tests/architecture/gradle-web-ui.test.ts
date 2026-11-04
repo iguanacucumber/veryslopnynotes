@@ -93,6 +93,7 @@ function harness(sdk: string): string {
     }),
   );
   writeFileSync(join(dir, "bun.lock"), '{"lock":"v1"}\n');
+  writeFileSync(join(dir, "THIRD_PARTY_NOTICES.md"), "# Notices de test\n");
   return dir;
 }
 

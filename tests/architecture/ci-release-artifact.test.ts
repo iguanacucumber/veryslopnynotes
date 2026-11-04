@@ -10,6 +10,7 @@ const ROOT = join(import.meta.dir, "..", "..");
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 const WORKFLOW = read(".github/workflows/release-artifact.yml");
 const BUILD = read("docs/architecture/BUILD.md");
+const SCRIPT = read("agents/runtime/check-release-artifact.ts");
 
 function step(name: string): string {
   const start = WORKFLOW.indexOf(`- name: ${name}`);
@@ -18,7 +19,7 @@ function step(name: string): string {
   return WORKFLOW.slice(start, next < 0 ? WORKFLOW.length : next);
 }
 
-describe("CI : artefact release (#883)", () => {
+describe("CI : artefact release (#883, #928)", () => {
   test("le workflow est réutilisable et sans secret", () => {
     expect(WORKFLOW).toMatch(/^ {2}workflow_call:$/m);
     expect(WORKFLOW).not.toContain("secrets.");
@@ -46,10 +47,23 @@ describe("CI : artefact release (#883)", () => {
     expect(step("APK release")).toContain("assembleRelease");
     const verify = step("Vérification signature et mapping");
     expect(verify).toContain('"$apksigner" verify --print-certs');
-    // Le repli debug du build passe sans erreur : il doit être REFUSÉ ici.
-    expect(verify).toContain("CN=Android Debug");
     expect(verify).toContain("certificate SHA-256 digest");
     expect(verify).toContain('"$signataire" != "$attendue"');
+  });
+
+  test("les assertions de contenu sont déléguées au script, pas au YAML", () => {
+    const assertions = step("Assertions artefact");
+    expect(assertions).toContain("agents/runtime/check-release-artifact.ts");
+    expect(assertions).toContain("--apk android/app/build/outputs/apk/release/app-release.apk");
+    expect(assertions).toContain('--certs "$RUNNER_TEMP/apksigner-certs.txt"');
+    // Le repli debug du build passe sans erreur : le script doit le REFUSER.
+    expect(SCRIPT).toContain("CN=Android Debug");
+    expect(SCRIPT).toContain("notice absente de l'APK");
+    expect(SCRIPT).toContain("secret potentiel");
+    expect(SCRIPT).toContain("permission inattendue");
+    expect(SCRIPT).toContain("tag");
+    // Un tag pousse le même build : la version est alors croisée avec l'APK.
+    expect(WORKFLOW).toMatch(/^ {4}tags: \["v\*"\]$/m);
   });
 
   test("R8 a bien produit mapping et seeds", () => {

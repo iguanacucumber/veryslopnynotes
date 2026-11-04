@@ -53,6 +53,7 @@ const WEB_INPUTS = [
   "web/tsconfig.json",
   "package.json",
   "bun.lock",
+  "THIRD_PARTY_NOTICES.md",
 ] as const;
 
 /** Entrées attendues absentes de la déclaration : vide = Gradle voit le bundle. */

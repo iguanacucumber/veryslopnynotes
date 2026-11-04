@@ -1,9 +1,13 @@
-# Construit l'APK release en CI et prouve son intégrité (#883).
+# Construit l'APK release en CI et prouve son intégrité (#883, #928).
 #
 # La clé de signature est ÉPHÉMÈRE : générée dans le job, hors du workspace,
 # jamais commitée ni publiée. Elle ne remplace pas la clé de distribution : elle
 # prouve que la release compile, que R8 produit son mapping et que l'APK n'est
 # PAS signé debug (le repli silencieux du build sans STORE_FILE).
+#
+# L'APK est ensuite vérifié par `check-release-artifact.ts` : certificat debug,
+# notices GPL/tierces, secrets embarqués, allowlist de permissions et version
+# tag/package/APK. Le tag `v*` déclenche le même build pour croiser le tag.
 #
 # `workflow_call` : un futur job de tag réutilise CE fichier au lieu de recopier
 # le build. L'artefact `release-apk` (APK + mapping + seeds, 7 jours) reste
@@ -14,6 +18,7 @@ on:
   pull_request:
   push:
     branches: [main]
+    tags: ["v*"]
   workflow_dispatch:
   workflow_call:
 
@@ -101,8 +106,8 @@ jobs:
           ./gradlew --console=plain --no-daemon assembleRelease
 
       # Deux verdicts distincts : la signature est VALIDE, puis elle vient bien
-      # de la clé éphémère. Le second attrape le repli debug du build, qui est
-      # une release installable mais NON publiable.
+      # de la clé éphémère. Le certificat debug est refusé par le script
+      # d'assertions, avec les notices, secrets, permissions et versions.
       - name: Vérification signature et mapping
         run: |
           set -euo pipefail
@@ -113,10 +118,6 @@ jobs:
           [ -x "$apksigner" ] || { echo "::error title=apksigner absent::Aucun build-tools dans $sdk."; exit 1; }
           certs="$RUNNER_TEMP/apksigner-certs.txt"
           "$apksigner" verify --print-certs "$apk" | tee "$certs"
-          if grep -q 'CN=Android Debug' "$certs"; then
-            echo "::error title=APK signé debug::L'APK release porte le certificat debug Android (CN=Android Debug) : la clé éphémère n'a pas été utilisée. Artefact refusé."
-            exit 1
-          fi
           norm() { tr -d ':' | tr '[:upper:]' '[:lower:]'; }
           signataire="$(sed -n 's/^.*certificate SHA-256 digest: //p' "$certs" | head -1 | norm)"
           attendue="$(keytool -list -v -keystore "$STORE_FILE" -alias "$KEY_ALIAS" -storepass "$STORE_PASSWORD" \
@@ -134,6 +135,15 @@ jobs:
             exit 1
           }
           echo "APK signé par la clé éphémère ; mapping et seeds R8 présents."
+
+      # Un seul script pour les cinq assertions de contenu : le YAML reste une
+      # suite d'appels vérifiables, pas une réimplémentation.
+      - name: Assertions artefact
+        run: |
+          set -euo pipefail
+          bun run agents/runtime/check-release-artifact.ts \
+            --apk android/app/build/outputs/apk/release/app-release.apk \
+            --certs "$RUNNER_TEMP/apksigner-certs.txt"
 
       - name: APK et mapping
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

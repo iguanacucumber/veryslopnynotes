@@ -395,8 +395,9 @@ describe("registre d'invariants", () => {
       // +600 pour la politique anti-flake (#924), qui appartient au build CI.
       // +1 150 pour la mesure, la marge et le seuil de couverture (#895).
       // +1 450 smoke émulateur (#891), +350 axe/captures (#970), +1 100 tests
-      // instrumentés (#887). Marge : 8 700.
-      ["docs/architecture/BUILD.md", 8_700],
+      // instrumentés (#887), +800 assertions artefact release (#928).
+      // Marge : 9 500.
+      ["docs/architecture/BUILD.md", 9_500],
       // +1 000 mort du rendu (#866), +580 FLAG_SECURE (#898), +600 réseau
       // local (#896). Marge : 12 000.
       ["android/README.md", 12_000],
@@ -407,8 +408,8 @@ describe("registre d'invariants", () => {
       ["shared/contracts/README.md", 1_000],
       // +500 loopback/digest (#921), +900 deep links (SEC-10), +200 démo (#873),
       // +900 version dérivée des tags (#927), +900 budget de taille APK (#974),
-      // +1 400 canal bêta (#936).
-      ["docs/RELEASE.md", 11_800],
+      // +1 400 canal bêta (#936), +800 assertions artefact release (#928).
+      ["docs/RELEASE.md", 12_600],
       ["docs/HUMAN_INPUTS.md", 4_500],
       // +500 pour la suppression totale et le compte élève (#853/#832),
       // +750 pour le consentement IA versionné (#860),
