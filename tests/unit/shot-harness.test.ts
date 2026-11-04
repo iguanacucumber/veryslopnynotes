@@ -1,7 +1,12 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+// Chaque spawn du vrai shot.sh coûte ~0,3 s à vide et bien plus quand le
+// gate parallèle sature les cœurs : le défaut Bun de 5 s n'est pas un budget
+// de charge. 15 s couvre le pire mesuré sans masquer un vrai blocage.
+setDefaultTimeout(15_000);
 
 // Deux listes doivent rester d'accord : WEB_ROUTES et les hôtes du manifest DEBUG.
 const ROOT = join(import.meta.dir, "..", "..");
