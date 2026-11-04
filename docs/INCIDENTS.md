@@ -137,7 +137,7 @@ relayer par le serveur, scraper Pronote depuis le serveur (lois 1 et 2).
 Pronote n'est pas un artefact fautif. Retirer la version si elle est la cause
 (gate rouge, régression, empreinte fausse) selon
 [`RELEASE-HEALTH.md`](RELEASE-HEALTH.md) : arrêt du déploiement Play, puis
-correctif `versionCode` supérieur ; en sideload, retirer APK/AAB et empreintes et
+correctif `versionCode` supérieur ; en sideload, retirer l'APK et ses empreintes et
 republier la dernière version bonne. Si aucun correctif n'est possible, publier
 la limitation dans [`COMPATIBILITY.md`](COMPATIBILITY.md), garder l'issue ouverte
 comme `known-issues` et clore l'incident avec la preuve, pas avec un faux
@@ -178,7 +178,7 @@ absence de secret. Serveur : redéployer le digest précédent épinglé dans
 
 **Retrait ou retour arrière.** Play : arrêt du déploiement, pas de retour à un
 `versionCode` inférieur ; le correctif part avec un code supérieur.
-GitHub/sideload : marquer la release « retirée », retirer APK/AAB et empreintes,
+GitHub/sideload : marquer la release « retirée », retirer l'APK et ses empreintes,
 republier la dernière version connue bonne avec ses propres empreintes. Serveur :
 digest précédent. Un artefact non publié n'est pas retiré : il est jeté. Après
 retrait, revue dans les 7 jours et reprise aux quatre preuves de
@@ -232,7 +232,7 @@ relire les runs et artefacts récents, rejouer `make check`. Corriger la cause
 le correctif, rescanner l'historique.
 
 **Retrait ou retour arrière.** Retirer tout artefact publié qui contient la clé
-(APK/AAB, image, archive) : arrêt Play, page « retiré », correctif `versionCode`
+(APK, image, archive) : page « retiré », correctif `versionCode`
 supérieur. Une clé LLM d'un seul appareil ne justifie pas un retrait de release :
 rotation et clôture. Une clé de signature compromise ne se répare pas par un
 simple retrait : les installations font confiance à l'ancienne clé ; l'avis et la

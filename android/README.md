@@ -213,7 +213,7 @@ bruyamment plutôt que d'embarquer une UI absente.
 bun run build:web   # optionnel : build seul de l'interface
 make buildDebugApk
 make updateApkToPhone   # construit l'APK debug et l'installe (données conservées)
-make buildRelApk   # APK + AAB release, signés (custom si STORE_FILE, sinon debug #297)
+make buildRelApk   # APK release signé (custom si STORE_FILE, sinon debug #297)
 ```
 
 `make check` compile réellement Kotlin si JDK 17–21 et SDK Android 37 sont

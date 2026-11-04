@@ -160,16 +160,15 @@ updateApkToPhone: buildDebugApk ## installe l'APK debug sur le téléphone branc
 	echo "updateApkToPhone : installation sur $$serial (données conservées)…"; \
 	adb -s "$$serial" install -r android/app/build/outputs/apk/debug/app-debug.apk
 
-buildRelApk: ## APK + AAB release (JDK/SDK requis)
+buildRelApk: ## APK release (JDK/SDK requis)
 	@$(ANDROID_ENV); \
 	jdk=$$(android_jdk); sdk=$$(android_sdk); \
 	if [ -z "$$jdk" ] || [ -z "$$sdk" ]; then \
 	  echo "buildRelApk : outillage absent (JDK=$${jdk:-aucun}, SDK=$${sdk:-aucun})."; \
 	  android_toolchain_hint; exit 1; \
 	fi; \
-	cd android && JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain assembleRelease bundleRelease && \
-	echo "APK release : android/app/build/outputs/apk/release/ (signé custom si STORE_FILE présent, sinon signé debug #297)" && \
-	echo "AAB release : android/app/build/outputs/bundle/release/app-release.aab (Play : upload key custom recommandée)"
+	cd android && JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain assembleRelease && \
+	echo "APK release : android/app/build/outputs/apk/release/ (signé custom si STORE_FILE présent, sinon signé debug #297)"
 
 # HTTPS sans auth (I8) ; boucle locale par défaut.
 runServer: ## serveur scraper HTTPS local
