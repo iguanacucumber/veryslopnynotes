@@ -201,7 +201,9 @@ future finale) ; une section `## [X.Y.Z-beta.N]` est utilisée en priorité si
 elle existe. Numéroter les bêtas dans l'ordre : `versionCode` croît, et la
 finale `X.Y.Z` s'installe par-dessus toutes ses bêtas. Une bêta ne se
 « downgrade » pas : réinstaller une version antérieure exige une
-désinstallation, donc la perte des données locales.
+désinstallation, donc la perte des données locales. Le parcours participant
+(invitation, vérification, retour, sortie vers la finale) est dans
+[BETA.md](BETA.md).
 
 Secrets `release` : `RELEASE_KEYSTORE_BASE64` (PKCS12 base64),
 `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`. Absent

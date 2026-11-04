@@ -85,6 +85,10 @@ la section `0.1.0` le jour du tag.
   interdiction de déroger un `tier:L`, la sécurité, une perte de données ou une
   revendication de confidentialité ; propositions `to-waive` marquées non
   approuvées et blocs de signature vides (#972).
+- Bêta privée : kit participant (`docs/BETA.md`) pour rejoindre une pré-release
+  `vX.Y.Z-beta.N`, vérifier l'APK signé, mettre à jour vers la finale, donner un
+  retour sans donnée scolaire et suivre le triage `known-issues` ; modèle
+  d'issue « Retour bêta » (#969).
 
 ### Modifié
 
