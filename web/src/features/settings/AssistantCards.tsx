@@ -6,29 +6,45 @@ import { useApp } from "../../ui/AppContext";
 import { Card } from "../../ui/components";
 import { Dialog } from "../../ui/Dialog";
 import {
+  AI_AGE_ATTESTATION_REQUIRED,
   AI_CONSENT_COST_NOTE,
   AI_CONSENT_ITEMS,
   AI_CONSENT_REQUIRED_MESSAGE,
   AI_CONSENT_RETENTION_NOTE,
+  AI_CONSENT_VERSION,
   aiConsentGranted,
   aiConsentNeedsReconsent,
 } from "../assistant/consent";
 import { AI_MODEL_NOTE } from "../assistant/notices";
+import { AgeAttestation } from "./AgeAttestation";
 import { AssistantOverviewCard } from "./AssistantOverviewCard";
 import { actionMessage } from "./action";
 import { MAX_API_KEY_CHARS, llmSaveError } from "./model";
 
 type ConsentAction = "granted" | "refused" | "withdrawn";
 
-function consentHeading(decision: AiConsentDecision | null, loading: boolean, version: number): string {
+function consentHeading(
+  decision: AiConsentDecision | null,
+  loading: boolean,
+  version: number,
+  ageAttested: boolean,
+): string {
   if (decision === null) return loading ? "Lecture du consentement IA…" : "Consentement IA non lu";
   if (decision === "refused") return "Assistant IA désactivé";
   if (decision === "withdrawn") return "Consentement retiré";
-  if (aiConsentNeedsReconsent(decision, version)) return "Consentement IA à renouveler";
+  if (decision === "granted" && version === AI_CONSENT_VERSION && !ageAttested) {
+    return "Attestation d’âge à confirmer";
+  }
+  if (aiConsentNeedsReconsent(decision, version, ageAttested)) return "Consentement IA à renouveler";
   return "Avant d’activer l’assistant IA";
 }
 
-function consentBody(decision: AiConsentDecision | null, loading: boolean, version: number): string {
+function consentBody(
+  decision: AiConsentDecision | null,
+  loading: boolean,
+  version: number,
+  ageAttested: boolean,
+): string {
   if (decision === null) {
     return loading
       ? "L’état du consentement IA est en cours de lecture."
@@ -37,10 +53,13 @@ function consentBody(decision: AiConsentDecision | null, loading: boolean, versi
   if (decision === "refused" || decision === "withdrawn") {
     return "Ton choix est enregistré sur cet appareil : aucun appel IA n’est possible tant que tu n’acceptes pas. Tu peux revenir sur ce choix à tout moment.";
   }
-  if (aiConsentNeedsReconsent(decision, version)) {
-    return "Le texte ou le périmètre de l’accord a changé depuis ta dernière acceptation. Ton ancien accord n’est pas réutilisé : l’assistant reste désactivé tant que tu n’as pas relu l’aperçu et accepté à nouveau.";
+  if (decision === "granted" && version === AI_CONSENT_VERSION && !ageAttested) {
+    return "Ton accord ne comporte pas encore l’attestation d’âge ou d’autorisation parentale. L’assistant reste désactivé tant que tu ne la confirmes pas et n’acceptes pas à nouveau.";
   }
-  return "L’assistant est facultatif et reste désactivé tant que tu n’as pas accepté. Voici exactement ce qui quitte l’appareil quand tu l’utilises.";
+  if (aiConsentNeedsReconsent(decision, version, ageAttested)) {
+    return "Le texte, le périmètre ou l’attestation de l’accord ont changé depuis ta dernière acceptation. Ton ancien accord n’est pas réutilisé : l’assistant reste désactivé tant que tu n’as pas relu l’aperçu, confirmé l’attestation et accepté à nouveau.";
+  }
+  return "L’assistant est facultatif et reste désactivé tant que tu n’as pas confirmé l’attestation et accepté. Voici exactement ce qui quitte l’appareil quand tu l’utilises.";
 }
 
 export function AssistantCards({ snapshot, loading }: { snapshot: SettingsSnapshot | null; loading: boolean }) {
@@ -49,6 +68,9 @@ export function AssistantCards({ snapshot, loading }: { snapshot: SettingsSnapsh
   const [llmConfigured, setLlmConfigured] = useState<boolean | null>(null);
   const [consent, setConsent] = useState<AiConsentDecision | null>(null);
   const [consentVersion, setConsentVersion] = useState(0);
+  const [ageAttested, setAgeAttested] = useState(false);
+  const [attestationChecked, setAttestationChecked] = useState(false);
+  const [attestationError, setAttestationError] = useState("");
   const [consentError, setConsentError] = useState("");
   const [decidingConsent, setDecidingConsent] = useState<ConsentAction | "">("");
   const [withdrawAsk, setWithdrawAsk] = useState(false);
@@ -64,18 +86,29 @@ export function AssistantCards({ snapshot, loading }: { snapshot: SettingsSnapsh
     setLlmConfigured(snapshot.llmConfigured === true);
     setConsent(snapshot.aiConsent ?? "none");
     setConsentVersion(snapshot.aiConsentVersion ?? 0);
+    setAgeAttested(snapshot.aiAgeAttested === true);
   }, [snapshot]);
 
-  const consentGranted = consent !== null && aiConsentGranted(consent, consentVersion);
+  const consentGranted =
+    consent !== null && aiConsentGranted(consent, consentVersion, ageAttested);
 
   async function decideConsent(decision: ConsentAction): Promise<void> {
+    if (decision === "granted" && !attestationChecked) {
+      setAttestationError(AI_AGE_ATTESTATION_REQUIRED);
+      return;
+    }
     setConsentError("");
+    setAttestationError("");
     setDecidingConsent(decision);
     try {
-      const response = await bridge.setAiConsent(decision);
+      const response = await bridge.setAiConsent(
+        decision,
+        decision === "granted" && attestationChecked,
+      );
       if (response.decision) {
         setConsent(response.decision);
         setConsentVersion(response.version ?? 0);
+        setAgeAttested(response.ageAttested === true);
       }
       if (!response.ok) {
         setConsentError(
@@ -88,10 +121,16 @@ export function AssistantCards({ snapshot, loading }: { snapshot: SettingsSnapsh
         setLlmKey("");
         setKeyVisible(false);
         setWithdrawAsk(false);
-        notify("Consentement retiré : clé et fil du professeur effacés.");
+        setAgeAttested(false);
+        setAttestationChecked(false);
+        notify("Consentement et attestation retirés : clé et fil du professeur effacés.");
       } else if (decision === "granted") {
-        notify("Consentement IA enregistré.");
+        setAgeAttested(true);
+        setAttestationChecked(true);
+        notify("Consentement et attestation IA enregistrés.");
       } else {
+        setAgeAttested(false);
+        setAttestationChecked(false);
         notify("Assistant IA désactivé.");
       }
     } catch (error) {
@@ -155,12 +194,17 @@ export function AssistantCards({ snapshot, loading }: { snapshot: SettingsSnapsh
         loading={loading}
         consent={consent}
         consentVersion={consentVersion}
+        ageAttested={ageAttested}
       />
 
       {!consentGranted ? (
         <Card className="card--flat assistant-key ai">
-          <strong className="assistant-key__title">{consentHeading(consent, loading, consentVersion)}</strong>
-          <p className="assistant-key__body">{consentBody(consent, loading, consentVersion)}</p>
+          <strong className="assistant-key__title">
+            {consentHeading(consent, loading, consentVersion, ageAttested)}
+          </strong>
+          <p className="assistant-key__body">
+            {consentBody(consent, loading, consentVersion, ageAttested)}
+          </p>
           <ul className="assistant-consent__list">
             {AI_CONSENT_ITEMS.map((item) => (
               <li key={item.key}>
@@ -170,6 +214,15 @@ export function AssistantCards({ snapshot, loading }: { snapshot: SettingsSnapsh
           </ul>
           <p className="tiny muted">{AI_CONSENT_RETENTION_NOTE}</p>
           <p className="tiny muted">{AI_CONSENT_COST_NOTE}</p>
+          <AgeAttestation
+            checked={attestationChecked}
+            error={attestationError}
+            disabled={loading || decidingConsent !== ""}
+            onChange={(checked) => {
+              setAttestationChecked(checked);
+              if (attestationError) setAttestationError("");
+            }}
+          />
           {consentError ? (
             <p className="tiny" role="alert" style={{ color: "var(--danger-ink)", margin: "6px 0 0" }}>
               {consentError}
@@ -187,7 +240,7 @@ export function AssistantCards({ snapshot, loading }: { snapshot: SettingsSnapsh
             <button
               type="button"
               className="btn btn--small"
-              disabled={loading || decidingConsent !== ""}
+              disabled={loading || decidingConsent !== "" || !attestationChecked}
               onClick={() => void decideConsent("granted")}
             >
               {decidingConsent === "granted" ? "Enregistrement…" : "J’accepte et j’active l’assistant"}
@@ -202,6 +255,9 @@ export function AssistantCards({ snapshot, loading }: { snapshot: SettingsSnapsh
           <p className="assistant-key__body">
             L’assistant utilise ton compte OpenRouter. La clé est enregistrée sur cet appareil ;
             elle part directement au fournisseur avec chaque demande.
+          </p>
+          <p className="tiny muted">
+            Ton attestation d’âge ou d’autorisation parentale est enregistrée avec ce consentement.
           </p>
           <p className="tiny muted">{AI_MODEL_NOTE}</p>
           <label className="assistant-key__label" htmlFor="llm-key">
@@ -317,9 +373,9 @@ export function AssistantCards({ snapshot, loading }: { snapshot: SettingsSnapsh
 
       <Dialog
         open={withdrawAsk}
-        title="Retirer le consentement IA ?"
+        title="Retirer le consentement et l’attestation IA ?"
         role="alertdialog"
-        description="L’assistant sera désactivé. Ta clé OpenRouter et le fil du professeur IA seront effacés. Tes cours, tes fiches et le manuel enregistré restent sur cet appareil."
+        description="L’assistant sera désactivé. Ton attestation d’âge ou d’autorisation parentale est retirée avec ton consentement. Ta clé OpenRouter et le fil du professeur IA seront effacés. Tes cours, tes fiches et le manuel enregistré restent sur cet appareil."
         busy={decidingConsent === "withdrawn"}
         onClose={() => setWithdrawAsk(false)}
         actions={

@@ -12,16 +12,25 @@ export function AssistantOverviewCard({
   loading,
   consent = "granted",
   consentVersion = AI_CONSENT_VERSION,
+  ageAttested = false,
 }: {
   /** `null` = état non lu (échec du pont), jamais « pas de clé ». */
   configured: boolean | null;
   loading: boolean;
   consent?: AiConsentDecision | null;
   consentVersion?: number;
+  ageAttested?: boolean;
 }) {
   const { storageUnavailable } = useApp();
   const navigate = useViewNavigate();
-  const status = assistantStatus(configured, storageUnavailable, loading, consent, consentVersion);
+  const status = assistantStatus(
+    configured,
+    storageUnavailable,
+    loading,
+    consent,
+    consentVersion,
+    ageAttested,
+  );
   return (
     <Card className="card--flat assistant-overview ai">
       <div className="assistant-overview__head">

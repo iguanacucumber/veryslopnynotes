@@ -354,8 +354,8 @@ export const bridge = {
   shareDiagnostic: () => call<DiagnosticShareResult>("diagnostics.share"),
 
   llmStatus: () => call<{ configured: boolean }>("llm.status"),
-  setAiConsent: (decision: "granted" | "refused" | "withdrawn") =>
-    call<AiConsentResult>("llm.setConsent", { decision }),
+  setAiConsent: (decision: "granted" | "refused" | "withdrawn", ageAttested = false) =>
+    call<AiConsentResult>("llm.setConsent", { decision, ageAttested }),
   saveLlmKey: (key: string) => call<{ ok: boolean; message?: string }>("llm.saveKey", { key }),
   forgetLlmKey: () => call<{ ok: true }>("llm.forgetKey"),
   askHomework: (

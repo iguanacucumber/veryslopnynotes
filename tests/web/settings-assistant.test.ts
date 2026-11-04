@@ -47,7 +47,7 @@ describe("réglages — une seule section Assistant (#612)", () => {  const sett
     expect(keyCard).toContain('id="llm-key"');
     expect(manual).toContain('id="manual-url"');
     expect(manual).not.toContain('id="server-host"');
-    expect(overview).toContain("assistantStatus(configured");
+    expect(overview).toContain("assistantStatus(");
     expect(overview).toContain("configured: boolean | null");
 
     const advanced = settings.slice(settings.indexOf("<AdvancedSection"));
@@ -69,12 +69,13 @@ describe("réglages — une seule section Assistant (#612)", () => {  const sett
 
   test("un instantané en erreur n'est ni « Aucune clé » ni des valeurs lues (I14)", () => {
     // `null` = instantané non lu : le titre ne prétend rien sur la clé.
-    expect(assistantStatus(null, false, false).title).not.toBe("Aucune clé");
-    expect(assistantStatus(null, false, false).title).toContain("inconnu");
-    expect(assistantStatus(null, false, true).title).toContain("Lecture");
+    const granted = ["granted", AI_CONSENT_VERSION, true] as const;
+    expect(assistantStatus(null, false, false, ...granted).title).not.toBe("Aucune clé");
+    expect(assistantStatus(null, false, false, ...granted).title).toContain("inconnu");
+    expect(assistantStatus(null, false, true, ...granted).title).toContain("Lecture");
     // Seuls les états LUS disent « aucune clé » ou « actif ».
-    expect(assistantStatus(false, false).title).toBe("Aucune clé");
-    expect(assistantStatus(true, false).title).toBe("Assistant actif");
+    expect(assistantStatus(false, false, false, ...granted).title).toBe("Aucune clé");
+    expect(assistantStatus(true, false, false, ...granted).title).toBe("Assistant actif");
     // Le manuel part vide avant lecture : aucune adresse préremplie.
     expect(manual).toContain('useState("")');
     expect(manual).toContain("Réglages non lus");
@@ -111,7 +112,7 @@ describe("réglages — une seule section Assistant (#612)", () => {  const sett
 
   test("le consentement précède la clé : accepter, refuser, retirer (#848)", () => {
     expect(keyCard).toContain("AI_CONSENT_ITEMS.map");
-    expect(keyCard).toContain("aiConsentGranted(consent, consentVersion)");
+    expect(keyCard).toContain("aiConsentGranted(consent, consentVersion, ageAttested)");
     expect(keyCard).toContain("!consentGranted");
     expect(keyCard).toContain('decideConsent("granted")');
     expect(keyCard).toContain('decideConsent("refused")');
@@ -122,17 +123,44 @@ describe("réglages — une seule section Assistant (#612)", () => {  const sett
     expect(keyCard.indexOf('id="llm-key"')).toBeLessThan(keyCard.indexOf("Retirer mon consentement"));
   });
 
-  test("un accord d'une autre version redemande l'accord au lieu d'activer l'IA (#860)", () => {
-    const stale = assistantStatus(true, false, false, "granted", AI_CONSENT_VERSION + 1);
+  test("l'attestation d'âge précède le bouton d'accord et la clé (#849)", () => {
+    expect(keyCard).toContain("<AgeAttestation");
+    expect(keyCard).toContain("checked={attestationChecked}");
+    expect(keyCard).toContain("!attestationChecked");
+    expect(keyCard).toContain("AI_AGE_ATTESTATION_REQUIRED");
+    // La case est rendue AVANT les boutons ; accepter reste désactivé sans elle.
+    expect(keyCard.indexOf("<AgeAttestation")).toBeLessThan(keyCard.indexOf('decideConsent("granted")'));
+    const acceptDisabled = keyCard.indexOf(
+      'disabled={loading || decidingConsent !== "" || !attestationChecked}',
+    );
+    const acceptClick = keyCard.indexOf('onClick={() => void decideConsent("granted")}');
+    expect(acceptDisabled).toBeGreaterThan(-1);
+    expect(acceptDisabled).toBeLessThan(acceptClick);
+    // Le pont reçoit l'attestation avec la décision, jamais une clé seule.
+    expect(keyCard).toContain("bridge.setAiConsent(");
+    expect(keyCard).toContain('decision === "granted" && attestationChecked');
+    expect(keyCard).toContain("setAgeAttested(response.ageAttested === true)");
+  });
+
+  test("un accord d'une autre version ou sans attestation redemande l'accord (#860, #849)", () => {
+    const stale = assistantStatus(true, false, false, "granted", AI_CONSENT_VERSION + 1, true);
     expect(stale.title).toBe("Consentement IA à renouveler");
     expect(stale.body).toContain("reste désactivé");
-    expect(assistantStatus(true, false, false, "granted", AI_CONSENT_VERSION).title).toBe("Assistant actif");
-    expect(assistantStatus(true, false, false, "refused", AI_CONSENT_VERSION).title).toBe("Assistant IA désactivé");
-    expect(keyCard).toContain("aiConsentNeedsReconsent(decision, version)");
+    expect(assistantStatus(true, false, false, "granted", AI_CONSENT_VERSION, true).title).toBe(
+      "Assistant actif",
+    );
+    expect(assistantStatus(true, false, false, "refused", AI_CONSENT_VERSION, true).title).toBe(
+      "Assistant IA désactivé",
+    );
+    const unattested = assistantStatus(true, false, false, "granted", AI_CONSENT_VERSION, false);
+    expect(unattested.title).toBe("Attestation IA à confirmer");
+    expect(unattested.body).toContain("reste désactivé");
+    expect(keyCard).toContain("aiConsentNeedsReconsent(decision, version, ageAttested)");
     // Le pont factice suit la même version que l'écran, sans littéral recopié.
     const mock = source("bridge/mock.ts");
     expect(mock).toContain("aiConsentVersion: AI_CONSENT_VERSION");
     expect(mock).not.toMatch(/aiConsentVersion:\s*[1-9]/);
+    expect(mock).toContain("aiAgeAttested");
   });
 
   test("les matières personnalisées chargent avant d'affirmer qu'il n'y en a aucune (#804)", () => {

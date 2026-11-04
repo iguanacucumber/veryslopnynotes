@@ -3,16 +3,22 @@
 // prouver : Kotlin EXÉCUTÉ par la parité quand le comportement est pur,
 // manifeste/Intent/journaux lus à la source quand seul Android les porte.
 //
-// PRV-04 (#848) / PRV-16 (#860) : le consentement est une porte native
-// versionnée (refus, retrait, re-consentement sur changement matériel) ; les
-// preuves ci-dessous couvrent le stockage ET l'absence de lecture de
-// clé/appel réseau avant l'accord.
+// PRV-04 (#848) / PRV-16 (#860) / PRV-05 (#849) : le consentement et
+// l'attestation d'âge sont une porte native versionnée (refus, retrait,
+// re-consentement sur changement matériel) ; les preuves ci-dessous couvrent
+// le stockage ET l'absence de lecture de clé/appel réseau avant l'accord.
 import { afterAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { listFiles } from "../../agents/runtime/check-architecture";
 import { codeOnly } from "../../agents/runtime/source-guards";
-import { AI_CONSENT_ITEMS, AI_CONSENT_RETENTION_NOTE, AI_CONSENT_VERSION } from "../../web/src/features/assistant/consent";
+import {
+  AI_AGE_ATTESTATION,
+  AI_AGE_ATTESTATION_DETAIL,
+  AI_CONSENT_ITEMS,
+  AI_CONSENT_RETENTION_NOTE,
+  AI_CONSENT_VERSION,
+} from "../../web/src/features/assistant/consent";
 import { BRIDGE_FILES } from "./fixtures/bridge-source";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
 
@@ -54,8 +60,8 @@ afterAll(async () => {
   }
 });
 
-async function ask(link: ParityLink, op: unknown): Promise<any> {
-  return JSON.parse(await link.ask(op));
+async function ask(link: ParityLink, op: unknown, allowError = false): Promise<any> {
+  return JSON.parse(await link.ask(op, { allowError }));
 }
 
 function source(path: string): string {
@@ -158,11 +164,22 @@ describe("confidentialité — aucun envoi IA sans clé (#943)", () => {
   }
 });
 
-describe("confidentialité — consentement IA versionné (#848, #860)", () => {
+describe("confidentialité — consentement IA versionné et attesté (#848, #860, #849)", () => {
   test("la version de copie et la version native ne divergent pas", () => {
     const policy = source(join(CORE, "AiConsent.kt"));
     expect(policy).toContain(`const val AI_CONSENT_VERSION = ${AI_CONSENT_VERSION}`);
-    expect(AI_CONSENT_VERSION).toBe(1);
+    expect(AI_CONSENT_VERSION).toBe(2);
+  });
+
+  test("l'attestation nomme l'âge, l'autorisation parentale et l'absence de validation juridique", () => {
+    const copy = `${AI_AGE_ATTESTATION} ${AI_AGE_ATTESTATION_DETAIL}`;
+    expect(copy).toContain("18 ans");
+    expect(copy).toContain("représentant légal");
+    expect(copy).toContain("OpenRouter");
+    expect(copy).toContain("ne vérifie pas ton âge");
+    expect(copy).toContain("pas encore fait l’objet d’une validation juridique");
+    // Aucune promesse d'approbation ou de conformité juridique.
+    expect(copy).not.toMatch(/approuv|conforme|validé juridiquement|autorisation légale/i);
   });
 
   test("la copie liste les huit catégories et ne promet pas l'effacement chez le fournisseur", () => {
@@ -185,34 +202,70 @@ describe("confidentialité — consentement IA versionné (#848, #860)", () => {
     expect(copy).toContain("1600 px");
   });
 
-  test.skipIf(skip)("un accord est versionné, un refus et un retrait persistent", async () => {
-    const granted = await ask(consentLink!, { op: "roundtrip", decision: "granted" });
+  test.skipIf(skip)("un accord est versionné et attesté, un refus et un retrait persistent", async () => {
+    const granted = await ask(consentLink!, { op: "roundtrip", decision: "granted", ageAttested: true });
     expect(granted).toEqual({
-      encoded: `granted:${AI_CONSENT_VERSION}`,
+      encoded: `granted:${AI_CONSENT_VERSION}:attested`,
       decision: "granted",
       version: AI_CONSENT_VERSION,
       allowsAi: true,
       needsReconsent: false,
+      ageAttested: true,
     });
 
     // Une acceptation d'une AUTRE version ne vaut pas accord : elle redemande
     // l'accord sans jamais le réutiliser (PRV-16).
-    const stale = await ask(consentLink!, { op: "roundtrip", decision: "granted", version: AI_CONSENT_VERSION + 1 });
+    const stale = await ask(consentLink!, {
+      op: "roundtrip",
+      decision: "granted",
+      version: AI_CONSENT_VERSION + 1,
+      ageAttested: true,
+    });
     expect(stale.allowsAi).toBe(false);
     expect(stale.decision).toBe("granted");
     expect(stale.needsReconsent).toBe(true);
-    const unknown = await ask(consentLink!, { op: "parse", raw: "granted:999" });
+    const unknown = await ask(consentLink!, { op: "parse", raw: "granted:999:attested" });
     expect(unknown.allowsAi).toBe(false);
     expect(unknown.needsReconsent).toBe(true);
 
+    // Un accord de la bonne version mais SANS attestation ne s'écrit pas et,
+    // s'il est forgé sur le disque, n'autorise ni clé ni appel (#849).
+    const unattestedWrite = await ask(
+      consentLink!,
+      { op: "roundtrip", decision: "granted", ageAttested: false },
+      true,
+    );
+    expect(unattestedWrite).toMatchObject({ error: "IllegalArgumentException" });
+    const forged = await ask(consentLink!, { op: "parse", raw: `granted:${AI_CONSENT_VERSION}:none` });
+    expect(forged).toMatchObject({ allowsAi: false, needsReconsent: true, ageAttested: false });
+
     const refused = await ask(consentLink!, { op: "roundtrip", decision: "refused" });
-    expect(refused).toMatchObject({ decision: "refused", version: AI_CONSENT_VERSION, allowsAi: false });
+    expect(refused).toMatchObject({
+      decision: "refused",
+      version: AI_CONSENT_VERSION,
+      ageAttested: false,
+      allowsAi: false,
+    });
 
     const withdrawn = await ask(consentLink!, { op: "roundtrip", decision: "withdrawn" });
-    expect(withdrawn).toMatchObject({ decision: "withdrawn", version: AI_CONSENT_VERSION, allowsAi: false });
+    expect(withdrawn).toMatchObject({
+      decision: "withdrawn",
+      version: AI_CONSENT_VERSION,
+      ageAttested: false,
+      allowsAi: false,
+    });
 
     // Enregistrement illisible ou forgé : aucun accord, jamais un défaut permissif.
-    for (const raw of ["", "granted", ":1", "granted:", "peut-être:1", "none:1"]) {
+    for (const raw of [
+      "",
+      "granted",
+      ":1",
+      "granted:",
+      "peut-être:1",
+      "none:1",
+      "granted:2:maybe",
+      "granted:2:attested:extra",
+    ]) {
       const parsed = await ask(consentLink!, { op: "parse", raw });
       expect({ raw, allowsAi: parsed.allowsAi }).toEqual({ raw, allowsAi: false });
     }
@@ -275,10 +328,13 @@ describe("confidentialité — consentement IA versionné (#848, #860)", () => {
     expect(lessons.indexOf("aiConsentRefusal")).toBeLessThan(lessons.indexOf("awaitPhoto"));
   });
 
-  test("le retrait persiste AVANT d'effacer la clé et le fil du professeur", () => {
+  test("le consentement et l'attestation sont écrits ensemble, le retrait purge ensuite", () => {
     const settings = source(join(APP, "VsnBridgeSettings.kt"));
     const body = functionBody(settings, "internal fun VsnBridge.setAiConsent(");
+    const attestation = body.indexOf("AI_AGE_ATTESTATION_REQUIRED_MESSAGE");
     const persist = body.indexOf("aiConsent.decide(");
+    expect(attestation).toBeGreaterThan(-1);
+    expect(attestation).toBeLessThan(persist);
     expect(persist).toBeGreaterThan(-1);
     expect(persist).toBeLessThan(body.indexOf("llmKeys.clear()"));
     expect(persist).toBeLessThan(body.indexOf("teacherChat.clear()"));
@@ -286,6 +342,10 @@ describe("confidentialité — consentement IA versionné (#848, #860)", () => {
     expect(body).toContain('put("ok", false)');
     expect(body).toContain("keyCleared");
     expect(body).toContain("chatCleared");
+
+    // L'instantané expose l'attestation ; l'écran ne la déduit pas d'une clé.
+    const snapshot = functionBody(settings, "internal fun VsnBridge.settings(");
+    expect(snapshot).toContain('put("aiAgeAttested", consent.ageAttested)');
   });
 
   test("le stockage natif est durable, fail-closed et sans journal", () => {
@@ -293,6 +353,9 @@ describe("confidentialité — consentement IA versionné (#848, #860)", () => {
     expect(store).toContain("parseAiConsent");
     expect(store).toContain("prefs ?: return false");
     expect(store).toContain("prefs?.getString");
+    // Un accord sans attestation ne peut pas être écrit par le store.
+    expect(store).toContain("decision == AiConsentDecision.GRANTED && !ageAttested");
+    expect(store).toContain("encodeAiConsent(decision, ageAttested = ageAttested)");
     // `commit()` synchrone : un force-stop ne doit pas perdre un refus/retrait.
     expect(store).not.toMatch(/\.apply\(\)/);
     expect(store.match(/\.commit\(\)/g)).toHaveLength(2);

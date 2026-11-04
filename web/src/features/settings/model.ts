@@ -89,9 +89,11 @@ export function assistantStatus(
   loading = false,
   consent: AiConsentDecision | null = "granted",
   consentVersion = AI_CONSENT_VERSION,
+  ageAttested = false,
 ): AssistantStatus {
-  // Le consentement précède la clé : une clé présente ne rend pas l'IA active
-  // si l'accord manque, a été retiré ou vise une version périmée (PRV-04).
+  // Le consentement et l'attestation précèdent la clé : une clé présente ne
+  // rend pas l'IA active si l'accord manque, a été retiré, vise une version
+  // périmée ou n'a pas d'attestation (PRV-04, PRV-05).
   if (consent === null) {
     return loading || configured === null
       ? { title: "Lecture du consentement…", body: "L’état du consentement IA est en cours de lecture." }
@@ -100,7 +102,7 @@ export function assistantStatus(
           body: "Les réglages n’ont pas pu être lus : on ne sait pas si l’IA est autorisée sur cet appareil.",
         };
   }
-  if (!aiConsentGranted(consent, consentVersion)) {
+  if (!aiConsentGranted(consent, consentVersion, ageAttested)) {
     if (consent === "refused") {
       return {
         title: "Assistant IA désactivé",
@@ -113,10 +115,16 @@ export function assistantStatus(
         body: "L’assistant est désactivé et la clé a été effacée. Tu peux redonner ton accord dans cette section.",
       };
     }
-    if (aiConsentNeedsReconsent(consent, consentVersion)) {
+    if (consent === "granted" && consentVersion === AI_CONSENT_VERSION && !ageAttested) {
+      return {
+        title: "Attestation IA à confirmer",
+        body: "Ton accord ne comporte pas l’attestation d’âge ou d’autorisation parentale : l’assistant reste désactivé tant que tu ne l’as pas confirmée.",
+      };
+    }
+    if (aiConsentNeedsReconsent(consent, consentVersion, ageAttested)) {
       return {
         title: "Consentement IA à renouveler",
-        body: "Le texte ou le périmètre de l’accord a changé : ton ancien accord n’est pas réutilisé et l’assistant reste désactivé tant que tu n’as pas relu l’aperçu et accepté à nouveau.",
+        body: "Le texte, le périmètre ou l’attestation de l’accord ont changé : ton ancien accord n’est pas réutilisé et l’assistant reste désactivé tant que tu n’as pas relu l’aperçu, confirmé l’attestation et accepté à nouveau.",
       };
     }
     return {

@@ -35,10 +35,11 @@ internal fun VsnBridge.settings(): JSONObject {
         // Hôte seul, jamais une URL de session ni un jeton.
         .put("serverHost", currentBaseUrl().substringAfter("://").trimEnd('/').take(300))
         .put("llmConfigured", llmKeys.isConfigured())
-        // Décision et version : l'interface ne déduit jamais un accord d'une
-        // simple présence de clé (PRV-04).
+        // Décision, version et attestation : l'interface ne déduit jamais un
+        // accord d'une simple présence de clé (PRV-04, PRV-05).
         .put("aiConsent", consent.decision.wire)
         .put("aiConsentVersion", consent.version)
+        .put("aiAgeAttested", consent.ageAttested)
         .put("accountCount", accounts.count())
         // Adresse du manuel : réglage saisi par l'utilisateur, jamais un secret.
         .put("manualUrl", manuals.url() ?: "")
@@ -56,9 +57,12 @@ internal fun VsnBridge.settings(): JSONObject {
 }
 
 internal const val AI_CONSENT_REQUIRED_MESSAGE =
-    "Consentement IA requis : lis l’aperçu des données et accepte dans Réglages > Assistant."
+    "Consentement IA requis : lis l’aperçu, atteste l’âge ou l’autorisation parentale et accepte dans Réglages > Assistant."
 
-/** Refus JSON commun aux chemins IA : aucune clé lue, aucun réseau avant l'accord. */
+internal const val AI_AGE_ATTESTATION_REQUIRED_MESSAGE =
+    "Attestation requise : coche l’âge ou l’autorisation parentale avant d’activer l’assistant."
+
+/** Refus JSON commun aux chemins IA : aucune clé lue, aucun réseau avant l'accord et l'attestation. */
 internal fun VsnBridge.aiConsentRefusal(): JSONObject? =
     if (aiConsent.allowsAi()) {
         null
@@ -79,7 +83,14 @@ internal fun VsnBridge.setAiConsent(p: JSONObject): JSONObject {
     if (decision == AiConsentDecision.NONE) {
         return JSONObject().put("ok", false).put("message", "Choix IA invalide.")
     }
-    if (!aiConsent.decide(decision)) {
+    val ageAttested = p.opt("ageAttested") == true
+    if (decision == AiConsentDecision.GRANTED && !ageAttested) {
+        return JSONObject()
+            .put("ok", false)
+            .put("code", "attestation")
+            .put("message", AI_AGE_ATTESTATION_REQUIRED_MESSAGE)
+    }
+    if (!aiConsent.decide(decision, ageAttested)) {
         return JSONObject().put("ok", false).put("message", "Consentement non enregistré : réessaie dans un instant.")
     }
     val record = aiConsent.record()
@@ -87,6 +98,7 @@ internal fun VsnBridge.setAiConsent(p: JSONObject): JSONObject {
         .put("ok", true)
         .put("decision", record.decision.wire)
         .put("version", record.version)
+        .put("ageAttested", record.ageAttested)
     if (decision != AiConsentDecision.WITHDRAWN) return result
 
     val keyCleared = try {

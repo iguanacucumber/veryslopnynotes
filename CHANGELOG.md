@@ -49,6 +49,10 @@ la section `0.1.0` le jour du tag.
   devoirs, fiches de révision, professeur, exercices, brouillon de photo),
   conservée à la copie et dans l'export PDF ; action « Signaler » réutilisant le
   diagnostic borné, sans donnée scolaire ni envoi automatique.
+- Attestation d’âge ou d’autorisation parentale avant la clé IA : l’écran
+  explique 18 ans ou plus, ou représentant légal gérant le compte OpenRouter ;
+  sans attestation, aucune clé ni aucun appel, et le retrait avec le
+  consentement efface clé et fil. Revue juridique en attente (DEC-04).
 
 ### Modifié
 

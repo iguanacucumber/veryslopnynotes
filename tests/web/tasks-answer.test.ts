@@ -121,7 +121,7 @@ describe("aide devoirs — fil borné (#765)", () => {
 describe("aide devoirs — pont et panneau (#629)", () => {
   test("le pont factice publie answer, steps et sources, jamais un body opaque", async () => {
     // Le pont factice applique la même porte que le natif : accord explicite.
-    await mockCall("llm.setConsent", { decision: "granted" });
+    await mockCall("llm.setConsent", { decision: "granted", ageAttested: true });
     const result = await mockCall<{
       ok: boolean;
       answer?: string;

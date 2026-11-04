@@ -10,7 +10,7 @@ Registre : [`INVARIANTS.md`](architecture/INVARIANTS.md).
 |---|---|
 | Réseau, session, client Pronote, file de requêtes | I1 `invariants/frontieres.md#i1`, I17 `invariants/donnees.md#i17`, I19 `invariants/donnees.md#i19` |
 | Prompt IA, contenu externe, fiche PDF, cours et pièces jointes | I4 `invariants/ia.md#i4`, I6 `invariants/ia.md#i6`, I14 `invariants/ia.md#i14`, I15 `invariants/ia.md#i15`, I35 `invariants/ia.md#i35` |
-| Consentement IA, version et re-consentement | I36 `invariants/ia.md#i36` |
+| Consentement IA, attestation d’âge, version et re-consentement | I36 `invariants/ia.md#i36` |
 | Photo prise ou envoyée | I32 `invariants/ia.md#i32` |
 | Écran React, réponse périmée, pont WebView, bundle | I10 `invariants/frontieres.md#i10`, I13 `invariants/build.md#i13`, I25 `invariants/ia.md#i25` |
 | Compte : purge, cache hors-ligne, dédup, sauvegarde | I16 `invariants/donnees.md#i16`, I18 `invariants/donnees.md#i18`, I31 `invariants/donnees.md#i31`, I33 `invariants/donnees.md#i33` |

@@ -8,10 +8,11 @@ import fr.veryslopnynotes.core.encodeAiConsent
 import fr.veryslopnynotes.core.parseAiConsent
 
 /**
- * Consentement IA persisté, au niveau de l'appareil. Aucun secret ici : le
- * fichier est en clair, mais une acceptation n'est valide qu'après un
- * `commit()` synchrone (un force-stop ne doit pas ramener l'IA à l'insu de
- * l'utilisateur). Un stockage indisponible ou corrompu = aucun accord.
+ * Consentement IA et attestation d'âge persistés ensemble, au niveau de
+ * l'appareil. Aucun secret ici : le fichier est en clair, mais une acceptation
+ * n'est valide qu'après un `commit()` synchrone (un force-stop ne doit pas
+ * ramener l'IA à l'insu de l'utilisateur). Un stockage indisponible, corrompu
+ * ou sans attestation = aucun accord.
  */
 class AiConsentStore(context: Context) {
     private val prefs: SharedPreferences? = try {
@@ -31,11 +32,14 @@ class AiConsentStore(context: Context) {
     fun allowsAi(): Boolean = record().allowsAi
 
     /** `false` = rien n'a été écrit : l'appelant ne doit pas annoncer un choix. */
-    fun decide(decision: AiConsentDecision): Boolean {
+    fun decide(decision: AiConsentDecision, ageAttested: Boolean = false): Boolean {
         if (decision == AiConsentDecision.NONE) return false
+        if (decision == AiConsentDecision.GRANTED && !ageAttested) return false
         val target = prefs ?: return false
         return try {
-            target.edit().putString(KEY_DECISION, encodeAiConsent(decision)).commit()
+            target.edit()
+                .putString(KEY_DECISION, encodeAiConsent(decision, ageAttested = ageAttested))
+                .commit()
         } catch (_: Exception) {
             false
         }

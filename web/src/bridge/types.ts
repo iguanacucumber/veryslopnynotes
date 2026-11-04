@@ -281,6 +281,8 @@ export interface AiConsentResult {
   ok: boolean;
   decision?: AiConsentDecision;
   version?: number;
+  /** Attestation d'âge ou d'autorisation parentale enregistrée avec la décision. */
+  ageAttested?: boolean;
   /** Effacements du retrait : `false` = la donnée est encore sur l'appareil. */
   keyCleared?: boolean;
   chatCleared?: boolean;
@@ -301,6 +303,8 @@ export interface SettingsSnapshot {
   aiConsent: AiConsentDecision;
   /** Version du texte/périmètre accepté ; 0 = aucun enregistrement lisible. */
   aiConsentVersion: number;
+  /** Attestation d'âge ou d'autorisation parentale ; `false` = aucune. */
+  aiAgeAttested: boolean;
   accountCount: number;
   /** Adresse du manuel saisie une fois ("" = aucun manuel). */
   manualUrl: string;
