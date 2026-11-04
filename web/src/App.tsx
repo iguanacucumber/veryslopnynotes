@@ -13,6 +13,10 @@ import TasksRoute from "./routes/tasks";
 import ProfileRoute from "./routes/profile";
 import SettingsRoute from "./routes/settings";
 import HelpRoute from "./routes/help";
+import AboutRoute from "./routes/about";
+import PrivacyRoute from "./routes/privacy";
+import TermsRoute from "./routes/terms";
+import LicensesRoute from "./routes/licenses";
 import PairingRoute from "./routes/pairing";
 import MessagesRoute from "./routes/messages";
 import AttendanceRoute from "./routes/attendance";
@@ -125,6 +129,10 @@ export function App() {
               <Route path="/profile" element={<ProfileRoute />} />
               <Route path="/settings" element={<SettingsRoute />} />
               <Route path="/help" element={<HelpRoute />} />
+              <Route path="/about" element={<AboutRoute />} />
+              <Route path="/privacy" element={<PrivacyRoute />} />
+              <Route path="/terms" element={<TermsRoute />} />
+              <Route path="/licenses" element={<LicensesRoute />} />
               <Route path="/messages" element={<MessagesRoute />} />
               <Route path="/messages/new" element={<MessagesRoute />} />
               <Route path="/messages/:id" element={<MessagesRoute />} />

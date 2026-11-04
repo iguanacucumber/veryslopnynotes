@@ -177,6 +177,12 @@ export default function SettingsScreen() {
             leading={<IconInfo size={22} />}
             onClick={() => navigate("/help")}
           />
+          <ListRow
+            title="À propos et informations légales"
+            subtitle="Version, source, confidentialité, conditions, licences"
+            leading={<IconShield size={22} />}
+            onClick={() => navigate("/about")}
+          />
         </Rows>
         <DiagnosticExportCard />
       </Section>

@@ -410,8 +410,9 @@ describe("registre d'invariants", () => {
       ["docs/HUMAN_INPUTS.md", 4_500],
       // +500 pour la suppression totale et le compte élève (#853/#832),
       // +750 pour le consentement IA versionné (#860),
-      // +550 pour l'attestation d'âge ou d'autorisation parentale (#849).
-      ["docs/PRODUCT.md", 9_300],
+      // +550 pour l'attestation d'âge ou d'autorisation parentale (#849),
+      // +500 pour les écrans légaux (#847).
+      ["docs/PRODUCT.md", 9_800],
     ];
     for (const [file, max] of ceilings) {
       expect({ file, sousBudget: read(file).length <= max }).toEqual({ file, sousBudget: true });

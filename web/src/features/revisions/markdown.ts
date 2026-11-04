@@ -12,6 +12,14 @@ export const MAX_QUOTE_DEPTH = 6;
 export const MAX_TABLE_COLUMNS = 12;
 export const MAX_TABLE_ROWS = 200;
 
+/** Budgets d'un document statique et fiable (notice, conditions) : les
+ *  constantes ci-dessus restent le plafond du contenu de modèle. */
+export interface MarkdownLimits {
+  maxChars?: number;
+  maxLines?: number;
+  maxNodes?: number;
+}
+
 export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
 export type InlineNode =
@@ -382,14 +390,14 @@ function stripOutputArtifacts(markdown: string): string {
     .replace(/[ \t]*[\[(]\s*DONN[EÉ]E(?:\s*,\s*non\s+citable)?\s*[\])]/g, "");
 }
 
-function boundSource(markdown: string): string {
+function boundSource(markdown: string, maxChars: number, maxLines: number): string {
   let source = stripOutputArtifacts(markdown);
-  if (source.length > MAX_MARKDOWN_CHARS) {
-    source = `${source.slice(0, MAX_MARKDOWN_CHARS - 1)}…`;
+  if (source.length > maxChars) {
+    source = `${source.slice(0, maxChars - 1)}…`;
   }
   const lines = source.split("\n");
-  if (lines.length > MAX_MARKDOWN_LINES) {
-    return [...lines.slice(0, MAX_MARKDOWN_LINES - 1), "…"].join("\n");
+  if (lines.length > maxLines) {
+    return [...lines.slice(0, maxLines - 1), "…"].join("\n");
   }
   return source;
 }
@@ -508,14 +516,18 @@ export function countMarkdownNodes(blocks: MarkdownBlock[]): number {
 }
 
 /** Résultat sans HTML : le rendu React échappe le texte. */
-export function parseMarkdown(markdown: string): MarkdownBlock[] {
+export function parseMarkdown(markdown: string, limits: MarkdownLimits = {}): MarkdownBlock[] {
   // Un corps Windows (CRLF) ou vieux Mac (CR) rendrait ses marqueurs : les
   // expressions sont ancrées en `$` et `.` ne franchit pas `\r`. Normalisation
   // en UN seul point d'entrée, avant toute analyse. Les formules restent en TeX
   // jusqu'au rendu MathML ; les commandes nues retombent en texte lisible.
-  const source = boundSource(markdown.replace(/\r\n?/g, "\n"));
+  const source = boundSource(
+    markdown.replace(/\r\n?/g, "\n"),
+    limits.maxChars ?? MAX_MARKDOWN_CHARS,
+    limits.maxLines ?? MAX_MARKDOWN_LINES,
+  );
   const blocks = parseBlocks(source);
-  if (countMarkdownNodes(blocks) <= MAX_MARKDOWN_NODES) return blocks;
+  if (countMarkdownNodes(blocks) <= (limits.maxNodes ?? MAX_MARKDOWN_NODES)) return blocks;
   // Trop de nœuds : texte plat, borné par la taille source, plutôt qu'un rendu
   // partiel ou une structure pathologique qui fait exploser le DOM.
   return [{ type: "paragraph", children: [{ type: "text", text: source }] }];

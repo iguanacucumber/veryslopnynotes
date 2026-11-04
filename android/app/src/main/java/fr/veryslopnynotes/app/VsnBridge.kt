@@ -537,6 +537,7 @@ class VsnBridge(
         // (signal immédiat, hors file d'exécution).
         return when (method) {
             "app.ready" -> JSONObject().put("ok", true).put("demo", BuildConfig.DEMO_MODE)
+            "app.version" -> JSONObject().put("version", BuildConfig.VERSION_NAME)
             "app.theme" -> JSONObject().put("theme", theme())
             "app.setTheme" -> setTheme(p)
             "app.textSize" -> textSize()

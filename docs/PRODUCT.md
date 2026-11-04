@@ -26,6 +26,10 @@ contribuer, voir `AGENTS.md`.
 | `/alerts` | Alertes | Contenus hostiles détectés puis neutralisés, affichés en texte brut, avec l'état de la dernière vérification. |
 | `/profile` | Profil | Compte actif, comptes liés publiés par l'établissement en lecture seule, changement d'appairage et déconnexion qui purge session et caches. |
 | `/settings` | Réglages | Thème clair / sombre / système, 4 palettes, matières personnalisées (couleur, emoji, libellé), adresse du scraper, adresse du manuel, clé de l'assistant, export local des données. |
+| `/about` | À propos | Version de l’app lue au pont, source, contacts support et sécurité, non-affiliation, licence GPL-3.0-only. |
+| `/privacy` | Confidentialité | Notice de confidentialité complète, hors ligne, rendue depuis `PRIVACY.md`. |
+| `/terms` | Conditions | Conditions d’utilisation complètes, hors ligne, rendues depuis `TERMS.md`. |
+| `/licenses` | Licences | Notices de tiers et textes intégraux embarqués dans `web/public/licenses/`. |
 
 Les anciennes routes `/fiches` et `/cahier` restent des alias.
 

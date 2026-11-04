@@ -22,7 +22,7 @@ const val CANCEL_METHOD = "bridge.cancel"
 
 /** Miroir exact de `web/src/bridge/types.ts`. Aucun autre nom n'entre. */
 val BRIDGE_METHODS = setOf(
-    "app.ready", "app.theme", "app.setTheme", "app.textSize", "app.setTextSize", "app.backState",
+    "app.ready", "app.version", "app.theme", "app.setTheme", "app.textSize", "app.setTextSize", "app.backState",
     "session.status", "session.restore", "session.logout", "session.accounts",
     "privacy.deleteAll",
     "pairing.scanQr", "pairing.pair", "pairing.pairDemo", "pairing.cancel",

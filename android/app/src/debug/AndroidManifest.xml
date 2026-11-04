@@ -29,6 +29,10 @@
                 <data android:host="profile" />
                 <data android:host="settings" />
                 <data android:host="help" />
+                <data android:host="about" />
+                <data android:host="privacy" />
+                <data android:host="terms" />
+                <data android:host="licenses" />
                 <data android:host="news" />
                 <data android:host="canteen" />
                 <data android:host="attendance" />
