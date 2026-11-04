@@ -43,6 +43,8 @@ la section `0.1.0` le jour du tag.
 
 ### Modifié
 
+- Licence du dépôt actée en GPL-3.0-only (ADR-008) : contributions sous la
+  même licence, source correspondante publiée et dérivés Papillon crédités.
 - Fontes SN Pro sous-ensemblées en WOFF2 (graisses réellement utilisées,
   préchargement) et budget gzip vérifié à chaque build.
 - Santé de release documentée sans télémétrie : signaux store, CI, issues et

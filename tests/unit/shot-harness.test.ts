@@ -412,6 +412,8 @@ describe("shot.sh : l'APK capturé est celui des sources (#151)", () => {
     expect(r.out).toContain("interface périmée");
   });
 
+  // Six exécutions de shot.sh : 5 s (défaut Bun) ne tiennent pas sous la
+  // parallélisation du gate sur une machine chargée (#1107).
   test("--theme : la bascule passe par l'appareil, le thème entre dans le nom", () => {
     const h = harness();
     for (const theme of ["dark", "light", "system"]) {
@@ -440,7 +442,7 @@ describe("shot.sh : l'APK capturé est celui des sources (#151)", () => {
     expect(muet.out).toContain("thème NON");
     expect(muet.out).toContain("forcé");
     expect(muet.out).not.toContain("route vérifiée");
-  });
+  }, 15_000);
 
   test("installation refusée : on ne désinstalle jamais, la session appairée survit", () => {
     const h = harness();

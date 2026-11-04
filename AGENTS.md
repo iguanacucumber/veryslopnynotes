@@ -77,10 +77,17 @@ bannière ou séparateur, historique (`AVANT`, `#NNN`), code commenté,
 `@param`/`@returns` qui répètent le nom. Doc publique : le contrat, en une
 ligne. Le récit va dans l'issue, le commit ou l'ADR.
 
+## Licence
+
+Code et contributions sous **GPL-3.0-only**
+([ADR-008](docs/adr/008-relicense-gpl.md)) : inbound = outbound, sign-off DCO,
+pas de CLA, aucune restriction ajoutée.
+
 ## Dépendances, vendorisé, public
 
 - Stdlib et dépendances déjà installées d'abord. Une nouvelle dépendance est
-  justifiée en PR, épinglée, auditée (`bun audit`), MIT ; relire `bun.lock`.
+  justifiée en PR, épinglée, auditée (`bun audit`), compatible GPL-3.0-only ;
+  relire `bun.lock`.
 - `.agents/` = skills tierces, jamais éditées à la main : `npx skills update`
   met à jour `skills-lock.json` et la table de
   `tests/architecture/skills-lock.test.ts` dans la MÊME PR.
