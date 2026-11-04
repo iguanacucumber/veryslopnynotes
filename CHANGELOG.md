@@ -57,6 +57,8 @@ la section `0.1.0` le jour du tag.
 - Runbooks d'incident : rupture de protocole, mauvaise release, clé exposée et
   incompatibilité d'établissement, avec triage, communication, correctif et
   retrait.
+- `LICENSE` remplacé par le texte GPL-3.0 canonique, `package.json` déclaré
+  GPL-3.0-only et README/docs alignés.
 
 ### Sécurité
 

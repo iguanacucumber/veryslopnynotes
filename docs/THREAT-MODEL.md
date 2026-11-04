@@ -184,8 +184,9 @@ contenu de `.agents/`, build Docker.
 
 - Versions exactes dans `package.json`, verrou unique `bun.lock`, installation
   `--frozen-lockfile` sur le poste et dans l'image ; `bun audit` fait partie du
-  gate complet. Une nouvelle dépendance est justifiée, épinglée et
-  MIT-compatible (ADR-001, `docs/RELEASE.md`).
+  gate complet. Une nouvelle dépendance est justifiée, épinglée et compatible
+  avec la licence du projet GPL-3.0-only
+  ([ADR-008](adr/008-relicense-gpl.md), `docs/RELEASE.md`).
 - Les actions GitHub sont épinglées à un SHA de commit, le workflow est en
   `permissions: contents: read`, et le checkout ne persiste pas les
   identifiants : [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
