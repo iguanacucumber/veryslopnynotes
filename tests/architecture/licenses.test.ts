@@ -7,6 +7,7 @@ import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { resolveConfig } from "vite";
+import { tagsAtHead, versionFromTags } from "../../agents/runtime/android-version";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const LICENSES = join(ROOT, "web", "public", "licenses");
@@ -28,10 +29,7 @@ const catalog = Bun.TOML.parse(repo("android/gradle/libs.versions.toml")) as {
   versions: Record<string, string>;
 };
 const notices = repo(NOTICES);
-const appVersion = required(
-  /versionName\s*=\s*"([^"]+)"/.exec(repo("android/app/build.gradle.kts"))?.[1],
-  "versionName Android",
-);
+const appVersion = versionFromTags(tagsAtHead(ROOT)).name;
 const papiconsVersion = required(
   /Icônes Papicons ([\d.]+)/.exec(repo("web/src/ui/icons.tsx"))?.[1],
   "version Papicons",

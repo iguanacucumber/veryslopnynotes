@@ -64,6 +64,10 @@ function harness(sdk: string): string {
     },
   });
   chmodSync(join(dir, "android", "gradlew"), 0o755);
+  // Gradle lit la version via ce script (repli sans tag : le harnais n'est pas
+  // un dépôt git) ; sans lui, toute la configuration Gradle échoue.
+  mkdirSync(join(dir, "agents", "runtime"), { recursive: true });
+  cpSync(join(ROOT, "agents", "runtime", "android-version.ts"), join(dir, "agents", "runtime", "android-version.ts"));
   // Le SDK est celui découvert par le harnais, pas un `local.properties` périmé.
   writeFileSync(join(dir, "android", "local.properties"), `sdk.dir=${sdk}\n`);
   // Les entrées de la tâche.

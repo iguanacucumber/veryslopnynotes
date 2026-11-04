@@ -84,6 +84,22 @@ make build   # check-secrets + docker build (skip si daemon absent)
 - Vérifier : `bun run agents/runtime/check-secrets.ts` OK,
   `bun audit` propre (0 vulnérabilité), `bunx tsc --noEmit` OK.
 
+## Version Android (tag git, #927)
+
+Le tag `vX.Y.Z` posé sur le commit construit fixe les deux champs :
+`versionName = X.Y.Z` et `versionCode = X * 1_000_000 + Y * 1_000 + Z`.
+`Y` et `Z` doivent rester `< 1000`, et le code sous le plafond Android
+`2_100_000_000` ; sinon le build échoue au lieu de publier un code ambigu.
+Sans tag, le repli est déterministe : `0.1.0` / `1` (dev seulement).
+Les tags de pré-release (`v1.2.3-beta.1`) sont refusés : le `versionCode` ne
+peut pas rester croissant entre une pré-release et sa version finale (voir
+REL-05). Un build release doit donc partir d'un checkout qui contient le tag
+sur `HEAD` (`fetch-depth: 0` ou `fetch-tags: true` en CI).
+
+Le calcul pur vit dans `agents/runtime/android-version.ts`, testé par
+`tests/unit/version-from-tags.test.ts` ; Gradle l'appelle une seule fois avec
+`providers.exec`, sans réseau.
+
 ## APK + AAB release (clé hors repo, repli debug #297)
 
 1. Générer keystore une fois, hors repo (jamais commité, `.gitignore`

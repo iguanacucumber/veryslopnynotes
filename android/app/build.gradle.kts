@@ -2,6 +2,21 @@ plugins {
     id("com.android.application")
 }
 
+// Le tag `vX.Y.Z` posé sur HEAD fixe la version ; sans tag, repli 0.1.0/1.
+// Le calcul pur vit dans agents/runtime/android-version.ts (testé par
+// tests/unit/version-from-tags.test.ts) : une seule lecture git, pas une
+// formule recopiée dans chaque script de build.
+val tagVersion = providers.exec {
+    workingDir = rootProject.projectDir.parentFile
+    commandLine("bun", "run", "agents/runtime/android-version.ts")
+}.standardOutput.asText.get().trim().split(Regex("\\s+"))
+require(tagVersion.size == 2) {
+    "android-version.ts : sortie inattendue « ${tagVersion.joinToString(" ")} »"
+}
+val tagVersionName = tagVersion[0]
+val tagVersionCode = tagVersion[1].toIntOrNull()
+    ?: error("android-version.ts : versionCode non entier « ${tagVersion[1]} »")
+
 // Graine serveur : HTTPS-only, et AUCUN défaut en release (SEC-01). Le défaut
 // émulateur `10.0.2.2:3000` vit uniquement dans le variant debug, avec son
 // network_security_config dédié.
@@ -16,8 +31,8 @@ android {
         applicationId = "fr.veryslopnynotes.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = tagVersionCode
+        versionName = tagVersionName
         // Tests instrumentés (#887) : même APK debug que le smoke émulateur.
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
