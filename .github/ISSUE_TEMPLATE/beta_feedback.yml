@@ -1,0 +1,115 @@
+name: Retour bêta
+description: Signaler un problème ou une gêne pendant la bêta privée, sans donnée scolaire.
+title: "[Beta] "
+labels: ["beta"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Une issue = un problème ou un retour, pas un support privé. **Ne joins
+        aucune donnée scolaire** : pas de nom, d'URL d'établissement, de note,
+        de message, de pièce jointe ni de capture non caviardée.
+
+        Lis d'abord le [kit bêta](https://github.com/iguanacucumber/veryslopnynotes/blob/main/docs/BETA.md)
+        et le [support](https://github.com/iguanacucumber/veryslopnynotes/blob/main/docs/SUPPORT.md).
+        Une faille exploitable ne s'ouvre pas ici : utilise
+        [SECURITY.md](https://github.com/iguanacucumber/veryslopnynotes/blob/main/SECURITY.md).
+
+  - type: dropdown
+    id: type-retour
+    attributes:
+      label: Type de retour
+      description: Le thème principal, sans contenu scolaire.
+      options:
+        - Installation ou mise à jour
+        - Appairage QR + PIN ou session
+        - Écran ou parcours
+        - Performance ou accessibilité
+        - Documentation ou consigne de bêta
+        - Autre
+    validations:
+      required: true
+
+  - type: input
+    id: version-app
+    attributes:
+      label: Version de l'app
+      description: Réglages Android → Applications → VerySlopyNyNotes, ou le nom de l'APK.
+      placeholder: "0.1.0-beta.1"
+    validations:
+      required: true
+
+  - type: input
+    id: version-android
+    attributes:
+      label: Version d'Android
+      description: Réglages → À propos du téléphone.
+      placeholder: "Android 14"
+    validations:
+      required: true
+
+  - type: input
+    id: version-webview
+    attributes:
+      label: Version de la WebView
+      description: Réglages → Applications → Android System WebView (ou Chrome).
+      placeholder: "Chromium 131"
+    validations:
+      required: true
+
+  - type: textarea
+    id: constat
+    attributes:
+      label: Constat
+      description: Ce qui se passe, en une phrase, sans contenu scolaire.
+      placeholder: "Exemple : la mise à jour bêta.2 échoue à l'installation."
+    validations:
+      required: true
+
+  - type: textarea
+    id: etapes
+    attributes:
+      label: Étapes de reproduction
+      description: Le chemin exact, sans renseigner de contenu scolaire.
+      placeholder: |
+        1. Ouvrir ...
+        2. Toucher ...
+        3. Observer ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: attendu
+    attributes:
+      label: Attendu et obtenu
+      description: Ce que tu attendais, puis ce qui s'est produit, avec le message exact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostic
+    attributes:
+      label: Diagnostic (facultatif)
+      description: Extrait du diagnostic exporté, ou message et code affichés. Pas de contenu scolaire.
+      placeholder: |
+        Code : ...
+        Message : ...
+        Ressource : notes / devoirs / messages / autre
+
+  - type: textarea
+    id: captures
+    attributes:
+      label: Captures (facultatif)
+      description: Glisse ici des images **caviardées**. Pas d'URL, de nom, de note ni de message visible.
+
+  - type: checkboxes
+    id: donnees
+    attributes:
+      label: Données et sécurité
+      options:
+        - label: J'ai retiré noms, URL d'établissement, notes, messages et identifiants de toute capture.
+          required: true
+        - label: Je sais que cette issue est publique et je n'y publie aucune donnée scolaire.
+          required: true
+        - label: Je n'ai pas ouvert de faille exploitable ici ; elle passe par SECURITY.md.
+          required: true
