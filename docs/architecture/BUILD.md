@@ -104,6 +104,12 @@ HTML et le logcat en artefact `emulator-instrumentation` 7 jours, même en
 Ces tests ne lisent aucun secret, aucun hôte d'établissement et aucune donnée
 scolaire : les fixtures sont des identifiants de test locaux.
 
+## Artefact release (#883)
+
+`release-artifact` construit l'APK release à chaque PR et push `main` avec une
+clé ÉPHÉMÈRE générée dans le job, hors workspace. Il vérifie `apksigner`, refuse
+un certificat debug, exige `mapping.txt` + `seeds.txt` R8, et publie APK +
+mapping 7 jours. `workflow_call` le rend réutilisable par un futur job de tag.
 
 ## Couverture (#895)
 

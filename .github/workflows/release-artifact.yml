@@ -1,0 +1,151 @@
+# Construit l'APK release en CI et prouve son intégrité (#883).
+#
+# La clé de signature est ÉPHÉMÈRE : générée dans le job, hors du workspace,
+# jamais commitée ni publiée. Elle ne remplace pas la clé de distribution : elle
+# prouve que la release compile, que R8 produit son mapping et que l'APK n'est
+# PAS signé debug (le repli silencieux du build sans STORE_FILE).
+#
+# `workflow_call` : un futur job de tag réutilise CE fichier au lieu de recopier
+# le build. L'artefact `release-apk` (APK + mapping + seeds, 7 jours) reste
+# attaché au run appelant.
+name: release-artifact
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-artifact-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.4"
+
+      - name: JDK 17
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache Gradle
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        continue-on-error: true
+        with:
+          path: |
+            ~/.gradle/wrapper/dists
+            ~/.gradle/caches/modules-2
+            ~/.gradle/caches/9.8.2
+          key: gradle-release-${{ runner.os }}-${{ hashFiles('android/gradle/libs.versions.toml', 'android/gradle/wrapper/gradle-wrapper.properties', 'android/gradle.properties', 'android/build.gradle.kts', 'android/settings.gradle.kts', 'android/*/build.gradle.kts') }}
+
+      # Même disposition que les jobs émulateur : le SDK de l'image n'a pas
+      # forcément la plateforme 37 du module app.
+      - name: SDK Android
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          [ -n "$sdk" ] || { echo "ANDROID_SDK_ROOT absent" >&2; exit 1; }
+          sdkmanager="$sdk/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$sdkmanager" ] || sdkmanager="$(command -v sdkmanager)"
+          [ -x "$sdkmanager" ] || { echo "sdkmanager absent" >&2; exit 1; }
+          yes | "$sdkmanager" --licenses >/dev/null 2>&1 || true
+          "$sdkmanager" --install "platforms;android-37.0" "build-tools;36.0.0" "platform-tools"
+          echo "$sdk/platform-tools" >> "$GITHUB_PATH"
+
+      - name: Dépendances
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile --silent || bun install --frozen-lockfile
+
+      # Hors workspace (`RUNNER_TEMP`) : rien de la clé ne peut entrer dans un
+      # artefact, et le runner la détruit avec le job. Mot de passe masqué pour
+      # qu'aucun log ne le recopie.
+      - name: Clé éphémère
+        run: |
+          set -euo pipefail
+          store="$RUNNER_TEMP/vsn-ci-release.jks"
+          password="$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
+          keytool -genkeypair -keystore "$store" -storetype PKCS12 \
+            -alias vsn-ci -keyalg RSA -keysize 2048 -validity 1 \
+            -dname "CN=VSN CI ephemeral,O=veryslopnynotes,C=FR" \
+            -storepass "$password" -keypass "$password"
+          {
+            echo "STORE_FILE=$store"
+            echo "STORE_PASSWORD=$password"
+            echo "KEY_ALIAS=vsn-ci"
+            echo "KEY_PASSWORD=$password"
+          } >> "$GITHUB_ENV"
+
+      - name: APK release
+        run: |
+          set -euo pipefail
+          cd android
+          ./gradlew --console=plain --no-daemon assembleRelease
+
+      # Deux verdicts distincts : la signature est VALIDE, puis elle vient bien
+      # de la clé éphémère. Le second attrape le repli debug du build, qui est
+      # une release installable mais NON publiable.
+      - name: Vérification signature et mapping
+        run: |
+          set -euo pipefail
+          apk="android/app/build/outputs/apk/release/app-release.apk"
+          [ -s "$apk" ] || { echo "::error title=APK release absent::$apk introuvable ou vide."; exit 1; }
+          sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          apksigner="$(ls -1 "$sdk"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1 || true)"
+          [ -x "$apksigner" ] || { echo "::error title=apksigner absent::Aucun build-tools dans $sdk."; exit 1; }
+          certs="$RUNNER_TEMP/apksigner-certs.txt"
+          "$apksigner" verify --print-certs "$apk" | tee "$certs"
+          if grep -q 'CN=Android Debug' "$certs"; then
+            echo "::error title=APK signé debug::L'APK release porte le certificat debug Android (CN=Android Debug) : la clé éphémère n'a pas été utilisée. Artefact refusé."
+            exit 1
+          fi
+          norm() { tr -d ':' | tr '[:upper:]' '[:lower:]'; }
+          signataire="$(sed -n 's/^.*certificate SHA-256 digest: //p' "$certs" | head -1 | norm)"
+          attendue="$(keytool -list -v -keystore "$STORE_FILE" -alias "$KEY_ALIAS" -storepass "$STORE_PASSWORD" \
+            | sed -n 's/^[[:space:]]*SHA256: //p' | head -1 | norm)"
+          if [ -z "$signataire" ] || [ "$signataire" != "$attendue" ]; then
+            echo "::error title=Signature inattendue::certificat « ${signataire:-absent} », attendu « ${attendue:-absent} » (clé éphémère). Artefact refusé."
+            exit 1
+          fi
+          for fichier in mapping.txt seeds.txt; do
+            chemin="android/app/build/outputs/mapping/release/$fichier"
+            [ -s "$chemin" ] || { echo "::error title=Mapping R8 absent::$chemin absent ou vide : release non minifiée ?"; exit 1; }
+          done
+          grep -q '^fr\.veryslopnynotes\.' android/app/build/outputs/mapping/release/mapping.txt || {
+            echo "::error title=Mapping R8 étranger::mapping.txt ne contient aucune classe de l'application."
+            exit 1
+          }
+          echo "APK signé par la clé éphémère ; mapping et seeds R8 présents."
+
+      - name: APK et mapping
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-apk
+          path: |
+            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/mapping/release/mapping.txt
+            android/app/build/outputs/mapping/release/seeds.txt
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Effacer la clé éphémère
+        if: always()
+        run: rm -f "$RUNNER_TEMP/vsn-ci-release.jks"
