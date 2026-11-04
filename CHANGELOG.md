@@ -17,6 +17,8 @@ la section `0.1.0` le jour du tag.
   marqué non fiable avant chaque prompt.
 - Scraper de manuels facultatif, HTTPS obligatoire, sans authentification.
 - Taille du texte réglable (100/125/150 %) et suivi du réglage Android jusqu'à 200 %.
+- À propos : versionName et versionCode, empreinte SHA-256 du certificat installé
+  lue localement, tag source et notes de version, sans réseau.
 - Export local et portable (JSON versionné, manifeste) des notes, du cahier de
   cours, des fiches de révision, du fil du professeur, du manuel mémorisé, des
   préférences matière et de l’état de lecture ; partage Android, sans jeton de

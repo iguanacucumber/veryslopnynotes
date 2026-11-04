@@ -5,6 +5,17 @@
 export const REPO_URL = "https://github.com/iguanacucumber/veryslopnynotes";
 export const SUPPORT_URL = `${REPO_URL}/issues/new/choose`;
 export const SECURITY_URL = `${REPO_URL}/security/advisories/new`;
+export const RELEASES_URL = `${REPO_URL}/releases`;
+
+/** Tag git d'une version publiée : le build dérive `versionName` du même tag. */
+export function sourceTag(version: string): string {
+  return `v${version}`;
+}
+
+/** Notes de version de CE tag. `RELEASES_URL` couvre le cas sans version lue. */
+export function releaseNotesUrl(tag: string): string {
+  return `${REPO_URL}/releases/tag/${tag}`;
+}
 
 export interface LicenseText {
   file: string;

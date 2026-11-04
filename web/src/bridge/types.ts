@@ -242,6 +242,19 @@ export class BridgeCallError extends Error {
   }
 }
 
+/** Identité de l'installation, lue LOCALEMENT par le natif (aucun réseau). */
+export interface AppVersion {
+  /** `versionName` Android, dérivé du tag `vX.Y.Z` (ou `0.1.0` en dev). */
+  version: string;
+  /** `versionCode` Android ; -1 = champ natif illisible. */
+  versionCode: number;
+  /** SHA-256 du certificat APK, hexadécimal majuscule séparé par `:`.
+   *  `null` = signature illisible : build sans certificat lisible. */
+  fingerprint: string | null;
+  /** Build de développement : le certificat peut être celui de debug. */
+  debug: boolean;
+}
+
 export interface SessionStatus {
   state: "restored" | "no_session" | "dead" | "offline";
   message?: string;

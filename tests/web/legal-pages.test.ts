@@ -7,11 +7,21 @@ import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
-import AboutScreen from "../../web/src/features/legal/AboutScreen";
+import AboutScreen, { AboutContent, parseAppVersion } from "../../web/src/features/legal/AboutScreen";
 import LicensesScreen from "../../web/src/features/legal/LicensesScreen";
 import PrivacyScreen from "../../web/src/features/legal/PrivacyScreen";
 import TermsScreen from "../../web/src/features/legal/TermsScreen";
-import { LICENSE_TEXTS, REPO_URL, SECURITY_URL, SUPPORT_URL } from "../../web/src/features/legal/legal";
+import {
+  LICENSE_TEXTS,
+  RELEASES_URL,
+  releaseNotesUrl,
+  REPO_URL,
+  SECURITY_URL,
+  sourceTag,
+  SUPPORT_URL,
+} from "../../web/src/features/legal/legal";
+import { mockCall } from "../../web/src/bridge/mock";
+import type { AppVersion } from "../../web/src/bridge/types";
 import { SMOKE_ROUTES } from "../../web/src/smoke-routes";
 
 const ROOT = join(import.meta.dir, "..", "..");
@@ -46,6 +56,7 @@ describe("écrans légaux (#847)", () => {
     expect(html).toContain("VerySlopyNyNotes");
     expect(html).toContain("Version indisponible");
     expect(html).toContain(REPO_URL);
+    expect(html).toContain(RELEASES_URL);
     expect(html).toContain(SUPPORT_URL);
     expect(html).toContain(SECURITY_URL);
     expect(html).toContain("GPL-3.0-only");
@@ -57,6 +68,82 @@ describe("écrans légaux (#847)", () => {
     expect(html).toContain('aria-label="Informations légales"');
   });
 
+  test("À propos affiche version, code, empreinte, tag et notes de version", () => {
+    const identity: AppVersion = {
+      version: "1.4.2",
+      versionCode: 1_004_002,
+      fingerprint:
+        "3A:8B:12:CD:45:EF:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89",
+      debug: false,
+    };
+    const html = render(createElement(AboutContent, { identity }), "/about");
+    expect(html).toContain("Version 1.4.2 · versionCode 1004002");
+    expect(html).toContain("Empreinte du certificat (SHA-256)");
+    expect(html).toContain(identity.fingerprint!);
+    expect(html).toContain("Tag source");
+    expect(html).toContain(sourceTag("1.4.2"));
+    expect(html).toContain("Notes de version");
+    expect(html).toContain(releaseNotesUrl(sourceTag("1.4.2")));
+    expect(html).not.toContain("Build de développement");
+  });
+
+  test("le repli debug ou non signé est explicite, jamais inventé", () => {
+    const debug = render(
+      createElement(AboutContent, {
+        identity: { version: "0.1.0", versionCode: 1, fingerprint: null, debug: true },
+      }),
+      "/about",
+    );
+    expect(debug).toContain("Empreinte du certificat indisponible");
+    expect(debug).toContain("build de développement ou paquet non signé");
+    expect(debug).toContain("Build de développement");
+
+    const unsigned = render(
+      createElement(AboutContent, {
+        identity: { version: "1.0.0", versionCode: 1, fingerprint: null, debug: false },
+      }),
+      "/about",
+    );
+    expect(unsigned).toContain("Empreinte du certificat indisponible (paquet non signé).");
+    expect(unsigned).not.toContain("Build de développement");
+  });
+
+  test("une réponse de pont malformée ne fabrique ni code ni empreinte", () => {
+    expect(parseAppVersion(null)).toBeNull();
+    expect(parseAppVersion({})).toBeNull();
+    expect(
+      parseAppVersion({
+        version: "  1.2.3  ",
+        versionCode: "42",
+        fingerprint: "pas-une-empreinte",
+        debug: "true",
+      }),
+    ).toEqual({ version: "1.2.3", versionCode: -1, fingerprint: null, debug: false });
+    expect(
+      parseAppVersion({
+        version: "1.2.3",
+        versionCode: 42,
+        fingerprint:
+          "3A:8B:12:CD:45:EF:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89",
+        debug: true,
+      }),
+    ).toEqual({
+      version: "1.2.3",
+      versionCode: 42,
+      fingerprint:
+        "3A:8B:12:CD:45:EF:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89",
+      debug: true,
+    });
+  });
+
+  test("le pont factice expose le contrat complet version/code/empreinte", async () => {
+    const identity = await mockCall<AppVersion>("app.version", {});
+    expect(identity.version).toBe("0.1.0");
+    expect(identity.versionCode).toBe(1);
+    expect(identity.fingerprint).toMatch(/^(?:[0-9A-F]{2}:){31}[0-9A-F]{2}$/);
+    expect(identity.debug).toBe(true);
+  });
+
   test("la version vient du pont, jamais d'une constante inventée", () => {
     const text = source("web/src/features/legal/AboutScreen.tsx");
     expect(text).toContain("bridge");
@@ -65,9 +152,16 @@ describe("écrans légaux (#847)", () => {
 
     expect(source("web/src/bridge/types.ts")).toContain('"app.version"');
     expect(source("android/app/src/main/java/fr/veryslopnynotes/app/BridgeCall.kt")).toContain('"app.version"');
-    expect(source("android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt")).toContain(
-      '"app.version" -> JSONObject().put("version", BuildConfig.VERSION_NAME)',
-    );
+    const native = source("android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt");
+    expect(native).toContain('"app.version" -> appVersion()');
+    expect(native).toContain('.put("version", BuildConfig.VERSION_NAME)');
+    expect(native).toContain('.put("versionCode", BuildConfig.VERSION_CODE)');
+    expect(native).toContain('.put("fingerprint", fingerprint ?: JSONObject.NULL)');
+    expect(native).toContain("GET_SIGNING_CERTIFICATES");
+    expect(native).toContain("apkContentsSigners");
+    expect(
+      source("android/app/src/main/java/fr/veryslopnynotes/app/AppIdentity.kt"),
+    ).toContain('MessageDigest.getInstance("SHA-256")');
   });
 
   test("Confidentialité et Conditions rendent le texte complet de référence", () => {

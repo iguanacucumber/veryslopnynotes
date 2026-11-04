@@ -537,7 +537,7 @@ class VsnBridge(
         // (signal immédiat, hors file d'exécution).
         return when (method) {
             "app.ready" -> JSONObject().put("ok", true).put("demo", BuildConfig.DEMO_MODE)
-            "app.version" -> JSONObject().put("version", BuildConfig.VERSION_NAME)
+            "app.version" -> appVersion()
             "app.theme" -> JSONObject().put("theme", theme())
             "app.setTheme" -> setTheme(p)
             "app.textSize" -> textSize()
@@ -614,6 +614,38 @@ class VsnBridge(
     }
 
     // --- Application / session -------------------------------------------------
+
+    private fun appVersion(): JSONObject {
+        val fingerprint = runCatching {
+            installedCertificate()?.takeIf { it.isNotEmpty() }?.let(::certificateSha256)
+        }.getOrNull()
+        return JSONObject()
+            .put("version", BuildConfig.VERSION_NAME)
+            .put("versionCode", BuildConfig.VERSION_CODE)
+            .put("fingerprint", fingerprint ?: JSONObject.NULL)
+            .put("debug", BuildConfig.DEBUG)
+    }
+
+    /**
+     * Certificat qui a signé l'APK INSTALLÉ, lu sur l'appareil (aucun réseau,
+     * aucun service Google). API 28+ : `signingInfo` ; API 26–27 :
+     * `signatures`, déprécié mais seule voie disponible.
+     */
+    @Suppress("DEPRECATION")
+    private fun installedCertificate(): ByteArray? {
+        val pm = ctx.packageManager
+        val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            pm.getPackageInfo(ctx.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+        } else {
+            pm.getPackageInfo(ctx.packageName, PackageManager.GET_SIGNATURES)
+        }
+        val signers = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.signingInfo?.apkContentsSigners
+        } else {
+            info.signatures
+        }
+        return signers?.firstOrNull()?.toByteArray()
+    }
 
     internal fun theme(): String = when (appPrefs?.getString(THEME_KEY, null)) {
         "LIGHT" -> "LIGHT"
