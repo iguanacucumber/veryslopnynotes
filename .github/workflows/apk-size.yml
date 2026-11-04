@@ -1,0 +1,109 @@
+# Budget de taille APK (#974) : mesure l'artefact `release-apk` produit par
+# `release-artifact.yml`, sans reconstruire ni re-signer l'APK. Le plafond vit
+# dans `apk-size-baseline.json` (octets) ; un dépassement rougit ce job. La
+# taille mesurée reste dans le résumé et un artefact 90 jours, pour suivre la
+# release. `pull_request` ne mesure rien : il exerce les fixtures du check.
+name: apk-size
+
+on:
+  workflow_run:
+    workflows: ["release-artifact", "release"]
+    types: [completed]
+  pull_request:
+    paths:
+      - ".github/workflows/apk-size.yml"
+      - "agents/runtime/apk-size.ts"
+      - "tests/unit/apk-size-budget.test.ts"
+      - "apk-size-baseline.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: apk-size-${{ github.event.workflow_run.head_sha || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mesure:
+    name: budget APK
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Aucun secret, aucun jeton d'écriture : le checkout suit le commit mesuré
+      # pour que la baseline de la PR soit celle qui s'applique.
+      - name: Code (commit mesuré)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event.workflow_run.head_repository.full_name }}
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.4"
+
+      - name: Artefact release-apk
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          dest="$RUNNER_TEMP/release-apk"
+          mkdir -p "$dest"
+          gh run download "$SOURCE_RUN_ID" -n release-apk -D "$dest"
+          apk="$(find "$dest" -type f -name '*.apk' -print -quit)"
+          [ -n "$apk" ] || {
+            echo "::error title=APK absent::l'artefact release-apk ne contient aucun .apk."
+            exit 1
+          }
+          echo "APK_PATH=$apk" >> "$GITHUB_ENV"
+
+      - name: Budget
+        run: |
+          set -euo pipefail
+          bun run agents/runtime/apk-size.ts \
+            --apk "$APK_PATH" \
+            --baseline apk-size-baseline.json \
+            --record "$RUNNER_TEMP/apk-size.json"
+
+      - name: Run source
+        if: always()
+        run: |
+          set -euo pipefail
+          {
+            echo
+            echo "[Run source](${{ github.event.workflow_run.html_url }})"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Taille mesurée
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: apk-size
+          path: ${{ runner.temp }}/apk-size.json
+          retention-days: 90
+          if-no-files-found: ignore
+
+  fixtures:
+    name: fixtures budget
+    if: github.event_name != 'workflow_run'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.4"
+
+      # Aucun APK réel : les tests créent des fichiers de tailles exactes.
+      - name: Seuils sur fixtures
+        run: bun test tests/unit/apk-size-budget.test.ts

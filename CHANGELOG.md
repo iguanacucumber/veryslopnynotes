@@ -30,6 +30,8 @@ la section `0.1.0` le jour du tag.
 - CI : release sur tag `vX.Y.Z` — build réutilisé, signature réelle depuis
   l'environnement protégé `release`, `SHA256SUMS`, archive source GPL et GitHub
   Release ; dry-run manuel sans publication, échec si un secret manque.
+- CI : budget de taille APK — taille mesurée sur l'artefact release et
+  conservée, dépassement du plafond = échec.
 - Smoke CI sur émulateur : APK debug installé, appairage démo, accueil vérifié,
   captures et logcat en artefact (non bloquant tant que non stable).
 - Tests instrumentés sur émulateur : clé chiffrée, Keystore dégradé puis sain,

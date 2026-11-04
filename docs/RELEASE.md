@@ -132,6 +132,27 @@ par `tests/unit/version-from-tags.test.ts`.
 4. Vérifier : `apksigner verify --print-certs`, aucune clé/secret dans
    l'artefact, `git status` propre (APK ignoré `*.apk`).
 
+## Budget de taille APK (#974)
+
+[`apk-size-baseline.json`](../apk-size-baseline.json) (racine, unités :
+octets) porte la mesure `measuredBytes` et le plafond `budgetBytes`.
+`.github/workflows/apk-size.yml` télécharge l'artefact `release-apk` de
+`release-artifact` sans reconstruire l'APK, mesure l'APK et échoue dès que sa
+taille dépasse `budgetBytes` ; la mesure part dans le résumé du run et un
+artefact `apk-size` conservé 90 jours. Sur une PR qui touche ces fichiers, il
+n'exécute que les fixtures, sans APK réel.
+
+Mesurer et vérifier localement :
+
+```sh
+bun run agents/runtime/apk-size.ts --apk android/app/build/outputs/apk/release/app-release.apk
+```
+
+Mettre à jour : relever la taille du dernier run CI, puis modifier
+`measuredBytes`, `budgetBytes`, `measuredAt` et `measuredOn` dans la MÊME PR.
+Une hausse du plafond se justifie dans la PR ; une baisse est toujours
+bienvenue.
+
 ## Liens profonds et App Links
 
 Politique : **aucun App Link** ; le deep link par schéma privé

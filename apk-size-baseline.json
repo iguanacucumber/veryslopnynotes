@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "unit": "bytes",
+  "apk": "android/app/build/outputs/apk/release/app-release.apk",
+  "measuredAt": "2026-11-04",
+  "measuredOn": "GitHub Actions ubuntu-latest, release-artifact run 41834884160 (main, clé éphémère)",
+  "measuredBytes": 1423857,
+  "budgetBytes": 1500000
+}
