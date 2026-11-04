@@ -9,7 +9,7 @@ Pronote et OpenRouter ne sont pas couverts.
 
 ## Cible de conformité
 
-La cible est **WCAG 2.2 niveaux A et AA** pour les 21 routes visitées par
+La cible est **WCAG 2.2 niveaux A et AA** pour les 25 routes visitées par
 `make web-smoke`, en thème clair et sombre. La référence exécutable est
 axe-core 4.14.0 avec les règles `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`,
 `wcag22a` et `wcag22aa`.
@@ -43,7 +43,7 @@ une ligne `Bloqué` n'est pas une conformité.
 
 | Environnement | Version | Statut | Ce qui est prouvé |
 |---|---|---|---|
-| Poste Linux de rédaction | Bun 1.4.4, Playwright 1.64.1 | `Réussi` (2026-11-03) | `make web-smoke` : 21 routes × clair/sombre, `axe-core` 4.14.0, contrastes, captures 390 × 844. |
+| Poste Linux de rédaction | Bun 1.4.4, Playwright 1.64.1 | `Réussi` (2026-11-03) | `make web-smoke` : 25 routes × clair/sombre, `axe-core` 4.14.0, contrastes, captures 390 × 844. |
 | Moteur de test Chromium | Chrome for Testing 156.0.8078.4 | `Réussi` (2026-11-03) | Rendu et scans automatisés. Ce n'est **pas** la WebView système d'un téléphone. |
 | Android 8.0 (API 26), WebView Chromium 100+ | Minimum annoncé | `Bloqué` (QA-01, QA-05) | Aucun appareil ni image système. Rien n'est certifié sur ce minimum. |
 | Android 12 (API 31) | — | `Bloqué` (QA-02) | Aucun appareil. |

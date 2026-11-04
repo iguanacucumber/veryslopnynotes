@@ -40,7 +40,8 @@ usage() {
 usage : shot.sh <route> [--theme <t>] [--wait <secondes>] [--no-build]
 
   <route>               route de l'app : index, calendar, grades, tasks,
-                        profile, settings, help, news, canteen, attendance,
+                        profile, settings, help, about, privacy, terms, licenses,
+                        news, canteen, attendance,
                         messages, pairing, alerts, revision-sheets,
                         course-notes, prof, sanctions.
   --theme <dark|light|system>
@@ -341,6 +342,10 @@ tasks|Tâches|Devoirs;Aucun devoir
 profile|Profil|Se déconnecter;Compte;Ressources
 settings|Réglages|Apparence;Serveur;Sécurité
 help|Aide|Trouver le QR;Dépannage;Clé OpenRouter, coût et âge
+about|À propos|VerySlopyNyNotes;GPL-3.0-only;GitHub est le seul canal officiel
+privacy|Confidentialité|Notice de confidentialité;Responsable du traitement et contact;Points ouverts avant la release publique
+terms|Conditions|Conditions d’utilisation;Licence du logiciel;Aucune garantie
+licenses|Licences|Notices de tiers;Textes intégraux;APP-GPL-3.0-ONLY.txt
 news|Actualités|Dernières actualités en cache;Autres actualités;Aucune actualité;Aucune donnée en cache
 canteen|Cantine|Menus de la semaine;Aucun menu publié cette semaine
 attendance|Vie scolaire|Absences et retards;Heures manquées;Aucune absence ni retard;Aucune donnée en cache

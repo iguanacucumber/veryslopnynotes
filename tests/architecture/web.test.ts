@@ -86,7 +86,16 @@ describe("web invariants", () => {
   });
 
   test("aucun hôte Pronote dans le web", () => {
+    // Les écrans légaux CITENT les marques (non-affiliation, inventaire de
+    // licences) sans jamais joindre un hôte : le scan garde son verdict pour
+    // tout le code exécutable, ces deux fichiers statiques exceptés.
+    const citationsStatiques = new Set([
+      "/web/src/features/legal/AboutScreen.tsx",
+      "/web/src/features/legal/legal.ts",
+      "/web/src/routes/licenses.tsx",
+    ]);
     const hits = list(join(WEB, "src"))
+      .filter((file) => !citationsStatiques.has(file.replace(ROOT, "")))
       .filter((file) => pronoteHost.test(codeOnly(readFileSync(file, "utf8"))))
       .map((file) => file.replace(ROOT, ""));
     expect(hits).toEqual([]);

@@ -57,6 +57,10 @@ la section `0.1.0` le jour du tag.
   devoirs, fiches de révision, professeur, exercices, brouillon de photo),
   conservée à la copie et dans l'export PDF ; action « Signaler » réutilisant le
   diagnostic borné, sans donnée scolaire ni envoi automatique.
+- Écrans À propos, Confidentialité, Conditions et Licences, hors ligne et
+  atteignables depuis Réglages : version lue au pont, source et contacts GitHub,
+  non-affiliation, GPL-3.0-only, notices de tiers et textes intégraux embarqués
+  dans l’APK.
 - Attestation d’âge ou d’autorisation parentale avant la clé IA : l’écran
   explique 18 ans ou plus, ou représentant légal gérant le compte OpenRouter ;
   sans attestation, aucune clé ni aucun appel, et le retrait avec le

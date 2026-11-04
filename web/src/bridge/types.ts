@@ -12,6 +12,7 @@
  */
 export const BRIDGE_METHODS = [
   "app.ready",
+  "app.version",
   "app.theme",
   "app.setTheme",
   "app.textSize",
