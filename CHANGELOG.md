@@ -96,6 +96,11 @@ la section `0.1.0` le jour du tag.
 - Voie de relicence MIT → GPL-3.0-only documentée : texte MIT, ayants droit
   relevés dans Git, politique DCO et provenance Papillon en cours d'inventaire
   (`docs/legal/RELICENSING.md`, #827) ; l'avis du conseil reste suivi en #976.
+- Kit d'annonce v1.0.0 (`docs/RELEASE-ANNOUNCEMENT.md`) : brouillon publiable,
+  modèle de notes GitHub, limites réelles (rappels, IA, compte/QR, télémétrie,
+  non-affiliation), chemins d'installation/vérification/mise à jour,
+  placeholders de tag/date/SHA-256/empreinte et conditions de non-annonce ;
+  aucun tag, checksum ni release inventé (#978).
 
 ### Modifié
 
