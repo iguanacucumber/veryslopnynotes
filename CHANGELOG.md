@@ -58,6 +58,10 @@ la section `0.1.0` le jour du tag.
   explique 18 ans ou plus, ou représentant légal gérant le compte OpenRouter ;
   sans attestation, aucune clé ni aucun appel, et le retrait avec le
   consentement efface clé et fil. Revue juridique en attente (DEC-04).
+- Nom public et `applicationId` actés (`veryslopnynotes`,
+  `fr.veryslopnynotes.app`) : vérifications GitHub, Play, F-Droid, DNS/RDAP et
+  recherche web sans conflit public détecté, revue de marque formelle encore
+  requise (`docs/legal/NAME.md`, #826).
 
 ### Modifié
 
