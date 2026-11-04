@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "license": "GPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iguanacucumber/veryslopnynotes.git"
+  },
   "scripts": {
     "check": "make check",
     "typecheck": "tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsc-root.tsbuildinfo",

@@ -70,6 +70,8 @@ la section `0.1.0` le jour du tag.
   retrait.
 - `LICENSE` remplacé par le texte GPL-3.0 canonique, `package.json` déclaré
   GPL-3.0-only et README/docs alignés.
+- `package.json` identifie le dépôt GitHub réel (`repository`) en plus de la
+  licence SPDX ; `docs/REPOSITORY.md` documente licence et URL.
 
 ### Sécurité
 
