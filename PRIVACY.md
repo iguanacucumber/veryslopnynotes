@@ -366,7 +366,10 @@ un conseil et, pour certains, avec l’établissement.
    ne nomme ni société, ni adresse, ni représentant (issue
    [#831](https://github.com/iguanacucumber/veryslopnynotes/issues/831)).
 2. **Contact vie privée.** Quelle adresse ou quel canal privé pour les demandes,
-   et qui y répond ? Aucun contact ne doit être inventé.
+   et qui y répond ? Aucun contact ne doit être inventé. Les options, les champs
+   à décider et le texte de remplacement de la section 1 sont dans
+   [`docs/legal/CONTROLLER.md`](docs/legal/CONTROLLER.md) ; aucune identité n’y
+   est inventée.
 3. **Bases légales.** Valider les bases proposées, en particulier pour les
    données scolaires, les motifs d’absence ou de sanction, les photos et les
    prompts IA. La base peut dépendre de l’établissement.
