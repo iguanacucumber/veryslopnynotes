@@ -154,6 +154,8 @@ la section `0.1.0` le jour du tag.
   monotone, repli déterministe `0.1.0`/`1` sans tag.
 - Release : le parcours public ne produit plus que l'APK sideload signé ;
   `make buildRelApk` n'embarque plus de bundle de publication.
+- Build release sans clé de signature : `assembleRelease` échoue en nommant le
+  champ manquant, sans repli debug ; le debug reste signé debug et constructible.
 - Fontes SN Pro sous-ensemblées en WOFF2 (graisses réellement utilisées,
   préchargement) et budget gzip vérifié à chaque build.
 - Santé de release documentée sans télémétrie : signaux store, CI, issues et

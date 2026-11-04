@@ -3,7 +3,7 @@
 # La clé de signature est ÉPHÉMÈRE : générée dans le job, hors du workspace,
 # jamais commitée ni publiée. Elle ne remplace pas la clé de distribution : elle
 # prouve que la release compile, que R8 produit son mapping et que l'APK n'est
-# PAS signé debug (le repli silencieux du build sans STORE_FILE).
+# PAS signé debug (aucun repli : sans clé, le build échoue — #919).
 #
 # L'APK est ensuite vérifié par `check-release-artifact.ts` : certificat debug,
 # notices GPL/tierces, secrets embarqués, allowlist de permissions et version
@@ -32,7 +32,7 @@ concurrency:
 jobs:
   release-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -78,6 +78,40 @@ jobs:
         run: |
           set -euo pipefail
           bun install --frozen-lockfile --silent || bun install --frozen-lockfile
+
+      # Preuve du fail-closed (#919) : sans clé, l'emballage release doit
+      # échouer AVANT le build et nommer le champ manquant. Aucune clé n'est
+      # encore générée ici ; -Prelease.storeFile= neutralise un gradle.properties
+      # de runner auto-hébergé.
+      - name: Release sans clé = échec
+        run: |
+          set -euo pipefail
+          cd android
+          log="$RUNNER_TEMP/release-sans-cle.log"
+          set +e
+          env -u STORE_FILE -u STORE_PASSWORD -u KEY_ALIAS -u KEY_PASSWORD \
+            ./gradlew --console=plain --no-daemon -Prelease.storeFile= assembleRelease >"$log" 2>&1
+          code=$?
+          set -e
+          cat "$log"
+          if [ "$code" -eq 0 ]; then
+            echo "::error title=Repli debug encore possible::assembleRelease a réussi sans clé release."
+            exit 1
+          fi
+          for attendu in "release.storeFile" "STORE_FILE" "Aucun repli debug"; do
+            grep -Fq "$attendu" "$log" || {
+              echo "::error title=Message de refus incomplet::« $attendu » absent du journal."
+              exit 1
+            }
+          done
+          echo "assembleRelease sans clé a échoué comme exigé."
+
+      - name: Debug sans clé = OK
+        run: |
+          set -euo pipefail
+          cd android
+          env -u STORE_FILE -u STORE_PASSWORD -u KEY_ALIAS -u KEY_PASSWORD \
+            ./gradlew --console=plain --no-daemon assembleDebug
 
       # Hors workspace (`RUNNER_TEMP`) : rien de la clé ne peut entrer dans un
       # artefact, et le runner la détruit avec le job. Mot de passe masqué pour

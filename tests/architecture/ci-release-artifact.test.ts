@@ -75,11 +75,27 @@ describe("CI : artefact release (#883, #928)", () => {
     expect(verify).toContain("^fr\\.veryslopnynotes\\.");
   });
 
+  test("sans clé, la release échoue et le debug reste constructible (#919)", () => {
+    const sansCle = step("Release sans clé = échec");
+    expect(sansCle).toContain("assembleRelease");
+    expect(sansCle).toContain("release.storeFile");
+    expect(sansCle).toContain("STORE_FILE");
+    expect(sansCle).toContain("Aucun repli debug");
+    const debug = step("Debug sans clé = OK");
+    expect(debug).toContain("assembleDebug");
+    // L'échec est prouvé AVANT que la clé éphémère n'existe.
+    expect(WORKFLOW.indexOf("- name: Release sans clé = échec")).toBeLessThan(
+      WORKFLOW.indexOf("- name: Clé éphémère"),
+    );
+  });
+
   test("BUILD.md documente le job et son artefact", () => {
     const section = BUILD.slice(BUILD.indexOf("## Artefact release"));
     expect(section).toContain("`release-artifact`");
     expect(section).toMatch(/ÉPHÉMÈRE/);
     expect(section).toContain("`workflow_call`");
     expect(section).toMatch(/7 jours/);
+    expect(section).toContain("#919");
+    expect(section).toContain("assembleRelease");
   });
 });

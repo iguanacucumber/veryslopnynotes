@@ -111,6 +111,7 @@ scolaire : les fixtures sont des identifiants de test locaux.
 `apksigner`, refuse un certificat debug, exige `mapping.txt` + `seeds.txt` R8,
 et publie APK + mapping 7 jours. `workflow_call` le rend réutilisable par un
 futur job de tag.
+Sans clé (#919), `assembleRelease` échoue, `assembleDebug` reste vert.
 
 `agents/runtime/check-release-artifact.ts` vérifie ensuite l'APK lui-même :
 notices (`THIRD_PARTY_NOTICES.md` + `assets/web/licenses/`) identiques aux
