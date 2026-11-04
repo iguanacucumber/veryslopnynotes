@@ -402,8 +402,9 @@ describe("registre d'invariants", () => {
       // l'opérabilité (sondes, drain, cgroups, CA/HSTS).
       ["server/README.md", 9_600],
       ["shared/contracts/README.md", 1_000],
-      // +500 loopback/digest (#921), +900 deep links (SEC-10), +200 démo (#873).
-      ["docs/RELEASE.md", 8_600],
+      // +500 loopback/digest (#921), +900 deep links (SEC-10), +200 démo (#873),
+      // +900 version dérivée des tags (#927).
+      ["docs/RELEASE.md", 9_500],
       ["docs/HUMAN_INPUTS.md", 4_500],
       // +500 pour la suppression totale et le compte élève (#853/#832),
       // +750 pour le consentement IA versionné (#860).

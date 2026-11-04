@@ -67,6 +67,15 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # La configuration Gradle dérive la version des tags via le script partagé
+      # (bun) : sans bun, la compile Kotlin échoue AVANT CodeQL. Pas de
+      # `bun install` : le script n'importe aucun paquet.
+      - name: Bun
+        if: matrix.language == 'java-kotlin'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.4"
+
       # Mêmes archives et mêmes empreintes que le gate : la version analysée est
       # celle que compile la CI, pas celle de l'image du runner.
       - name: SDK Android
@@ -96,7 +105,7 @@ jobs:
           echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$sdk" >> "$GITHUB_ENV"
 
-      # `buildWebUi` exige bun et le build web : hors analyse Kotlin, comme dans
+      # `buildWebUi` exige le bundle web, inutile à l'analyse Kotlin, comme dans
       # le gate. Les tâches visent les sources de production des quatre modules.
       - name: Compiler Kotlin
         if: matrix.language == 'java-kotlin'
