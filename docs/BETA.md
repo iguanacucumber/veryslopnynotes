@@ -129,6 +129,22 @@ pour la release. Le détail est dans [`PRIVACY.md`](../PRIVACY.md).
   [`PRIVACY.md`](../PRIVACY.md). Un export déjà partagé reste hors du contrôle
   de l'app.
 
+## Checklist de consentement
+
+Ce kit ne remplace pas l'accord : le mainteneur le recueille et le conserve
+**hors du dépôt public**. Aucun participant, aucune signature et aucune preuve
+nominative ne sont publiés ici.
+
+- [ ] Accord explicite recueilli avant l'installation, avec la version testée et
+      le canal de retour.
+- [ ] Autorisation de l'établissement pour utiliser le compte et les données
+      nécessaires au test.
+- [ ] Accord du représentant légal si le participant est mineur.
+- [ ] Participant informé qu'il peut retirer son accord à tout moment : il cesse
+      alors de recevoir les mises à jour et peut demander le retrait de ses
+      rapports, sans avoir à se justifier.
+- [ ] Retrait consigné hors du dépôt, sans publier l'identité du participant.
+
 ## Donner un retour
 
 Le seul canal de retour est **GitHub Issues**. Aucun courriel, formulaire, chat,
@@ -156,7 +172,10 @@ Chaque version de bêta a **une** issue épinglée `[known-issues] vX.Y.Z` (labe
 `bug`) qui liste chaque défaut connu, son contournement, son propriétaire et la
 version cible. Elle est mise à jour à chaque revue de bêta et close quand la
 version n'est plus proposée. Un défaut connu ne reste jamais seulement dans un
-fil de discussion.
+fil de discussion. Le modèle
+[Problèmes connus](https://github.com/iguanacucumber/veryslopnynotes/issues/new?template=known_issues.yml)
+fournit les champs exigés — version, symptôme, contournement, propriétaire,
+version cible, gravité — et rappelle l'interdiction de donnée scolaire.
 
 Le triage suit [`INCIDENTS.md`](INCIDENTS.md) et [`SUPPORT.md`](SUPPORT.md) :
 

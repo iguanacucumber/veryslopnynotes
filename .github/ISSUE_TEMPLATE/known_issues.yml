@@ -1,0 +1,87 @@
+name: Problèmes connus
+description: Ouvrir ou mettre à jour l'issue épinglée des défauts connus d'une version, sans donnée scolaire.
+title: "[known-issues] v"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Une seule issue épinglée par version, mise à jour à chaque revue de
+        bêta. **Ne joins aucune donnée scolaire** : pas de nom, d'URL
+        d'établissement, de note, de message, de pièce jointe ni de capture non
+        caviardée. Un défaut déjà listé se commente ici, sans ouvrir de doublon.
+
+        Lis le [kit bêta](https://github.com/iguanacucumber/veryslopnynotes/blob/main/docs/BETA.md)
+        et le [support](https://github.com/iguanacucumber/veryslopnynotes/blob/main/docs/SUPPORT.md).
+        Une faille exploitable ne s'ouvre pas ici : utilise
+        [SECURITY.md](https://github.com/iguanacucumber/veryslopnynotes/blob/main/SECURITY.md).
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Version exacte couverte par l'issue, finale ou bêta.
+      placeholder: "0.1.0-beta.3"
+    validations:
+      required: true
+
+  - type: textarea
+    id: symptome
+    attributes:
+      label: Symptôme
+      description: Ce qui échoue, avec le message exact et les étapes, sans contenu scolaire.
+      placeholder: "Exemple : la mise à jour bêta.3 échoue à l'installation."
+    validations:
+      required: true
+
+  - type: textarea
+    id: contournement
+    attributes:
+      label: Contournement
+      description: Ce que le participant peut faire en attendant, ou « aucun ».
+      placeholder: "Rester sur la bêta précédente, sans downgrade."
+    validations:
+      required: true
+
+  - type: input
+    id: proprietaire
+    attributes:
+      label: Propriétaire
+      description: Mainteneur responsable du suivi, par son compte GitHub.
+      placeholder: "@iguanacucumber"
+    validations:
+      required: true
+
+  - type: input
+    id: version-cible
+    attributes:
+      label: Version cible
+      description: Version qui doit corriger le défaut, ou « non planifiée ».
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: gravite
+    attributes:
+      label: Gravité
+      description: Priorité de triage, selon docs/INCIDENTS.md.
+      options:
+        - P0 — perte de données, démarrage cassé, faille, clé exposée
+        - P1 — parcours principal bloqué
+        - P2 — régression sans perte de données
+        - P3 — gêne mineure
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: donnees
+    attributes:
+      label: Données et sécurité
+      options:
+        - label: Je n'ai publié aucun nom, URL d'établissement, note, message ni identifiant.
+          required: true
+        - label: Je sais que cette issue est publique et ne contient aucune donnée scolaire.
+          required: true
+        - label: Je n'ai pas ouvert de faille exploitable ici ; elle passe par SECURITY.md.
+          required: true
