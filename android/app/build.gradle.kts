@@ -23,6 +23,29 @@ val tagVersionCode = tagVersion[1].toIntOrNull()
 val configuredHost = (project.findProperty("server.host") as String?)
     ?: System.getenv("SERVER_HOST")
 
+// Clé release hors repo (docs/RELEASE.md). Les quatre champs vont ensemble :
+// un chemin seul ne signe rien. Le refus ne cite que des NOMS de propriétés.
+val releaseStoreFile = ((project.findProperty("release.storeFile") as String?)
+    ?: System.getenv("STORE_FILE"))?.trim()
+val releaseStorePassword = ((project.findProperty("release.storePassword") as String?)
+    ?: System.getenv("STORE_PASSWORD"))?.trim()
+val releaseKeyAlias = ((project.findProperty("release.keyAlias") as String?)
+    ?: System.getenv("KEY_ALIAS"))?.trim()
+val releaseKeyPassword = ((project.findProperty("release.keyPassword") as String?)
+    ?: System.getenv("KEY_PASSWORD"))?.trim()
+val releaseKeystore = releaseStoreFile
+    ?.takeUnless { it.isEmpty() }
+    ?.let { file(it) }
+val missingReleaseSigning = buildList {
+    when {
+        releaseKeystore == null -> add("release.storeFile (ou STORE_FILE)")
+        !releaseKeystore.isFile -> add("release.storeFile « ${releaseKeystore.path} » (fichier absent)")
+    }
+    if (releaseStorePassword.isNullOrEmpty()) add("release.storePassword (ou STORE_PASSWORD)")
+    if (releaseKeyAlias.isNullOrEmpty()) add("release.keyAlias (ou KEY_ALIAS)")
+    if (releaseKeyPassword.isNullOrEmpty()) add("release.keyPassword (ou KEY_PASSWORD)")
+}
+
 android {
     namespace = "fr.veryslopnynotes.app"
     compileSdk = 37
@@ -43,19 +66,14 @@ android {
     }
 
     signingConfigs {
-        // Clé release hors repo (jamais commitée, docs/RELEASE.md) : config
-        // incomplète = bloc inutilisé, aucun secret en dur.
+        // Clé release hors repo (jamais commitée, docs/RELEASE.md). Config
+        // incomplète = bloc inutilisé : la release refuse de se construire.
         create("release") {
-            val f = (project.findProperty("release.storeFile") as String?)
-                ?: System.getenv("STORE_FILE")
-            if (!f.isNullOrBlank()) {
-                storeFile = file(f)
-                storePassword = ((project.findProperty("release.storePassword") as String?)
-                    ?: System.getenv("STORE_PASSWORD"))
-                keyAlias = ((project.findProperty("release.keyAlias") as String?)
-                    ?: System.getenv("KEY_ALIAS"))
-                keyPassword = ((project.findProperty("release.keyPassword") as String?)
-                    ?: System.getenv("KEY_PASSWORD"))
+            if (missingReleaseSigning.isEmpty()) {
+                storeFile = releaseKeystore
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
             }
         }
     }
@@ -64,6 +82,8 @@ android {
         // Défaut émulateur (http local) réservé au debug ; la release ne part
         // jamais sur `10.0.2.2` ni en clair, même sans configuration.
         debug {
+            // Debug signé debug, explicitement : constructible sans clé release.
+            signingConfig = signingConfigs.getByName("debug")
             val host = configuredHost ?: "10.0.2.2:3000"
             // ponytail: logique dupliquée de core/ServerConfig.schemeFor
             // (Gradle ne dépend pas du module core). Upgrade: settings partagés.
@@ -87,14 +107,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            // Clé TOUJOURS hors repo ; absente = repli debug, à ne pas publier
-            // comme mise à jour d'un APK signé custom.
-            val storeFileProp = (project.findProperty("release.storeFile") as String?)
-                ?: System.getenv("STORE_FILE")
-            if (!storeFileProp.isNullOrBlank()) {
+            // Clé TOUJOURS hors repo. Sans clé custom, aucune signature de
+            // repli : la tâche d'emballage échoue (garde ci-dessous).
+            if (missingReleaseSigning.isEmpty()) {
                 signingConfig = signingConfigs.getByName("release")
-            } else {
-                signingConfig = signingConfigs.getByName("debug")
             }
         }
     }
@@ -104,6 +120,26 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+}
+
+// Le repli debug est retiré (#919) : toute tâche qui EMBALLE une release sans
+// clé custom échoue avant d'exécuter quoi que ce soit, en nommant le champ
+// manquant. `assembleRelease` et `bundleRelease` passent par ces tâches.
+gradle.taskGraph.whenReady {
+    val packagesRelease = allTasks.any {
+        it.name == "assembleRelease" ||
+            it.name == "bundleRelease" ||
+            it.name.startsWith("packageRelease")
+    }
+    if (packagesRelease && missingReleaseSigning.isNotEmpty()) {
+        throw GradleException(
+            "Release refusée : aucune clé de signature release complète. " +
+                "Manquant : ${missingReleaseSigning.joinToString(", ")}. " +
+                "Configurer release.storeFile, release.storePassword, release.keyAlias et " +
+                "release.keyPassword (ou STORE_FILE, STORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD), " +
+                "hors du dépôt (docs/RELEASE.md). Aucun repli debug.",
+        )
     }
 }
 

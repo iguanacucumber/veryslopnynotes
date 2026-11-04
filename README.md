@@ -55,9 +55,9 @@ apksigner verify --print-certs veryslopnynotes-<version>.apk
    ne pas installer le fichier et le signaler via un Advisory privé.
 
 Android accepte le sideload après autorisation des sources inconnues.
-N'installer qu'un APK **release signé** : un APK debug, ou un build release
-sans clé (repli debug), n'est pas une release officielle et ne pourra pas
-recevoir les mises à jour publiées.
+N'installer qu'un APK **release signé** : un APK debug n'est pas une release
+officielle et ne pourra pas recevoir les mises à jour publiées. Un build release
+sans clé ÉCHOUE (fail-closed) au lieu de produire un APK non publiable.
 
 ## Mettre à jour
 
@@ -175,7 +175,7 @@ bun run dev:web       # interface + pont factice, sans téléphone
 make check            # gate complet
 make buildDebugApk    # APK debug
 make updateApkToPhone # installe le debug en conservant les données
-make buildRelApk      # APK release signé (clé hors dépôt)
+make buildRelApk      # APK release signé (clé hors dépôt requise, échec sans clé)
 ```
 
 Parcours de contribution, DCO et gate : [`CONTRIBUTING.md`](CONTRIBUTING.md),

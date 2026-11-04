@@ -102,7 +102,7 @@ Un checkout release doit contenir le tag sur `HEAD` (`fetch-depth: 0`). Calcul
 pur : `agents/runtime/android-version.ts`, testé par
 `tests/unit/version-from-tags.test.ts`.
 
-## APK release (clé hors repo, repli debug #297)
+## APK release (clé hors repo, échec sans clé #919)
 
 Cycle de vie complet — génération `keytool`, custody, secrets de
 l'environnement `release`, empreinte publiée, vérification `apksigner`,
@@ -124,9 +124,10 @@ artefact.
    Produit un APK signé :
    `android/app/build/outputs/apk/release/app-release.apk` (sideload).
 
-   Avec clé : signature custom. Sans clé : repli debug
-   (installable sideload, sans cert custom — ne pas publier comme mise à
-   jour d'un APK signé custom, signature différente).
+   Avec clé : signature custom. Sans clé complète : `assembleRelease` ÉCHOUE
+   avant le build en nommant le champ manquant (`release.*` ou `STORE_FILE`,
+   etc.) ; aucun repli debug. Debug : `assembleDebug` reste signé debug, sans
+   clé release.
    `SERVER_HOST` via `local.properties` `server.host` ou env (défaut release
    VIDE, HTTPS-only ; le défaut émulateur `10.0.2.2:3000` et le clair
    n'existent qu'en debug). La release pose `DEMO_MODE=false` : démo refusée,

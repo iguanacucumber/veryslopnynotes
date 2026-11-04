@@ -168,7 +168,7 @@ buildRelApk: ## APK release (JDK/SDK requis)
 	  android_toolchain_hint; exit 1; \
 	fi; \
 	cd android && JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain assembleRelease && \
-	echo "APK release : android/app/build/outputs/apk/release/ (signé custom si STORE_FILE présent, sinon signé debug #297)"
+	echo "APK release : android/app/build/outputs/apk/release/ (signé avec la clé release configurée ; échec sans clé)"
 
 # HTTPS sans auth (I8) ; boucle locale par défaut.
 runServer: ## serveur scraper HTTPS local
@@ -192,4 +192,4 @@ build: ## image Docker du serveur + scan de secrets
 	    echo "  n'a PAS été reconstruite : l'image d'un build précédent ne compte pas."; \
 	    exit 1; }; \
 	fi
-	@if [ -d android/app ]; then echo "APK : make buildDebugApk / make buildRelApk (custom hors repo, repli debug #297)"; fi
+	@if [ -d android/app ]; then echo "APK : make buildDebugApk / make buildRelApk (release : clé hors repo requise)"; fi
