@@ -1,8 +1,12 @@
 // Version Android dérivée du tag git : UN calcul pur, une seule lecture git.
-// Un tag `vX.Y.Z` posé sur HEAD fixe `versionName` et `versionCode` ; sans tag,
-// le repli est déterministe (jamais le nombre de commits, qui dépend de la
-// branche et du checkout). Les pré-releases sont REFUSÉES : aucun `versionCode`
-// strictement croissant ne peut être garanti entre `v1.2.3-beta.1` et `v1.2.3`.
+// Un tag `vX.Y.Z` (finale) ou `vX.Y.Z-beta.N` (pré-release) posé sur HEAD fixe
+// `versionName` et `versionCode` ; sans tag, le repli est déterministe (jamais
+// le nombre de commits, qui dépend de la branche et du checkout).
+//
+// Le dernier chiffre du code est un canal : `999` pour une finale, `N` pour
+// `-beta.N`. Une bêta est donc TOUJOURS sous sa finale, et la bêta du patch
+// suivant reste au-dessus de la finale précédente : beta→finale s'installe
+// sans désinstallation, l'inverse est un downgrade.
 export interface AndroidVersion {
   name: string;
   code: number;
@@ -16,12 +20,19 @@ export const MAX_VERSION_CODE = 2_100_000_000;
 
 const SCALE = 1_000;
 const MAX_COMPONENT = SCALE - 1;
+const FINAL_REVISION = SCALE - 1;
+const MAX_BETA = FINAL_REVISION - 1;
 // SemVer interdit les zéros de tête : `v01.2.3` ne doit pas devenir `1.2.3`.
 const VERSION_TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 // Un tag qui COMMENCE comme une version est une tentative de version : il est
 // refusé, pas ignoré (contrairement à `backup-2024` ou `nightly`).
 const VERSION_LIKE = /^v\d/;
-const PRE_RELEASE = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-/;
+const BETA_TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-beta\.(0|[1-9]\d*)$/;
+const PRE_RELEASE = /^v\d+\.\d+\.\d+-/;
+
+function versionCode(major: number, minor: number, patch: number, revision: number): number {
+  return major * SCALE ** 3 + minor * SCALE ** 2 + patch * SCALE + revision;
+}
 
 /**
  * Traduit UN tag en version Android. Un tag hors format de version rend `null` ;
@@ -29,16 +40,43 @@ const PRE_RELEASE = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-/;
  */
 export function versionFromTag(tag: string): AndroidVersion | null {
   if (!VERSION_LIKE.test(tag)) return null;
-  if (PRE_RELEASE.test(tag)) {
-    throw new Error(
-      `tag de pré-release « ${tag} » refusé : le versionCode ne peut pas rester ` +
-        `croissant entre une pré-release et sa version finale.`,
-    );
+
+  const beta = BETA_TAG.exec(tag);
+  if (beta !== null) {
+    const major = Number(beta[1]);
+    const minor = Number(beta[2]);
+    const patch = Number(beta[3]);
+    const number = Number(beta[4]);
+    if (minor > MAX_COMPONENT || patch > MAX_COMPONENT) {
+      throw new Error(
+        `tag « ${tag} » invalide : les composantes mineure et corrective doivent être < ${SCALE}.`,
+      );
+    }
+    if (number < 1 || number > MAX_BETA) {
+      throw new Error(
+        `tag « ${tag} » invalide : -beta.N exige 1 ≤ N ≤ ${MAX_BETA} ` +
+          `(999 est réservé à la finale).`,
+      );
+    }
+    const code = versionCode(major, minor, patch, number);
+    if (code > MAX_VERSION_CODE) {
+      throw new Error(
+        `tag « ${tag} » invalide : versionCode ${code} > plafond Android ${MAX_VERSION_CODE}.`,
+      );
+    }
+    return { name: tag.slice(1), code };
   }
+
   const match = VERSION_TAG.exec(tag);
   if (match === null) {
+    if (PRE_RELEASE.test(tag)) {
+      throw new Error(
+        `tag de pré-release « ${tag} » refusé : seul le canal -beta.N est accepté.`,
+      );
+    }
     throw new Error(
-      `tag « ${tag} » invalide : attendu vX.Y.Z (X, Y, Z sans zéro de tête, Y et Z < ${SCALE}).`,
+      `tag « ${tag} » invalide : attendu vX.Y.Z ou vX.Y.Z-beta.N ` +
+        `(X, Y, Z sans zéro de tête, Y et Z < ${SCALE}).`,
     );
   }
   const major = Number(match[1]);
@@ -49,7 +87,7 @@ export function versionFromTag(tag: string): AndroidVersion | null {
       `tag « ${tag} » invalide : les composantes mineure et corrective doivent être < ${SCALE}.`,
     );
   }
-  const code = major * SCALE * SCALE + minor * SCALE + patch;
+  const code = versionCode(major, minor, patch, FINAL_REVISION);
   if (code > MAX_VERSION_CODE) {
     throw new Error(
       `tag « ${tag} » invalide : versionCode ${code} > plafond Android ${MAX_VERSION_CODE}.`,
@@ -59,7 +97,7 @@ export function versionFromTag(tag: string): AndroidVersion | null {
 }
 
 /**
- * Version du commit : le plus haut tag `vX.Y.Z` de HEAD, sinon le repli.
+ * Version du commit : le plus haut tag de version de HEAD, sinon le repli.
  * Plusieurs tags valides sur HEAD (alias) sont départagés par le code.
  */
 export function versionFromTags(tags: readonly string[]): AndroidVersion {

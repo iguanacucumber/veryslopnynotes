@@ -84,14 +84,23 @@ make build   # check-secrets + docker build (skip si daemon absent)
 - Vérifier : `bun run agents/runtime/check-secrets.ts` OK,
   `bun audit` propre (0 vulnérabilité), `bunx tsc --noEmit` OK.
 
-## Version Android (tag git, #927)
+## Version Android (tag git, #927, #936)
 
-Le tag `vX.Y.Z` posé sur le commit construit fixe `versionName = X.Y.Z` et
-`versionCode = X * 1_000_000 + Y * 1_000 + Z` (`Y`, `Z` < 1000, code sous
-`2_100_000_000`). Sans tag : repli `0.1.0`/`1` (dev). Les pré-releases sont
-refusées (REL-05) : le checkout release doit contenir le tag sur `HEAD`
-(`fetch-depth: 0`). Calcul pur : `agents/runtime/android-version.ts`, testé
-par `tests/unit/version-from-tags.test.ts`.
+Le tag `vX.Y.Z` (finale) ou `vX.Y.Z-beta.N` (pré-release) posé sur le commit
+construit fixe le `versionName` (`X.Y.Z` ou `X.Y.Z-beta.N`) et
+`versionCode = X * 1_000_000_000 + Y * 1_000_000 + Z * 1_000 + R`, avec `Y` et
+`Z` < 1000, `R = 999` pour une finale et `R = N` pour `-beta.N` (`1 ≤ N ≤ 998`).
+Le code doit rester sous le plafond Android `2_100_000_000` : `X ≤ 2`, et
+`X = 2` limite `Y ≤ 99`. Sans tag : repli `0.1.0`/`1` (dev).
+
+Le slot `R` rend le code strictement croissant : `beta.1 < beta.2 < finale`
+pour une même version, et `X.Y.(Z+1)-beta.1` est au-dessus de `X.Y.Z`. Une
+finale s'installe donc par-dessus ses bêtas sans désinstallation ; revenir
+d'une finale à une bêta (ou d'une bêta à une bêta antérieure) est un
+**downgrade** : Android le refuse, et désinstaller efface les données locales.
+Un checkout release doit contenir le tag sur `HEAD` (`fetch-depth: 0`). Calcul
+pur : `agents/runtime/android-version.ts`, testé par
+`tests/unit/version-from-tags.test.ts`.
 
 ## APK release (clé hors repo, repli debug #297)
 
@@ -171,12 +180,28 @@ adb shell am start -W -a android.intent.action.VIEW \
 
 Avant le tag : renommer `[Unreleased]` de
 [`CHANGELOG.md`](../CHANGELOG.md) en `## [x.y.z] - AAAA-MM-JJ`, recréer
-`[Unreleased]` vide, merger, puis pousser `vX.Y.Z`. `.github/workflows/release.yml`
-checkout le tag, calcule la version avec `agents/runtime/android-version.ts`,
-réutilise `release-artifact.yml`, re-signe avec la clé de l'environnement
-protégé `release`, vérifie certificat et SHA-256, écrit `SHA256SUMS`, puis
-publie la GitHub Release : APK, mapping/seeds, liens vers le tag et
-`archive/refs/tags/<tag>.tar.gz` (GPL-3.0-only).
+`[Unreleased]` vide, merger, puis pousser `vX.Y.Z`.
+`.github/workflows/release.yml` checkout le tag, calcule la version avec
+`agents/runtime/android-version.ts`, réutilise `release-artifact.yml`, re-signe
+avec la clé de l'environnement protégé `release`, vérifie certificat et
+SHA-256, écrit `SHA256SUMS`, puis publie la GitHub Release : APK,
+mapping/seeds, liens vers le tag et `archive/refs/tags/<tag>.tar.gz`
+(GPL-3.0-only).
+
+### Canal bêta
+
+Un tag `vX.Y.Z-beta.N` publie une **pré-release** GitHub (`--prerelease`,
+jamais « Latest »). Build, clé de signature, vérification du certificat,
+`SHA256SUMS` et archive source sont identiques à la finale : aucune gate n'est
+allégée. Seul le format `-beta.N` est accepté ; `-rc.N` et les autres suffixes
+sont refusés avant le build.
+
+Les notes de `vX.Y.Z-beta.N` viennent de la section `## [X.Y.Z]` (celle de la
+future finale) ; une section `## [X.Y.Z-beta.N]` est utilisée en priorité si
+elle existe. Numéroter les bêtas dans l'ordre : `versionCode` croît, et la
+finale `X.Y.Z` s'installe par-dessus toutes ses bêtas. Une bêta ne se
+« downgrade » pas : réinstaller une version antérieure exige une
+désinstallation, donc la perte des données locales.
 
 Secrets `release` : `RELEASE_KEYSTORE_BASE64` (PKCS12 base64),
 `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`. Absent

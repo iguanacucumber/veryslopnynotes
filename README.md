@@ -68,6 +68,16 @@ APK release signé par le même certificat :
 - **Obtainium (facultatif)** : ajouter l'URL du dépôt ; Obtainium interroge
   GitHub et propose les releases avec APK. Ce n'est pas un service du projet.
 
+### Canal bêta
+
+Les tags `vX.Y.Z-beta.N` publient une **pré-release** GitHub, signée avec la
+même clé que la finale. Bêta → bêta (`N` croissant) et bêta → finale `X.Y.Z`
+s'installent par-dessus l'app sans perte : la finale porte un `versionCode`
+supérieur à ses bêtas. Revenir d'une finale à une bêta, ou d'une bêta à une
+bêta antérieure, est un **downgrade** : Android le refuse, et désinstaller
+efface les données listées ci-dessous. Ne suivre la bêta que depuis un APK
+release signé, jamais depuis un APK debug.
+
 Android refuse une mise à jour dont le certificat diffère. Ne jamais passer
 d'un APK debug à un APK release par-dessus : la migration exige une
 désinstallation.

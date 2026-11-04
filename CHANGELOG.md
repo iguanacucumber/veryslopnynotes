@@ -34,6 +34,9 @@ la section `0.1.0` le jour du tag.
   Release ; dry-run manuel sans publication, échec si un secret manque.
 - CI : budget de taille APK — taille mesurée sur l'artefact release et
   conservée, dépassement du plafond = échec.
+- CI : canal bêta sur tag `vX.Y.Z-beta.N` — pré-release GitHub avec les mêmes
+  gates de signature, checksums et source ; `versionCode` monotone, bêta →
+  finale sans désinstallation.
 - Smoke CI sur émulateur : APK debug installé, appairage démo, accueil vérifié,
   captures et logcat en artefact (non bloquant tant que non stable).
 - Tests instrumentés sur émulateur : clé chiffrée, Keystore dégradé puis sain,
@@ -102,7 +105,7 @@ la section `0.1.0` le jour du tag.
   aucun APK ni binaire public avant, droits MIT des copies déjà livrées
   préservés (#844).
 - Version Android dérivée du tag git `vX.Y.Z` : `versionName` et `versionCode`
-  monotone, repli déterministe `0.1.0`/`1` sans tag, pré-releases refusées.
+  monotone, repli déterministe `0.1.0`/`1` sans tag.
 - Release : le parcours public ne produit plus que l'APK sideload signé ;
   `make buildRelApk` n'embarque plus de bundle de publication.
 - Fontes SN Pro sous-ensemblées en WOFF2 (graisses réellement utilisées,

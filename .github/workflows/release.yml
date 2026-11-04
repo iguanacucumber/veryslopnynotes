@@ -1,4 +1,6 @@
 # Publie une release sur tag `v*` : build réutilisé, signature réelle, checksums.
+# `vX.Y.Z` publie une release finale ; `vX.Y.Z-beta.N` une pré-release GitHub,
+# avec les mêmes gates (signature, SHA-256, source) et sans jamais toucher « Latest ».
 #
 # `release-artifact.yml` construit et vérifie une release avec une clé éphémère.
 # Ici la signature PUBLIQUE est refaite avec la clé de l'environnement protégé
@@ -28,6 +30,7 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
       code: ${{ steps.version.outputs.code }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
       - name: Code (tag exact)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -53,10 +56,17 @@ jobs:
           case "$tag" in
             v*) ;;
             *)
-              echo "::error title=Tag invalide::« $tag » : attendu vX.Y.Z."
+              echo "::error title=Tag invalide::« $tag » : attendu vX.Y.Z ou vX.Y.Z-beta.N."
               exit 1
               ;;
           esac
+          prerelease=false
+          if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]; then
+            prerelease=true
+          elif [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error title=Tag invalide::« $tag » : attendu vX.Y.Z ou vX.Y.Z-beta.N."
+            exit 1
+          fi
           if [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
             echo "::error title=Tag déplacé::HEAD ne correspond plus au SHA du run $GITHUB_SHA."
             exit 1
@@ -70,6 +80,7 @@ jobs:
             echo "tag=$tag"
             echo "version=$version"
             echo "code=$code"
+            echo "prerelease=$prerelease"
           } >> "$GITHUB_OUTPUT"
 
   # Le workflow réutilisé checkout le ref de l'appelant : sur un tag, c'est le
@@ -91,6 +102,7 @@ jobs:
       TAG: ${{ needs.prepare.outputs.tag }}
       VERSION: ${{ needs.prepare.outputs.version }}
       VERSION_CODE: ${{ needs.prepare.outputs.code }}
+      PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
     steps:
       - name: Code (tag exact)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -227,17 +239,27 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          notes="$(awk -v v="$VERSION" '
-            index($0, "## [" v "]") == 1 { inside=1; next }
-            inside && /^## / { exit }
-            inside { print }
-          ' CHANGELOG.md)"
+          extract() {
+            awk -v v="$1" '
+              index($0, "## [" v "]") == 1 { inside=1; next }
+              inside && /^## / { exit }
+              inside { print }
+            ' CHANGELOG.md
+          }
+          base="${VERSION%%-*}"
+          notes="$(extract "$VERSION")"
+          if [ -z "$(printf '%s' "$notes" | tr -d '[:space:]')" ] && [ "$base" != "$VERSION" ]; then
+            notes="$(extract "$base")"
+          fi
           if [ -z "$(printf '%s' "$notes" | tr -d '[:space:]')" ]; then
-            echo "::error title=CHANGELOG sans section::aucune section « ## [$VERSION] » : renommer [Unreleased] avant le tag."
+            echo "::error title=CHANGELOG sans section::aucune section « ## [$VERSION] » (ni « ## [$base] » pour une bêta) : renommer [Unreleased] avant le tag."
             exit 1
           fi
           body="$RUNNER_TEMP/release-notes.md"
           {
+            if [ "$PRERELEASE" = "true" ]; then
+              printf '> Pré-release `%s` : canal bêta, pas une version stable.\n\n' "$VERSION"
+            fi
             printf '## Notes\n\n%s\n\n' "$notes"
             printf '## Vérification\n\n```\n'
             cat dist/SHA256SUMS
@@ -251,18 +273,20 @@ jobs:
             {
               echo "## Dry-run"
               echo
-              echo "Tag \`$TAG\`, version \`$VERSION\` (\`$VERSION_CODE\`). Aucune GitHub Release publiée."
+              echo "Tag \`$TAG\`, version \`$VERSION\` (\`$VERSION_CODE\`), pré-release : \`$PRERELEASE\`. Aucune GitHub Release publiée."
               echo
               cat "$body"
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          gh release create "$TAG" dist/* --verify-tag \
+          flags=()
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+          gh release create "$TAG" dist/* --verify-tag "${flags[@]}" \
             --title "Very Slop Notes $VERSION" --notes-file "$body"
           {
             echo "## Release publiée"
             echo
-            echo "Tag \`$TAG\`, version \`$VERSION\` (\`$VERSION_CODE\`)."
+            echo "Tag \`$TAG\`, version \`$VERSION\` (\`$VERSION_CODE\`), pré-release : \`$PRERELEASE\`."
             echo
             cat dist/SHA256SUMS
           } >> "$GITHUB_STEP_SUMMARY"
