@@ -72,6 +72,11 @@ la section `0.1.0` le jour du tag.
 
 ### Modifié
 
+- Règle d’éligibilité de l’assistant IA consignée (ADR-009) : consentement
+  versionné, attestation 18+ ou autorisation parentale et clé fournie par
+  l’utilisateur, toutes trois requises ; IA désactivée sinon, retrait qui
+  efface clé et fil, re-consentement sur changement matériel. L’arbitrage du
+  conseil entre 18 ans stricts et autorisation parentale reste en attente.
 - Durée de vie de la clé IA fixée et affichée : elle reste chiffrée après un
   redémarrage tant que la session est active, puis part à la déconnexion, au
   changement de compte, à la mort de session ou avec « Supprimer toutes mes

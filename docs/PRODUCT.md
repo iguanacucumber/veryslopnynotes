@@ -139,4 +139,5 @@ représentant légal avec un compte OpenRouter géré par un adulte. Sans cette
 attestation, aucune clé ne peut être enregistrée et aucun appel IA n’est
 possible ; la retirer avec le consentement efface la clé et le fil du
 professeur. L’app ne vérifie pas l’âge déclaré et ne prétend pas à une
-validation juridique : la revue de conseil reste en attente (DEC-04).
+validation juridique : la règle est consignée dans
+[ADR-009](adr/009-ai-eligibility.md), la revue de conseil reste en attente.
