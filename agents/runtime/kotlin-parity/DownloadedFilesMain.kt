@@ -134,6 +134,17 @@ private class Driver {
             val slot = bench.slot(op)
             ok("files" to JVal.Arr(listFiles(slot.cacheRoot).map { JVal.Str(it) }))
         }
+        // Artefact hors téléchargement (export, photo) : même racine de cache
+        // que les pièces, pour prouver la purge de TOUS les artefacts.
+        "seed" -> {
+            val slot = bench.slot(op)
+            val name = op.str("name") ?: throw IllegalArgumentException("pilote: name absent")
+            val dir = op.str("dir")?.trim().orEmpty()
+            val file = if (dir.isEmpty()) File(slot.cacheRoot, name) else File(File(slot.cacheRoot, dir), name)
+            file.parentFile?.mkdirs()
+            file.writeText(op.str("content") ?: "contenu")
+            ok("path" to JVal.Str(file.relativeTo(slot.cacheRoot).path))
+        }
         // Adoption d'un fichier DÉJÀ téléchargé (flux) : même nom, même garde.
         "adopt" -> {
             val slot = bench.slot(op)

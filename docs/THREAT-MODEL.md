@@ -96,8 +96,8 @@ dans `filesDir/offline/` tant que l'appareil est déverrouillé.
 `tests/unit/kotlin-session-repair.test.ts`,
 `tests/architecture/session-repair.test.ts`,
 `tests/unit/downloaded-files.test.ts`, `tests/unit/kotlin-store-health.test.ts`,
-`tests/unit/kotlin-vision.test.ts`, `tests/unit/android-secure-window.test.ts`
-et `tests/architecture/backup.test.ts`.
+`tests/unit/kotlin-vision.test.ts`, `tests/unit/android-secure-window.test.ts`,
+`tests/architecture/backup.test.ts` et `tests/unit/privacy-claims.test.ts`.
 
 ## T2 — Charge scolaire malveillante
 
@@ -357,8 +357,8 @@ récupérables, seule la ré-appairage les remplace.
 
 **Preuves** : `tests/unit/kotlin-store-health.test.ts`,
 `tests/unit/kotlin-llm-key-fallback.test.ts`,
-`tests/unit/kotlin-llm-guard.test.ts`, `tests/web/session.test.ts` et
-`tests/architecture/secret-scan.test.ts`.
+`tests/unit/kotlin-llm-guard.test.ts`, `tests/web/session.test.ts`,
+`tests/architecture/secret-scan.test.ts` et `tests/unit/privacy-claims.test.ts`.
 
 ## Correspondance lois, invariants, ADR
 

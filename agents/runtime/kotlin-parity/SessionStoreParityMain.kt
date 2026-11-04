@@ -202,6 +202,9 @@ private class Driver {
                 "health" to JVal.Str(SecureStorage.health().name),
             )
         }
+        // Un rapport de crash peut appeler `toString()` : il ne doit porter ni
+        // jeton, ni login, ni URL d'établissement.
+        "toString" -> ok("text" to JVal.Str(session().toString()))
         "cleanup" -> ok("ok" to JVal.Bool(true))
         else -> throw IllegalArgumentException("pilote: opération inconnue")
     }
