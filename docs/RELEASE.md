@@ -100,7 +100,7 @@ Le calcul pur vit dans `agents/runtime/android-version.ts`, testé par
 `tests/unit/version-from-tags.test.ts` ; Gradle l'appelle une seule fois avec
 `providers.exec`, sans réseau.
 
-## APK + AAB release (clé hors repo, repli debug #297)
+## APK release (clé hors repo, repli debug #297)
 
 1. Générer keystore une fois, hors repo (jamais commité, `.gitignore`
    `*.keystore/*.jks`) :
@@ -117,7 +117,7 @@ Le calcul pur vit dans `agents/runtime/android-version.ts`, testé par
    ou env `STORE_FILE/STORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD`.
 3. Builder :
    ```sh
-   make buildRelApk   # equivalent : cd android && ./gradlew assembleRelease bundleRelease
+   make buildRelApk   # equivalent : cd android && ./gradlew assembleRelease
    ```
    L'interface React est construite avant Gradle (`bun run build:web`, tâche
    Gradle `preBuild`) et copiée dans les assets de l'APK ; `MainActivity`
@@ -125,22 +125,19 @@ Le calcul pur vit dans `agents/runtime/android-version.ts`, testé par
    (`web/public/licenses/` : GPL de l'app, MIT, Apache-2.0, SN Pro OFL,
    Papicons MIT) sont copiées dans `assets/web/licenses/` et voyagent donc
    avec l'APK ; l'inventaire versionné est `THIRD_PARTY_NOTICES.md`.
-   Produit deux artefacts signés :
-   - APK : `android/app/build/outputs/apk/release/app-release.apk` (sideload)
-   - AAB : `android/app/build/outputs/bundle/release/app-release.aab` (Play Store)
+   Produit un APK signé :
+   `android/app/build/outputs/apk/release/app-release.apk` (sideload).
 
-   Avec clé : signature custom (store/upload key). Sans clé : repli debug
+   Avec clé : signature custom. Sans clé : repli debug
    (installable sideload, sans cert custom — ne pas publier comme mise à
-   jour d'un APK signé custom, signature différente ; pour Play, fournir une
-   vraie upload key, Play App Signing re-signant pour la distribution).
+   jour d'un APK signé custom, signature différente).
    `SERVER_HOST` via `local.properties` `server.host` ou env (défaut release
    VIDE, HTTPS-only ; le défaut émulateur `10.0.2.2:3000` et le clair
    n'existent qu'en debug). La release pose `DEMO_MODE=false` : démo refusée,
    bouton absent, session non restaurée
    (`tests/architecture/demo-mode.test.ts`).
-4. Vérifier : `apksigner verify --print-certs` (APK), `jarsigner -verify`
-   (AAB), aucune clé/secret dans les artefacts,
-   `git status` propre (APK/AAB ignorés `*.apk`/`*.aab`).
+4. Vérifier : `apksigner verify --print-certs`, aucune clé/secret dans
+   l'artefact, `git status` propre (APK ignoré `*.apk`).
 
 ## Liens profonds et App Links
 

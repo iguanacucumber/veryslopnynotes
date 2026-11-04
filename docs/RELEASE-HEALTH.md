@@ -29,7 +29,7 @@ moyens est refusé, pas ajouté « juste pour la release ».
 | S2 | ANR Android | Play Console → Android vitals, agrégé par version | Taux d'ANR sur 24 h et 7 jours, par canal | Responsable de release | J+0, J+1, J+3, J+7 |
 | S3 | Gate CI | GitHub Actions `ci.yml` (`make check`), `coverage`, scans secret et sécurité | Verdict du commit ou du tag, artefacts et logs du gate | Mainteneur de garde | Chaque PR, chaque push sur `main`, chaque tag |
 | S4 | Rapports d'issue | Issues GitHub `bug`/`incident` et signalements `SECURITY.md` | Version, symptôme, reproductibilité, perte de données | Triage de release | Quotidien pendant la fenêtre de release |
-| S5 | Intégrité des artefacts | SHA-256 de l'APK/AAB, certificat `apksigner`, digest de l'image Docker | Empreinte publiée = empreinte locale, signataire attendu | Responsable de release | Chaque publication |
+| S5 | Intégrité des artefacts | SHA-256 de l'APK, certificat `apksigner`, digest de l'image Docker | Empreinte publiée = empreinte locale, signataire attendu | Responsable de release | Chaque publication |
 | S6 | Santé serveur | `HEALTHCHECK` sur `/v1/ready` et logs locaux de l'opérateur | Prêt, erreurs 5xx et latence du déploiement | Opérateur serveur | Quotidien |
 
 Limite assumée : un utilisateur qui installe l'APK hors store n'alimente ni S1
@@ -74,7 +74,7 @@ revue, il ne déclenche pas seul un retrait.
 de release porte la mention « retiré », avec le motif et la version de
 remplacement. Sur Play, on arrête le déploiement (halt rollout) ; on ne peut pas
 republier un `versionCode` inférieur, donc le correctif part avec un
-`versionCode` supérieur. En sideload, on retire l'APK/AAB et ses empreintes,
+`versionCode` supérieur. En sideload, on retire l'APK et ses empreintes,
 puis on republie la dernière version connue bonne avec ses propres empreintes.
 
 **Retour arrière serveur** = redéploiement du digest précédent, épinglé dans

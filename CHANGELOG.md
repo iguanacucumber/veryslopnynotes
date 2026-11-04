@@ -76,6 +76,8 @@ la section `0.1.0` le jour du tag.
   préservés (#844).
 - Version Android dérivée du tag git `vX.Y.Z` : `versionName` et `versionCode`
   monotone, repli déterministe `0.1.0`/`1` sans tag, pré-releases refusées.
+- Release : le parcours public ne produit plus que l'APK sideload signé ;
+  `make buildRelApk` n'embarque plus de bundle de publication.
 - Fontes SN Pro sous-ensemblées en WOFF2 (graisses réellement utilisées,
   préchargement) et budget gzip vérifié à chaque build.
 - Santé de release documentée sans télémétrie : signaux store, CI, issues et

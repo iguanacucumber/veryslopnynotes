@@ -970,7 +970,7 @@ describe("métadonnées du dépôt (#979)", () => {
 describe("glossaire (#1072)", () => {
   const FILE = "docs/GLOSSARY.md";
   const GLOSSARY = read(FILE);
-  const REQUIRED = ["ADR", "AAB", "APK", "DCO", "ENT", "MFA", "PIN", "QR", "SSRF", "TTL", "WebView"];
+  const REQUIRED = ["ADR", "APK", "DCO", "ENT", "MFA", "PIN", "QR", "SSRF", "TTL", "WebView"];
   const rows = GLOSSARY.split("\n").filter((line) => /^\| [A-Za-z]+ \|/.test(line));
   const cells = (line: string) => line.split("|").map((cell) => cell.trim());
   const byTerm = new Map(rows.map((line) => [cells(line)[1]!, cells(line)[2]!]));

@@ -56,7 +56,7 @@ bun run dev:web       # Chromium + pont factice (src/bridge/mock.ts)
 make check            # toutes les vérifications, en parallèle
 make buildDebugApk    # APK debug -> android/app/build/outputs/apk/debug/
 make updateApkToPhone # construire puis installer en conservant les données
-make buildRelApk      # APK + AAB release (signés ; custom si STORE_FILE)
+make buildRelApk      # APK release (signé ; custom si STORE_FILE)
 ```
 
 L'interface React est reconstruite avant Gradle (`preBuild` →
