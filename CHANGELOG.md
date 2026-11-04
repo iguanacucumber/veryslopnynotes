@@ -34,6 +34,9 @@ la section `0.1.0` le jour du tag.
   artefacts hors-ligne, téléchargements, photos, manuel, comptes, WebView,
   état de lecture, clé de l'assistant et serveur, puis purge orchestrée avec
   échec partiel affiché.
+- Notices de licence tierces complètes (`THIRD_PARTY_NOTICES.md`) et textes
+  intégraux dans `web/public/licenses/`, versions liées à `bun.lock` et au
+  catalogue Gradle.
 
 ### Modifié
 

@@ -104,9 +104,10 @@ make build   # check-secrets + docker build (skip si daemon absent)
    ```
    L'interface React est construite avant Gradle (`bun run build:web`, tâche
    Gradle `preBuild`) et copiée dans les assets de l'APK ; `MainActivity`
-   l'affiche dans la WebView locale (ADR-004). Les notices de licence
-   (`web/public/licenses/` : SN Pro OFL, Papicons MIT) sont copiées dans
-   `assets/web/licenses/` et voyagent donc avec l'APK.
+   l'affiche dans la WebView locale (ADR-004). Les notices de licence tierces
+   (`web/public/licenses/` : GPL de l'application, MIT, Apache-2.0, SN Pro OFL,
+   Papicons MIT) sont copiées dans `assets/web/licenses/` et voyagent donc avec
+   l'APK ; l'inventaire versionné est `THIRD_PARTY_NOTICES.md`.
    Produit deux artefacts signés :
    - APK : `android/app/build/outputs/apk/release/app-release.apk` (sideload)
    - AAB : `android/app/build/outputs/bundle/release/app-release.aab` (Play Store)
