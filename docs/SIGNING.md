@@ -2,14 +2,13 @@
 
 Ce document est la procédure de la clé de signature release. Il complète
 [`RELEASE.md`](RELEASE.md), qui garde les commandes de build et de publication.
-La clé, ses mots de passe et ses sauvegardes ne quittent jamais le poste hors
-ligne : aucun secret dans le dépôt, un log, un artefact ou une issue.
+La clé et ses sauvegardes ne quittent jamais le poste hors ligne : aucun secret
+dans le dépôt, un log, un artefact ou une issue.
 
-Les valeurs entre chevrons (`<…>`) sont des **placeholders**. Aucune empreinte,
-aucun nom de détenteur et aucun secret réel n'est commité ici. Le détenteur, les
-lieux de sauvegarde et le coffre à mots de passe relèvent de DEC-03 (#828) :
-tant que cette décision humaine n'est pas tranchée, remplacer les placeholders
-sans inventer de valeur.
+La décision de custody est actée (DEC-03, #828) : le seul détenteur est le
+compte mainteneur `iguanacucumber`. Les valeurs entre chevrons (`<…>`) qui
+subsistent sont des **placeholders** d'empreinte ou de date ; aucun secret,
+aucun nom civil et aucun emplacement physique ne sont commités.
 
 ## Identité et conséquences
 
@@ -59,10 +58,11 @@ Paramètres à retenir :
 pas passer le mot de passe en argument (`-storepass`, `-keypass`) : il resterait
 dans l'historique du shell et la liste des processus. Réponses attendues :
 
-- **DN** : `CN=Very Slop Notes release, O=<détenteur DEC-03>, C=FR` — le nom du
-  détenteur est un placeholder, jamais un nom inventé ;
+- **DN** : `CN=Very Slop Notes release, O=iguanacucumber, C=FR` — `O` nomme le
+  compte mainteneur, jamais un nom civil ni une adresse ;
 - **mot de passe** : long et aléatoire (`openssl rand -base64 48`), conservé
-  dans le coffre hors ligne, jamais dans un fichier à côté du keystore.
+  dans le gestionnaire de mots de passe du détenteur, jamais dans un fichier à
+  côté du keystore, dans le dépôt ou dans la CI.
 
 PKCS12 utilise par défaut le même mot de passe pour le store et la clé. Les deux
 secrets GitHub restent distincts (`RELEASE_STORE_PASSWORD` et
@@ -75,25 +75,52 @@ Vérifier immédiatement que la clé est lisible et noter son empreinte :
 keytool -list -v -keystore ~/.keystore/vsn-release.jks -alias vsn
 ```
 
-## Custody et sauvegarde
+## Custody et sauvegarde (DEC-03, #828)
 
-Le keystore est un secret **d'identité** : le perdre interdit toute mise à jour
-des installations existantes ; le divulguer permet de signer un faux APK.
+Décision actée le 2026-11-04. Le keystore est un secret **d'identité** : le
+perdre interdit toute mise à jour des installations existantes ; le divulguer
+permet de signer un faux APK.
 
-- Deux copies chiffrées hors ligne, sur deux supports distincts, dans deux lieux
-  physiques distincts (références exactes : `<lieu A>`, `<lieu B>`, DEC-03).
-- Le mot de passe vit dans un coffre à mots de passe ou une enveloppe scellée
-  **séparé** des supports : une copie seule ne doit pas suffire.
+| Élément | Décision | Preuve |
+|---|---|---|
+| Détenteur | compte mainteneur `iguanacucumber`, seul détenteur de la clé et des copies | compte GitHub ; aucun nom civil dans le dépôt |
+| Génération | hors ligne, hors du dépôt ; le keystore n'entre jamais dans un commit, un artefact CI, une image Docker ou une pièce jointe | politique ; le scan de secrets et les tests d'artefact vérifient l'absence connue, pas la machine de génération |
+| Sauvegardes | deux copies chiffrées hors ligne, sur deux supports distincts, détenues par le détenteur ; emplacements choisis par lui et **intentionnellement non consignés dans le dépôt** | engagement du détenteur ; non vérifiable par la CI |
+| Phrase de passe | dans le gestionnaire de mots de passe du détenteur, séparé des supports ; jamais dans le dépôt, la CI, un fichier voisin ou une pièce jointe | engagement du détenteur ; non vérifiable par la CI |
+| Environnement | `release` avec relecteur obligatoire `iguanacucumber` et politique de tags `v*` | réglage vérifiable par l'API GitHub, décrit dans [`BRANCH-PROTECTION.md`](BRANCH-PROTECTION.md) |
+| Compromission | retirer les secrets, rotation hors ligne, réinstallation obligatoire, publication de la nouvelle empreinte (section « Compromission et révocation ») | procédure ; une rotation réelle n'est pas vérifiable par la CI |
+
+### Ce que la CI peut prouver, et ce qu'elle ne peut pas
+
+Le gate prouve la **déclaration** et l'absence de fuite connue : le workflow
+déclare `environment: release`, échoue si un secret manque, refuse un certificat
+debug, et les scans vérifient qu'aucun `*.jks`/`*.keystore` n'est versionné ou
+attaché à l'artefact. `tests/architecture/signing-custody.test.ts` verrouille
+les faits ci-dessus.
+
+Il ne peut pas prouver la génération hors ligne, l'existence ou l'emplacement
+des deux sauvegardes, le contenu du gestionnaire de mots de passe, la possession
+physique de la clé, ni qu'une rotation a été exécutée. Ces faits sont des
+**engagements du détenteur**, vérifiables seulement par lui ou par inspection
+physique. Le dépôt ne doit donc jamais les présenter comme une garantie
+technique.
+
+### Règles opérationnelles
+
+- Détenteur unique : `iguanacucumber`. Un remplaçant éventuel se consigne dans
+  le registre privé du détenteur, jamais dans le dépôt.
+- Deux copies chiffrées hors ligne, sur deux supports distincts, détenues par
+  le détenteur ; les emplacements exacts ne sont pas consignés ici.
+- La phrase de passe vit dans le gestionnaire de mots de passe du détenteur,
+  séparé des supports : une copie seule ne doit pas suffire.
 - Tester la restauration au moins une fois par an : déchiffrer une copie,
   `keytool -list` sur le keystore restauré, comparer l'empreinte.
-- Un seul détenteur nommé et un remplaçant documentés (DEC-03 / #828). Ne pas
-  inscrire ces noms dans le dépôt public : le registre de custody est
-  `<registre privé DEC-03>`.
 - Ne jamais stocker le keystore dans le cloud non chiffré, un gestionnaire de
   mots de passe en pièce jointe, un artifact CI, une image Docker ou un backup
   de téléphone.
-- Seules les métadonnées non sensibles (alias, date, empreinte publiée,
-  référence de custody) peuvent figurer dans ce document.
+- Seules les métadonnées non sensibles (alias, date, empreinte publiée) peuvent
+  figurer dans ce document ; un emplacement physique ou un nom civil n'en fait
+  pas partie.
 
 ## Secrets GitHub de l'environnement `release`
 
@@ -286,11 +313,13 @@ correction est une nouvelle identité signée avec une nouvelle clé.
 
 Avant la première release :
 
-- [ ] Détenteur, remplaçant, deux lieux de sauvegarde et coffre nommés dans le
-      registre privé DEC-03 (#828) ; placeholders de ce document remplacés.
+- [ ] Détenteur `iguanacucumber` et politique de custody relus ; deux
+      sauvegardes hors ligne et gestionnaire de mots de passe confirmés hors
+      dépôt par le détenteur (emplacements non consignés).
 - [ ] Keystore PKCS12 généré hors ligne, alias `vsn`, permissions `600`,
       sauvegardé deux fois, restauration testée.
-- [ ] Mots de passe dans le coffre, séparés des sauvegardes.
+- [ ] Mots de passe dans le gestionnaire de mots de passe du détenteur,
+      séparés des sauvegardes.
 - [ ] Quatre secrets présents dans l'environnement `release`
       (`gh secret list --env release`).
 - [ ] Empreinte SHA-256 du certificat calculée et publiée (note de release et
