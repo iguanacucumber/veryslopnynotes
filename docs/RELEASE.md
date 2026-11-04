@@ -86,19 +86,12 @@ make build   # check-secrets + docker build (skip si daemon absent)
 
 ## Version Android (tag git, #927)
 
-Le tag `vX.Y.Z` posé sur le commit construit fixe les deux champs :
-`versionName = X.Y.Z` et `versionCode = X * 1_000_000 + Y * 1_000 + Z`.
-`Y` et `Z` doivent rester `< 1000`, et le code sous le plafond Android
-`2_100_000_000` ; sinon le build échoue au lieu de publier un code ambigu.
-Sans tag, le repli est déterministe : `0.1.0` / `1` (dev seulement).
-Les tags de pré-release (`v1.2.3-beta.1`) sont refusés : le `versionCode` ne
-peut pas rester croissant entre une pré-release et sa version finale (voir
-REL-05). Un build release doit donc partir d'un checkout qui contient le tag
-sur `HEAD` (`fetch-depth: 0` ou `fetch-tags: true` en CI).
-
-Le calcul pur vit dans `agents/runtime/android-version.ts`, testé par
-`tests/unit/version-from-tags.test.ts` ; Gradle l'appelle une seule fois avec
-`providers.exec`, sans réseau.
+Le tag `vX.Y.Z` posé sur le commit construit fixe `versionName = X.Y.Z` et
+`versionCode = X * 1_000_000 + Y * 1_000 + Z` (`Y`, `Z` < 1000, code sous
+`2_100_000_000`). Sans tag : repli `0.1.0`/`1` (dev). Les pré-releases sont
+refusées (REL-05) : le checkout release doit contenir le tag sur `HEAD`
+(`fetch-depth: 0`). Calcul pur : `agents/runtime/android-version.ts`, testé
+par `tests/unit/version-from-tags.test.ts`.
 
 ## APK release (clé hors repo, repli debug #297)
 
@@ -159,13 +152,24 @@ adb shell am start -W -a android.intent.action.VIEW \
 # Debug : la même commande doit ouvrir l'écran Notes.
 ```
 
-## Notes de version
+## Release sur tag
 
-Chaque PR ajoute sa ligne sous `[Unreleased]` de
-[`CHANGELOG.md`](../CHANGELOG.md), catégorie Keep a Changelog. Au tag,
-renommer `[Unreleased]` en `## [x.y.z] - AAAA-MM-JJ`, recréer une section
-`[Unreleased]` vide, puis recopier **tel quel** ce corps dans la GitHub
-Release : la note publiée est la section du changelog.
+Avant le tag : renommer `[Unreleased]` de
+[`CHANGELOG.md`](../CHANGELOG.md) en `## [x.y.z] - AAAA-MM-JJ`, recréer
+`[Unreleased]` vide, merger, puis pousser `vX.Y.Z`. `.github/workflows/release.yml`
+checkout le tag, calcule la version avec `agents/runtime/android-version.ts`,
+réutilise `release-artifact.yml`, re-signe avec la clé de l'environnement
+protégé `release`, vérifie certificat et SHA-256, écrit `SHA256SUMS`, puis
+publie la GitHub Release : APK, mapping/seeds, liens vers le tag et
+`archive/refs/tags/<tag>.tar.gz` (GPL-3.0-only).
+
+Secrets `release` : `RELEASE_KEYSTORE_BASE64` (PKCS12 base64),
+`RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`. Absent
+= échec, aucun repli debug, aucune release ; l'environnement doit autoriser
+les tags `v*`.
+
+Dry-run : `gh workflow run release.yml --ref vX.Y.Z` ; un dispatch sur une
+branche échoue et ne publie jamais.
 
 Signaux, seuils et retrait :
 [RELEASE-HEALTH.md](RELEASE-HEALTH.md) ; incidents :

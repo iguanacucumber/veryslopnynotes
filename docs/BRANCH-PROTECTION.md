@@ -44,11 +44,10 @@ du ruleset, pas de l'ancienne branch protection. C'est attendu.
 | Branche/tag de déploiement | tags personnalisés uniquement : `v*` |
 | Contournement admin | activé (défaut GitHub, non réglable par cette API) |
 
-`v*` couvre les tags `vX.Y.Z` décrits dans [`RELEASE.md`](RELEASE.md). Aucun
-workflow ne référence encore `environment: release` : `release-artifact.yml`
-tourne sur chaque PR et ne doit pas être bloqué par une approbation. Le premier
-job qui publie une release doit déclarer `environment: release` au niveau du
-job ; il sera alors arrêté jusqu'à l'approbation du mainteneur.
+`v*` couvre les tags `vX.Y.Z` décrits dans [`RELEASE.md`](RELEASE.md). Le job
+`publish` de `.github/workflows/release.yml` déclare `environment: release` :
+une release attend l'approbation du mainteneur avant signature et publication.
+`release-artifact.yml` tourne sur chaque PR et reste sans approbation.
 
 ## Permissions GitHub Actions
 
@@ -124,8 +123,10 @@ justifie dans la PR ou l'issue.
    l'imposer aussi au collaborateur avec droit `push`, transférer le dépôt dans
    une organisation avec 2FA obligatoire, ou retirer ce collaborateur. Aucun
    appel API de ce dépôt ne peut le faire.
-2. **Premier job de release** : ajouter `environment: release` au job qui
-   publie (tag `v*`), pas à `release-artifact.yml` qui tourne sur les PR.
+2. **Secrets de signature** : créer dans l'environnement `release`
+   `RELEASE_KEYSTORE_BASE64` (keystore PKCS12 encodé base64),
+   `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`. Sans
+   eux, `release.yml` échoue avant toute publication (aucun repli debug).
 3. **Dependabot** : alertes et mises à jour de sécurité sont désactivées
    (`dependabot_security_updates: disabled`) ; les activer est une décision
    distincte, avec du bruit de PR attendu. Le scan de secrets et la protection
