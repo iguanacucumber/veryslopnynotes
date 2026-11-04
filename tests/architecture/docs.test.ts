@@ -1018,6 +1018,68 @@ describe("ADR", () => {
   });
 });
 
+describe("checklist de publication (#956)", () => {
+  const FILE = "docs/RELEASE-CHECKLIST.md";
+  const CHECKLIST = read(FILE);
+  // Libellés stables : une section renommée sans mettre à jour ce test rend le
+  // gate rouge, pour qu'une preuve de release ne disparaisse pas en silence.
+  const SECTIONS = [
+    "Gate vert",
+    "Version",
+    "Build",
+    "Licences et notices",
+    "Confidentialité et consentement",
+    "CHANGELOG et notes",
+    "Clé, signature et empreinte",
+    "Préparation du tag",
+    "Publication du tag",
+    "Signature et empreinte publiées",
+    "SHA-256",
+    "Offre de source",
+    "Soak de la bêta",
+    "Issue known-issues",
+    "Annonce",
+    "Retrait et retour arrière",
+  ];
+
+  test("chaque étape exigée a sa section numérotée", () => {
+    for (const titre of SECTIONS) {
+      expect({ titre, present: new RegExp(`^## \\d+\\. ${titre}$`, "m").test(CHECKLIST) }).toEqual({
+        titre,
+        present: true,
+      });
+    }
+  });
+
+  test("chaque étape porte propriétaire, date et preuve", () => {
+    const preuves = CHECKLIST.match(/\*\*Preuve\*\* — propriétaire :/g) ?? [];
+    expect({ preuves: preuves.length }).toEqual({ preuves: SECTIONS.length });
+  });
+
+  test("la règle de refus et les signatures restent présentes", () => {
+    expect(CHECKLIST).toContain("## Ne pas livrer si");
+    const refus = CHECKLIST.split("## Ne pas livrer si")[1]!.split("\n## ")[0]!;
+    expect(refus.match(/^- /gm)?.length ?? 0).toBeGreaterThanOrEqual(10);
+    expect(CHECKLIST).toContain("## Signatures");
+    expect(CHECKLIST).toContain("Un agent ne remplit ni ne signe ces lignes.");
+    expect(CHECKLIST).toMatch(/^\| Responsable de release \|  \|  \|/m);
+    expect(CHECKLIST).toMatch(/^\| Mainteneur de garde \|  \|  \|/m);
+  });
+
+  test("RELEASE.md renvoie vers la checklist", () => {
+    expect(relativeLinks(RELEASE)).toContain("RELEASE-CHECKLIST.md");
+  });
+
+  test("la checklist reste sous son budget de lecture", () => {
+    // Document de travail lu une fois par release : plafond large, mais borné
+    // pour qu'une étape ajoutée ne transforme pas la preuve en roman.
+    expect({ fichier: FILE, sousBudget: CHECKLIST.length <= 18_000 }).toEqual({
+      fichier: FILE,
+      sousBudget: true,
+    });
+  });
+});
+
 describe("parité : fichiers de test découpés", () => {
   test("chaque fichier de parité reste sous son budget de lecture", () => {
     // Un échec ne doit pas obliger à relire 56 Ko de tests : runner mince,
