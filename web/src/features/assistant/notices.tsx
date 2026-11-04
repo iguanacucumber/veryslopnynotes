@@ -8,13 +8,17 @@ export const AI_COST_REMINDER =
 /** Variante courte, posée juste avant le bouton d'envoi. */
 export const AI_COST_REMINDER_SHORT = "1 appel = des crédits OpenRouter facturés.";
 
-/** Le modèle est épinglé : sa disparition arrête l'appel, sans repli gratuit. */
+/** Les deux modèles sont épinglés et payants : pas de repli gratuit. */
 export const AI_MODEL_NOTE =
-  "Modèle épinglé : s'il disparaît du fournisseur, l'assistant s'arrête avec un message, sans basculer vers un modèle gratuit.";
+  "Modèles épinglés (texte et vision), facturés à l'usage sur ton compte OpenRouter : s'ils disparaissent du fournisseur, l'assistant s'arrête avec un message, sans basculer vers un modèle gratuit.";
 
 /** Message affiché quand le fournisseur a retiré le modèle épinglé. */
 export const MODEL_UNAVAILABLE_MESSAGE =
   "Modèle LLM indisponible : le fournisseur l'a retiré. Mets à jour l'application.";
+
+/** Repli explicite du chemin photo : aucun autre modèle n'est appelé. */
+export const VISION_MODEL_UNAVAILABLE_MESSAGE =
+  "Modèle vision indisponible : aucun autre modèle n'a été appelé. Mets à jour l'application.";
 
 /** Miroir du message natif d'un modèle hors allowlist. */
 export const MODEL_REFUSED_MESSAGE = "Modèle LLM non autorisé : configuration refusée.";
@@ -34,7 +38,7 @@ export interface AiFailureNotice {
   message: string;
 }
 
-const MODEL_FAILURE = /modèle llm (indisponible|introuvable|non autorisé)/i;
+const MODEL_FAILURE = /modèle (?:llm|vision) (indisponible|introuvable|non autorisé)/i;
 
 /**
  * Une cause d'échec assistant -> copie affichable. Un modèle retiré ou refusé

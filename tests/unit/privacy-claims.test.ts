@@ -168,7 +168,8 @@ describe("confidentialité — consentement IA versionné et attesté (#848, #86
   test("la version de copie et la version native ne divergent pas", () => {
     const policy = source(join(CORE, "AiConsent.kt"));
     expect(policy).toContain(`const val AI_CONSENT_VERSION = ${AI_CONSENT_VERSION}`);
-    expect(AI_CONSENT_VERSION).toBe(2);
+    // Version 3 : la règle de rétention des photos change (endpoint ZDR).
+    expect(AI_CONSENT_VERSION).toBe(3);
   });
 
   test("l'attestation nomme l'âge, l'autorisation parentale et l'absence de validation juridique", () => {
@@ -199,6 +200,9 @@ describe("confidentialité — consentement IA versionné et attesté (#848, #86
     // Le code ne peut pas prouver une rétention nulle : aucune promesse de ce type.
     expect(copy).not.toMatch(/aucune? (?:conservation|rétention)|zéro rétention|zéro conservation|jamais conserv/i);
     expect(AI_CONSENT_RETENTION_NOTE).toContain("peuvent conserver");
+    expect(AI_CONSENT_RETENTION_NOTE).toContain("photos");
+    expect(AI_CONSENT_RETENTION_NOTE).toContain("ZDR");
+    expect(AI_CONSENT_RETENTION_NOTE).toContain("entraînement");
     expect(copy).toContain("1600 px");
   });
 

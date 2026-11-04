@@ -58,6 +58,7 @@ import { useNow } from "../../lib/useNow";
 import { cardActionFlags } from "./actions";
 import { HomeworkChat, type HomeworkChatState, type HomeworkTurn } from "./HomeworkChat";
 import { AiCostReminder, aiFailureNotice } from "../assistant/notices";
+import { AI_VISION_RETENTION_NOTE } from "../assistant/consent";
 import { emptyTurn, storedThread } from "./homeworkThread";
 import { TasksSummary } from "./TasksSummary";
 import "./tasks.css";
@@ -680,7 +681,7 @@ function TasksWeek({ week }: { week: string }) {
       <Dialog
         open={photoChooser !== null}
         title="Photos de l’énoncé"
-        description="Jusqu’à 3 photos depuis la galerie, ou une avec l’appareil photo. Elles partent directement au fournisseur, avec ta clé, et sont supprimées après lecture."
+        description="Jusqu’à 3 photos depuis la galerie, ou une avec l’appareil photo. Elles partent directement à OpenRouter avec ta clé ; l’app les supprime après lecture."
         icon={<IconCamera size={20} />}
         onClose={closePhotoChooser}
         actions={
@@ -714,6 +715,10 @@ function TasksWeek({ week }: { week: string }) {
             </button>
           </div>
         ) : null}
+        <p className="tiny muted">{AI_VISION_RETENTION_NOTE}</p>
+        <p className="tiny muted">
+          <AiCostReminder short />
+        </p>
       </Dialog>
 
       {help && helpAssignment ? (

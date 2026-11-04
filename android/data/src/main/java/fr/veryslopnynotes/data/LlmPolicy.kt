@@ -14,11 +14,12 @@ package fr.veryslopnynotes.data
  * sur un modèle qu'il n'a pas choisi. `google/gemini-2.5-flash` est retenu pour
  * la fiabilité du calcul (les modèles gratuits rendaient un résultat faux une
  * fois sur deux sur le même DM) ; le vision est DISTINCT car le modèle texte
- * n'est pas garanti multimodal (`dots-studio` répond, contrairement à l'ancien
- * `google/gemma-4-31b-it:free`, en 429 amont).
+ * n'est pas garanti multimodal. `qwen/qwen3-vl-30b-a3b-instruct` est PAYANT et
+ * servi par des endpoints ZDR sans collecte : l'ancien modèle `:free` pouvait
+ * entraîner ou conserver les photos hors du contrôle de l'app.
  */
 const val PINNED_TEXT_MODEL = "google/gemini-2.5-flash"
-const val PINNED_VISION_MODEL = "dots-studio/dots-3-note-preview:free"
+const val PINNED_VISION_MODEL = "qwen/qwen3-vl-30b-a3b-instruct"
 
 val LLM_ALLOWED_MODELS: Set<String> = setOf(PINNED_TEXT_MODEL, PINNED_VISION_MODEL)
 
@@ -34,6 +35,14 @@ const val MODEL_REFUSED_MESSAGE = "Modèle LLM non autorisé : configuration ref
  */
 const val MODEL_UNAVAILABLE_MESSAGE =
     "Modèle LLM indisponible : le fournisseur l'a retiré. Mets à jour l'application."
+
+/**
+ * Repli EXPLICITE du chemin vision : le modèle épinglé a disparu. L'appel
+ * s'arrête avec cette cause ; aucun autre modèle n'est appelé, donc le coût et
+ * la rétention annoncés ne changent pas en silence.
+ */
+const val VISION_MODEL_UNAVAILABLE_MESSAGE =
+    "Modèle vision indisponible : aucun autre modèle n'a été appelé. Mets à jour l'application."
 
 /** Annulation explicite par l'appelant : aucun envoi, aucune reprise. */
 const val CANCELLED_MESSAGE = "Appel LLM annulé."

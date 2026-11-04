@@ -50,10 +50,13 @@ class LlmError(message: String, val status: Int? = null) : Exception(boundedMess
     // Message pour l'UI : borné, jamais le corps de réponse brut du fournisseur.
     val userMessage: String = boundedMessage(message)
 
-    // Cause MODÈLE seule : refus local de l'allowlist ou 404 du fournisseur. Le
-    // pont peut ainsi nommer « modèle indisponible » sans deviner le message.
+    // Cause MODÈLE seule : refus local de l'allowlist, 404 du fournisseur ou
+    // repli vision explicite. Le pont peut ainsi nommer « modèle indisponible »
+    // sans deviner le message.
     val isModelUnavailable: Boolean =
-        status == 404 || boundedMessage(message) == MODEL_REFUSED_MESSAGE
+        status == 404 ||
+            boundedMessage(message) == MODEL_REFUSED_MESSAGE ||
+            boundedMessage(message) == VISION_MODEL_UNAVAILABLE_MESSAGE
 
     companion object {
         // Une CAUSE par message : 401 clé refusée, 402 crédits, 404 modèle absent
@@ -82,7 +85,8 @@ class OpenRouterLlm(
     // vierge (l'UI n'a pas à construire d'OkHttpClient elle-même).
     client: OkHttpClient = OkHttpClient(),
     // Modèle VISION distinct, épinglé dans `LlmPolicy.kt` : le modèle texte
-    // n'est pas garanti multimodal. Il ne sert QU'aux photos.
+    // n'est pas garanti multimodal. Il ne sert QU'aux photos, sur un endpoint
+    // ZDR sans collecte imposé par la requête (voir `generateVisionSafe`).
     private val visionModel: String = PINNED_VISION_MODEL,
 ) : SafePromptProvider, SafeVisionPromptProvider {
     private val timeout = normalizeTimeoutMs(timeoutMs)
@@ -203,7 +207,25 @@ class OpenRouterLlm(
             .put("reasoning", JSONObject().put("enabled", false))
             // Meme contrainte de sortie que le texte (#708).
             .put("response_format", JSONObject().put("type", "json_object"))
-        return parseCompletion(send(payload, key))
+            // Photos : uniquement des endpoints ZDR qui ne collectent pas les
+            // donnees. Le fournisseur ne peut donc ni entrainer ni conserver
+            // la demande apres traitement, hors exceptions OpenRouter
+            // (controle CSAM, obligation legale) declarees a l'utilisateur.
+            .put(
+                "provider",
+                JSONObject()
+                    .put("zdr", true)
+                    .put("data_collection", "deny"),
+            )
+        return try {
+            parseCompletion(send(payload, key))
+        } catch (e: LlmError) {
+            // Repli EXPLICITE : le modele a disparu, aucun autre modele n'est
+            // appele (le cout et la retention annonces resteraient ceux du
+            // modele epingle).
+            if (e.isModelUnavailable) throw LlmError(VISION_MODEL_UNAVAILABLE_MESSAGE, 404)
+            throw e
+        }
     }
 
     /** Envoi HTTPS + cause d'erreur bornée. Seule la clé est interpolée (Bearer). */

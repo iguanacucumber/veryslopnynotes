@@ -92,6 +92,8 @@ describe("allowlist : modèle ÉPINGLÉ, aucun repli silencieux", () => {
     expect(c.allowedModels).toEqual([c.textModel, c.visionModel].sort());
     expect((await model(c.textModel)).allowed).toBe(true);
     expect((await model(c.visionModel)).allowed).toBe(true);
+    // La vision est PAYANTE : un modèle gratuit peut entraîner ou retenir.
+    expect(c.visionModel).not.toContain(":free");
   });
 
   test.skipIf(skip)("un modèle inconnu, vide ou déguisé est REFUSÉ", async () => {
@@ -100,6 +102,9 @@ describe("allowlist : modèle ÉPINGLÉ, aucun repli silencieux", () => {
       "",
       " ",
       "openai/gpt-4o",
+      "dots-studio/dots-3-note-preview:free",
+      "google/gemma-4-31b-it:free",
+      "google/gemma-4-26b-a4b-it:free",
       `${c.textModel} `,
       c.textModel.toUpperCase(),
       `${c.textModel}:free`,
@@ -133,6 +138,30 @@ describe("allowlist : modèle ÉPINGLÉ, aucun repli silencieux", () => {
     expect(init).toContain("throw LlmError(MODEL_REFUSED_MESSAGE)");
     // Aucun repli : pas de `?:` ni de `takeIf` qui ramènerait au défaut.
     expect(init).not.toMatch(/\?:|takeIf/);
+  });
+});
+
+describe("vision : payant, ZDR et repli explicite", () => {
+  const src = codeOnly(readFileSync(LLM, "utf8"));
+  const policy = codeOnly(readFileSync(join(DATA, "LlmPolicy.kt"), "utf8"));
+  const vision = src.slice(
+    src.indexOf("override fun generateVisionSafe"),
+    src.indexOf("private fun send"),
+  );
+
+  test("la requête vision impose un endpoint ZDR sans collecte", () => {
+    expect(vision).toContain('"provider"');
+    expect(vision).toContain('.put("zdr", true)');
+    expect(vision).toContain('.put("data_collection", "deny")');
+    // Le modèle reste épinglé : aucune liste de modèles de repli.
+    expect(vision).toContain('.put("model", visionModel)');
+    expect(vision).not.toMatch(/\.put\("models"/);
+  });
+
+  test("un modèle vision retiré s'arrête, jamais un autre modèle", () => {
+    expect(policy).toContain("const val VISION_MODEL_UNAVAILABLE_MESSAGE");
+    expect(policy).toContain("aucun autre modèle n'a été appelé");
+    expect(vision).toContain("if (e.isModelUnavailable) throw LlmError(VISION_MODEL_UNAVAILABLE_MESSAGE, 404)");
   });
 });
 

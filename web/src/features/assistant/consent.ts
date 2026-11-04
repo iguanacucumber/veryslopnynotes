@@ -10,7 +10,7 @@ import type { AiConsentDecision } from "../../bridge/types";
  * conservation modifiée, usage élargi, attestation ajoutée ou modifiée. Une
  * reformulation seule ne compte pas.
  */
-export const AI_CONSENT_VERSION = 2;
+export const AI_CONSENT_VERSION = 3;
 
 export const AI_CONSENT_REQUIRED_MESSAGE =
   "Consentement IA requis : lis l’aperçu, atteste l’âge ou l’autorisation parentale et accepte dans Réglages > Assistant.";
@@ -75,11 +75,14 @@ export const AI_CONSENT_ITEMS: readonly AiConsentItem[] = [
   },
 ] as const;
 
+export const AI_VISION_RETENTION_NOTE =
+  "Photos : l’app impose à OpenRouter un endpoint ZDR sans collecte de données. Hors contenu signalé pour le contrôle CSAM ou obligation légale, le fournisseur ne les conserve pas après traitement et ne les utilise pas pour l’entraînement.";
+
 export const AI_CONSENT_RETENTION_NOTE =
-  "OpenRouter et les fournisseurs de modèles qu’il route peuvent conserver les demandes selon leurs propres politiques. L’app ne peut garantir ni leur suppression, ni l’absence d’entraînement : consulte leurs conditions avant d’accepter.";
+  "Les demandes texte suivent la politique d’OpenRouter et des fournisseurs qu’il route : ils peuvent conserver les demandes et les utiliser pour l’entraînement. Les photos passent par un endpoint ZDR sans collecte : hors contrôle CSAM ou obligation légale, elles ne sont pas conservées après traitement et ne servent pas à l’entraînement. L’app ne peut pas garantir la suppression chez le fournisseur.";
 
 export const AI_CONSENT_COST_NOTE =
-  "Chaque demande utilise tes crédits OpenRouter et peut être facturée.";
+  "Chaque demande, photo comprise, utilise tes crédits OpenRouter et peut être facturée.";
 
 /** Un accord n'est valide que pour la version affichée ET l'attestation recueillie. */
 export function aiConsentGranted(

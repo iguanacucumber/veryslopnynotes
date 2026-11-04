@@ -12,9 +12,11 @@ import {
   AiCostReminder,
   MODEL_UNAVAILABLE_MESSAGE,
   ModelUnavailableNotice,
+  VISION_MODEL_UNAVAILABLE_MESSAGE,
   aiFailureNotice,
   boundedNotice,
 } from "../../web/src/features/assistant/notices";
+import { AI_VISION_RETENTION_NOTE } from "../../web/src/features/assistant/consent";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
@@ -67,6 +69,23 @@ describe("IA — modèle indisponible dit clairement, sans repli", () => {
     expect(llm).toMatch(/404 -> MODEL_UNAVAILABLE_MESSAGE/);
   });
 
+  test("le repli vision est explicite : aucun autre modèle appelé", () => {
+    expect(VISION_MODEL_UNAVAILABLE_MESSAGE).toContain("Modèle vision indisponible");
+    expect(VISION_MODEL_UNAVAILABLE_MESSAGE).toContain("aucun autre modèle");
+    expect(aiFailureNotice(undefined, VISION_MODEL_UNAVAILABLE_MESSAGE).kind).toBe("model");
+  });
+
+  test("le modèle vision livré est payant et la requête impose ZDR", () => {
+    const policy = codeOnly(source(join(DATA, "LlmPolicy.kt")));
+    const llm = codeOnly(source(join(DATA, "OpenRouterLlm.kt")));
+    expect(policy).toContain('const val PINNED_VISION_MODEL = "qwen/qwen3-vl-30b-a3b-instruct"');
+    expect(policy).not.toMatch(/PINNED_VISION_MODEL\s*=\s*"[^"]*:free"/);
+    const vision = llm.slice(llm.indexOf("override fun generateVisionSafe"), llm.indexOf("private fun send"));
+    expect(vision).toContain('.put("zdr", true)');
+    expect(vision).toContain('.put("data_collection", "deny")');
+    expect(vision).toContain("VISION_MODEL_UNAVAILABLE_MESSAGE");
+  });
+
   test("le pont nomme la cause modèle au lieu de la classer « réseau »", () => {
     const teacher = codeOnly(source(join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/VsnBridgeTeacher.kt")));
     expect(teacher).toContain("e.isModelUnavailable -> \"model\"");
@@ -97,6 +116,15 @@ describe("IA — rappel de coût avant l'usage", () => {
     expect(source(join(WEB, "features/tasks/HomeworkChat.tsx"))).toContain("<AiCostReminder short");
     expect(source(join(WEB, "features/teacher/TeacherScreen.tsx"))).toContain("<AiCostReminder short");
     expect(source(join(WEB, "features/tasks/TasksScreen.tsx"))).toContain("<AiCostReminder />");
+  });
+
+  test("la rétention des photos est divulguée sans promesse absolue", () => {
+    expect(AI_VISION_RETENTION_NOTE).toContain("ZDR");
+    expect(AI_VISION_RETENTION_NOTE).toContain("CSAM");
+    expect(AI_VISION_RETENTION_NOTE).toContain("entraînement");
+    expect(AI_VISION_RETENTION_NOTE).not.toMatch(/zéro rétention|zéro conservation|jamais conserv/i);
+    expect(source(join(WEB, "features/tasks/TasksScreen.tsx"))).toContain("AI_VISION_RETENTION_NOTE");
+    expect(source(join(WEB, "features/help/HelpScreen.tsx"))).toContain("AI_VISION_RETENTION_NOTE");
   });
 
   test("la copie d'erreur reste bornée et sur une seule ligne", () => {
