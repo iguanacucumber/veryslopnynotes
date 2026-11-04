@@ -332,6 +332,36 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
         ],
         withheld: ["sessionToken", "llmKey", "serverUrl", "manualSourceUrl", "credentials"],
       }) as Promise<T>;
+    case "diagnostics.preview":
+      return ok({
+        ok: true,
+        fields: {
+          format: "veryslopnynotes.diagnostic",
+          schemaVersion: 1,
+          generatedAt: "2026-11-04T09:00:00Z",
+          appVersion: "0.1.0",
+          androidVersion: "14",
+          androidApi: 34,
+          webViewVersion: "120.0.6099.230",
+          errorCode: "none",
+          resource: "none",
+          classLevel: "Terminale",
+          authState: "restored",
+          withheld: [
+            "payloads",
+            "names",
+            "urls",
+            "credentials",
+            "tokens",
+            "qr",
+            "pin",
+            "schoolData",
+            "logs",
+          ],
+        },
+      }) as Promise<T>;
+    case "diagnostics.share":
+      return ok({ ok: true }) as Promise<T>;
     case "llm.status":
       return ok({ configured: settings.llmConfigured }) as Promise<T>;
     case "llm.saveKey":
