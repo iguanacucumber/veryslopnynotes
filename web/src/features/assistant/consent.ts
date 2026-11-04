@@ -3,7 +3,12 @@
 // promesse de suppression chez le fournisseur : le code ne peut pas la tenir.
 import type { AiConsentDecision } from "../../bridge/types";
 
-/** Miroir de `AI_CONSENT_VERSION` (`android/core/.../AiConsent.kt`). */
+/**
+ * Miroir testé de `AI_CONSENT_VERSION` (`android/core/.../AiConsent.kt`), seule
+ * source côté web. À incrémenter dans les DEUX fichiers pour un changement
+ * MATÉRIEL : catégorie de données ajoutée ou retirée, destinataire ou règle de
+ * conservation modifiée, usage élargi. Une reformulation seule ne compte pas.
+ */
 export const AI_CONSENT_VERSION = 1;
 
 export const AI_CONSENT_REQUIRED_MESSAGE =
@@ -69,4 +74,9 @@ export const AI_CONSENT_COST_NOTE =
 /** Un accord n'est valide que pour la version de texte affichée. */
 export function aiConsentGranted(decision: AiConsentDecision, version: number): boolean {
   return decision === "granted" && version === AI_CONSENT_VERSION;
+}
+
+/** Un accord d'une autre version redemande l'accord, jamais un usage silencieux. */
+export function aiConsentNeedsReconsent(decision: AiConsentDecision, version: number): boolean {
+  return decision === "granted" && version !== AI_CONSENT_VERSION;
 }

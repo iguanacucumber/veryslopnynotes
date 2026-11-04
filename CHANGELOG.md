@@ -40,6 +40,9 @@ la section `0.1.0` le jour du tag.
 - Conditions d’utilisation (`TERMS.md`) : usage personnel, autorisation
   scolaire, limites de l’IA, intégrité académique, âge, garanties et
   responsabilité ; revue juridique en attente.
+- Consentement IA versionné : un changement matériel du texte ou du périmètre
+  redemande l’accord ; un accord d’une autre version, un refus ou un
+  enregistrement illisible ne réactive jamais l’IA.
 
 ### Modifié
 

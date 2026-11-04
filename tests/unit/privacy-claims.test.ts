@@ -3,9 +3,10 @@
 // prouver : Kotlin EXÉCUTÉ par la parité quand le comportement est pur,
 // manifeste/Intent/journaux lus à la source quand seul Android les porte.
 //
-// PRV-04 (#848) : le consentement de premier usage est désormais une porte
-// native (version, refus, retrait) ; les preuves ci-dessous couvrent le
-// stockage ET l'absence de lecture de clé/appel réseau avant l'accord.
+// PRV-04 (#848) / PRV-16 (#860) : le consentement est une porte native
+// versionnée (refus, retrait, re-consentement sur changement matériel) ; les
+// preuves ci-dessous couvrent le stockage ET l'absence de lecture de
+// clé/appel réseau avant l'accord.
 import { afterAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -157,7 +158,7 @@ describe("confidentialité — aucun envoi IA sans clé (#943)", () => {
   }
 });
 
-describe("confidentialité — consentement IA au premier usage (#848)", () => {
+describe("confidentialité — consentement IA versionné (#848, #860)", () => {
   test("la version de copie et la version native ne divergent pas", () => {
     const policy = source(join(CORE, "AiConsent.kt"));
     expect(policy).toContain(`const val AI_CONSENT_VERSION = ${AI_CONSENT_VERSION}`);
@@ -191,13 +192,18 @@ describe("confidentialité — consentement IA au premier usage (#848)", () => {
       decision: "granted",
       version: AI_CONSENT_VERSION,
       allowsAi: true,
+      needsReconsent: false,
     });
 
-    // Une acceptation d'une AUTRE version ne vaut pas accord.
+    // Une acceptation d'une AUTRE version ne vaut pas accord : elle redemande
+    // l'accord sans jamais le réutiliser (PRV-16).
     const stale = await ask(consentLink!, { op: "roundtrip", decision: "granted", version: AI_CONSENT_VERSION + 1 });
     expect(stale.allowsAi).toBe(false);
     expect(stale.decision).toBe("granted");
-    expect((await ask(consentLink!, { op: "parse", raw: "granted:999" })).allowsAi).toBe(false);
+    expect(stale.needsReconsent).toBe(true);
+    const unknown = await ask(consentLink!, { op: "parse", raw: "granted:999" });
+    expect(unknown.allowsAi).toBe(false);
+    expect(unknown.needsReconsent).toBe(true);
 
     const refused = await ask(consentLink!, { op: "roundtrip", decision: "refused" });
     expect(refused).toMatchObject({ decision: "refused", version: AI_CONSENT_VERSION, allowsAi: false });

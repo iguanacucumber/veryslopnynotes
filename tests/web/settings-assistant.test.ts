@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { AI_CONSENT_VERSION } from "../../web/src/features/assistant/consent";
 import { assistantStatus } from "../../web/src/features/settings/model";
 
 const WEB = join(import.meta.dir, "..", "..", "web", "src");
@@ -119,6 +120,19 @@ describe("réglages — une seule section Assistant (#612)", () => {  const sett
     // Le champ de clé n'existe que dans la branche « accord donné ».
     expect(keyCard.indexOf("{consentGranted ? (")).toBeLessThan(keyCard.indexOf('id="llm-key"'));
     expect(keyCard.indexOf('id="llm-key"')).toBeLessThan(keyCard.indexOf("Retirer mon consentement"));
+  });
+
+  test("un accord d'une autre version redemande l'accord au lieu d'activer l'IA (#860)", () => {
+    const stale = assistantStatus(true, false, false, "granted", AI_CONSENT_VERSION + 1);
+    expect(stale.title).toBe("Consentement IA à renouveler");
+    expect(stale.body).toContain("reste désactivé");
+    expect(assistantStatus(true, false, false, "granted", AI_CONSENT_VERSION).title).toBe("Assistant actif");
+    expect(assistantStatus(true, false, false, "refused", AI_CONSENT_VERSION).title).toBe("Assistant IA désactivé");
+    expect(keyCard).toContain("aiConsentNeedsReconsent(decision, version)");
+    // Le pont factice suit la même version que l'écran, sans littéral recopié.
+    const mock = source("bridge/mock.ts");
+    expect(mock).toContain("aiConsentVersion: AI_CONSENT_VERSION");
+    expect(mock).not.toMatch(/aiConsentVersion:\s*[1-9]/);
   });
 
   test("les matières personnalisées chargent avant d'affirmer qu'il n'y en a aucune (#804)", () => {

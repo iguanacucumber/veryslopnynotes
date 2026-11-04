@@ -354,7 +354,8 @@ describe("registre d'invariants", () => {
 
   test("l'index et les détails restent sous leur budget de lecture", () => {
     // Budgets de CONTEXTE, pas de style : dépasser = revenir au registre monolithique.
-    expect({ fichier: "INVARIANTS.md", sousBudget: INVARIANTS.length <= 5_500 }).toEqual({
+    // +250 pour l'entrée I36 (consentement versionné, #860).
+    expect({ fichier: "INVARIANTS.md", sousBudget: INVARIANTS.length <= 5_750 }).toEqual({
       fichier: "INVARIANTS.md",
       sousBudget: true,
     });
@@ -404,8 +405,9 @@ describe("registre d'invariants", () => {
       // +500 loopback/digest (#921), +900 deep links (SEC-10), +200 démo (#873).
       ["docs/RELEASE.md", 8_600],
       ["docs/HUMAN_INPUTS.md", 4_500],
-      // +500 pour la suppression totale et le compte élève (#853/#832).
-      ["docs/PRODUCT.md", 8_000],
+      // +500 pour la suppression totale et le compte élève (#853/#832),
+      // +750 pour le consentement IA versionné (#860).
+      ["docs/PRODUCT.md", 8_750],
     ];
     for (const [file, max] of ceilings) {
       expect({ file, sousBudget: read(file).length <= max }).toEqual({ file, sousBudget: true });
@@ -562,8 +564,9 @@ describe("badge contracts du README (#1071)", () => {
 describe("carte de contexte", () => {
   test("CONTEXT.md reste sous son budget de lecture", () => {
     // Une carte qu'on relit à chaque tâche coûte plus qu'elle ne rapporte.
-    // +110 pour la déclaration d'accessibilité (#981), +80 pour le glossaire (#1072).
-    expect({ fichier: "docs/CONTEXT.md", sousBudget: CONTEXT.length <= 2_700 }).toEqual({
+    // +110 pour la déclaration d'accessibilité (#981), +80 pour le glossaire (#1072),
+    // +80 pour le consentement IA versionné (#860).
+    expect({ fichier: "docs/CONTEXT.md", sousBudget: CONTEXT.length <= 2_800 }).toEqual({
       fichier: "docs/CONTEXT.md",
       sousBudget: true,
     });

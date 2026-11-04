@@ -41,6 +41,7 @@ import type {
   TextSizeChoice,
 } from "./types";
 import { parseTextSize } from "../lib/textScale";
+import { AI_CONSENT_VERSION, aiConsentGranted } from "../features/assistant/consent";
 
 const now = Date.now();
 
@@ -374,7 +375,7 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
       settings = {
         ...settings,
         aiConsent: decision,
-        aiConsentVersion: 1,
+        aiConsentVersion: AI_CONSENT_VERSION,
         llmConfigured: decision === "withdrawn" ? false : settings.llmConfigured,
       };
       if (decision === "withdrawn") teacherThread = { subject: "", messages: [] };
@@ -387,7 +388,7 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
       }) as Promise<T>;
     }
     case "llm.saveKey":
-      if (settings.aiConsent !== "granted") {
+      if (!aiConsentGranted(settings.aiConsent, settings.aiConsentVersion)) {
         return ok({
           ok: false,
           code: "consent",
@@ -400,17 +401,17 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
       settings = { ...settings, llmConfigured: false };
       return ok({ ok: true }) as Promise<T>;
     case "llm.askHomework":
-      if (settings.aiConsent !== "granted") {
+      if (!aiConsentGranted(settings.aiConsent, settings.aiConsentVersion)) {
         return ok({ ok: false, code: "consent", message: "Consentement IA requis : accepte dans Réglages > Assistant." }) as Promise<T>;
       }
       return ok(HOMEWORK_REPLY) as Promise<T>;
     case "llm.solvePhoto":
-      if (settings.aiConsent !== "granted") {
+      if (!aiConsentGranted(settings.aiConsent, settings.aiConsentVersion)) {
         return ok({ ok: false, code: "consent", message: "Consentement IA requis : accepte dans Réglages > Assistant." }) as Promise<T>;
       }
       return ok(PHOTO_REPLY) as Promise<T>;
     case "llm.generateRevision": {
-      if (settings.aiConsent !== "granted") {
+      if (!aiConsentGranted(settings.aiConsent, settings.aiConsentVersion)) {
         return ok({ ok: false, code: "consent", message: "Consentement IA requis : accepte dans Réglages > Assistant." }) as Promise<T>;
       }
       const id = String(p["assignmentId"] ?? "");
@@ -437,7 +438,7 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
       }) as Promise<T>;
     }
     case "llm.teacherTurn": {
-      if (settings.aiConsent !== "granted") {
+      if (!aiConsentGranted(settings.aiConsent, settings.aiConsentVersion)) {
         return ok({ ok: false, code: "consent", message: "Consentement IA requis : accepte dans Réglages > Assistant." }) as Promise<T>;
       }
       const subject = String(p["subject"] ?? "").trim();
@@ -490,7 +491,7 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
       }) as Promise<T>;
     }
     case "exercises.help": {
-      if (settings.aiConsent !== "granted") {
+      if (!aiConsentGranted(settings.aiConsent, settings.aiConsentVersion)) {
         return ok({ ok: false, code: "consent", message: "Consentement IA requis : accepte dans Réglages > Assistant." }) as Promise<T>;
       }
       const subject = String(p["subject"] ?? "").trim();

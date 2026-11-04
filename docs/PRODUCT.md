@@ -113,3 +113,16 @@ sont refusés.
   accessible. « **Supprimer toutes mes données** » emporte en plus la clé de
   l’assistant et l’adresse du serveur ; la confirmation liste tout
   l’inventaire et un échec partiel est affiché.
+
+### Consentement IA versionné
+
+L’assistant ne part qu’après un accord explicite, enregistré sur l’appareil
+avec la version du texte et du périmètre affichés. Un changement **matériel**
+incrémente cette version : ajout ou retrait d’une catégorie de données dans
+l’aperçu, nouveau destinataire, nouvelle règle de conservation, ou usage
+élargi. Une simple reformulation sans effet sur les données ne compte pas.
+
+Un accord d’une autre version n’est jamais réutilisé : l’app redemande
+l’accord et l’IA reste désactivée jusque-là. Refuser ou retirer le
+consentement laisse aussi l’IA désactivée. Un enregistrement illisible, absent
+ou d’une version inconnue est traité comme aucun accord (défaut sûr).
