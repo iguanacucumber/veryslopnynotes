@@ -84,6 +84,10 @@ la section `0.1.0` le jour du tag.
   sept sujets avec constat vérifiable, questions exactes au conseil, preuves,
   blocs de signature vides et procédure d'archive ; tous les statuts restent
   `pending`, aucune signature n'est revendiquée (#976).
+- Dossier de décision sur le responsable du traitement
+  (`docs/legal/CONTROLLER.md`) : options personne physique, association ou
+  société, champs à décider, représentant UE et DPO, texte de remplacement de
+  la notice ; aucune identité n'est inventée (#831).
 - Dérogations de release (`docs/RELEASE-WAIVERS.md`) : approbation à deux
   signatures humaines, champs risque/atténuation/propriétaire/expiration,
   interdiction de déroger un `tier:L`, la sécurité, une perte de données ou une
