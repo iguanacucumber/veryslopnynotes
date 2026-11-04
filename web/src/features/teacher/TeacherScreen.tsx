@@ -17,6 +17,7 @@ import {
 } from "../../ui/icons";
 import { subjectColor } from "../../lib/format";
 import { AiCostReminder } from "../assistant/notices";
+import { AiOutputLabel, AiReportButton, withAiOutputLabel } from "../assistant/AiOutput";
 import { MarkdownBody } from "../revisions/MarkdownBody";
 import {
   teacherActionLabel,
@@ -338,6 +339,7 @@ export function TeacherView({
                         <span className="teacher-bubble__who">
                           {message.role === "teacher" ? "Le professeur" : "Toi"}
                         </span>
+                        {message.role === "teacher" ? <AiOutputLabel /> : null}
                       </div>
                       {message.role === "teacher" ? (
                         <div className="teacher-bubble__answer ai-turn__body">
@@ -367,7 +369,7 @@ export function TeacherView({
                             )}
                           </div>
                           <div className="teacher-bubble__actions ai-actions">
-                            <CopyTextButton text={message.text} />
+                            <CopyTextButton text={withAiOutputLabel(message.text)} />
                             {onRegenerate &&
                               !loading &&
                               index === lastTeacher &&
@@ -388,6 +390,7 @@ export function TeacherView({
                                 Rejeter la réponse
                               </button>
                             ) : null}
+                            <AiReportButton />
                           </div>
                         </>
                       ) : null}

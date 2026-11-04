@@ -479,6 +479,9 @@ fun listRevisionSheets(store: RevisionKv): List<RevisionSheet> {
 /** En-tête du bloc de sources : celui du corps, celui de l'export. */
 const val REVISION_SOURCES_HEADING = "Sources :"
 
+/** Toute sortie du modèle porte son étiquette, y compris dans le PDF exporté. */
+const val REVISION_AI_LABEL = "IA — à vérifier"
+
 /** Marqueur de troncature : une fiche tronquée le DIT (jamais en silence). */
 const val REVISION_PDF_TRUNCATED = "(suite tronquée)"
 
@@ -803,7 +806,7 @@ fun revisionPdfLines(sheet: RevisionSheet): List<String> {
     } else {
         bodyLines
     }
-    val raw = listOf(sheet.title, "${sheet.subject} — ${localDay(sheet.date)}", "") +
+    val raw = listOf(sheet.title, "${sheet.subject} — ${localDay(sheet.date)}", REVISION_AI_LABEL, "") +
         capped +
         (if (truncated) listOf(REVISION_PDF_TRUNCATED) else emptyList()) +
         listOf("", REVISION_SOURCES_HEADING) + sheet.sources.map { "- $it" } +

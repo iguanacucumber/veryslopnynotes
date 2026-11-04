@@ -25,6 +25,7 @@ import {
   IconTrash,
   IconWarning,
 } from "../../ui/icons";
+import { AiOutputLabel, AiReportButton } from "../assistant/AiOutput";
 import "./course-notes.css";
 
 function messageOf(error: unknown, fallback: string): string {
@@ -673,6 +674,7 @@ export function CourseNotesScreen() {
                     <strong className="t-body">
                       {photoBusy !== null ? "Nouvelle lecture en cours…" : "Photo transcrite"}
                     </strong>
+                    <AiOutputLabel />
                     <span className="tiny muted">
                       {photoBusy !== null
                         ? "Ce brouillon sera remplacé à la fin de la transcription."
@@ -699,6 +701,7 @@ export function CourseNotesScreen() {
                         <IconImage size={15} />
                         Galerie
                       </button>
+                      <AiReportButton className="chip" />
                     </div>
                   ) : null}
                 </div>

@@ -15,6 +15,7 @@ import { CopyTextButton } from "../../ui/CopyTextButton";
 import { ThinkingLine } from "../../ui/ThinkingLine";
 import { useStickToBottom } from "../../ui/useStickToBottom";
 import { AiCostReminder, aiFailureNotice } from "../assistant/notices";
+import { AiOutputLabel, AiReportButton, withAiOutputLabel } from "../assistant/AiOutput";
 import { MarkdownBody } from "../revisions/MarkdownBody";
 import { relativeLongFr, subjectColor, tint } from "../../lib/format";
 import { subjectEmoji } from "../../lib/subjectVisual";
@@ -168,6 +169,7 @@ function AssistantTurn({
           <IconSparkles size={15} />
         </span>
         <span className="hw-assistant__who ai-turn__who">Assistant devoirs</span>
+        <AiOutputLabel />
         {unsourced ? <span className="hw-assistant__badge">non sourcée</span> : null}
       </div>
 
@@ -260,13 +262,14 @@ function AssistantTurn({
 
       {turn.answer ? (
         <div className="hw-turn-actions ai-actions">
-          <CopyTextButton text={turn.answer} />
+          <CopyTextButton text={withAiOutputLabel(turn.answer)} />
           {interactive ? (
             <button type="button" className="ai-action" onClick={onRetry}>
               <IconRefresh size={16} />
               Régénérer
             </button>
           ) : null}
+          <AiReportButton />
         </div>
       ) : null}
     </div>

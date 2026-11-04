@@ -1542,6 +1542,10 @@ button.chip {
   font-weight: 550;
 }
 
+.revision-card__ai {
+  margin-top: 5px;
+}
+
 /* Aperçu fermé : deux lignes, jamais le corps entier dans la carte. */
 .revision-card__preview {
   display: -webkit-box;

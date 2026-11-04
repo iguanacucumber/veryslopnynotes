@@ -38,6 +38,24 @@ function showValue(value: DiagnosticValue): string {
   return Array.isArray(value) ? value.join(", ") : String(value);
 }
 
+/** Le même aperçu sert au diagnostic des Réglages et au signalement IA. */
+export function DiagnosticFieldList({
+  fields,
+}: {
+  fields: Record<string, DiagnosticValue>;
+}) {
+  return (
+    <dl className="diagnostic-fields">
+      {orderedFields(fields).map(([key, value]) => (
+        <div className="diagnostic-field" key={key}>
+          <dt>{FIELD_LABELS[key] ?? key}</dt>
+          <dd>{showValue(value)}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 /**
  * Diagnostic de support : un aperçu figé, puis le sélecteur Android.
  * Aucun envoi automatique ; l'aperçu affiché EST le fichier partagé.
@@ -151,16 +169,7 @@ export function DiagnosticExportCard() {
           </>
         }
       >
-        {fields ? (
-          <dl className="diagnostic-fields">
-            {orderedFields(fields).map(([key, value]) => (
-              <div className="diagnostic-field" key={key}>
-                <dt>{FIELD_LABELS[key] ?? key}</dt>
-                <dd>{showValue(value)}</dd>
-              </div>
-            ))}
-          </dl>
-        ) : null}
+        {fields ? <DiagnosticFieldList fields={fields} /> : null}
         <p className="tiny muted">
           Aucun envoi réseau, aucun stockage hors de l’appareil : le fichier vit dans le cache,
           purgé avec le compte.

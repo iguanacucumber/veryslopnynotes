@@ -45,6 +45,10 @@ la section `0.1.0` le jour du tag.
 - Consentement IA versionné : un changement matériel du texte ou du périmètre
   redemande l’accord ; un accord d’une autre version, un refus ou un
   enregistrement illisible ne réactive jamais l’IA.
+- Étiquette visible « IA — à vérifier » sur chaque sortie de l'assistant (aide
+  devoirs, fiches de révision, professeur, exercices, brouillon de photo),
+  conservée à la copie et dans l'export PDF ; action « Signaler » réutilisant le
+  diagnostic borné, sans donnée scolaire ni envoi automatique.
 
 ### Modifié
 
