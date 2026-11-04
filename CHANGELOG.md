@@ -37,6 +37,9 @@ la section `0.1.0` le jour du tag.
 - Notices de licence tierces complètes (`THIRD_PARTY_NOTICES.md`) et textes
   intégraux dans `web/public/licenses/`, versions liées à `bun.lock` et au
   catalogue Gradle.
+- Conditions d’utilisation (`TERMS.md`) : usage personnel, autorisation
+  scolaire, limites de l’IA, intégrité académique, âge, garanties et
+  responsabilité ; revue juridique en attente.
 
 ### Modifié
 
