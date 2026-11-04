@@ -80,6 +80,11 @@ la section `0.1.0` le jour du tag.
   sept sujets avec constat vérifiable, questions exactes au conseil, preuves,
   blocs de signature vides et procédure d'archive ; tous les statuts restent
   `pending`, aucune signature n'est revendiquée (#976).
+- Dérogations de release (`docs/RELEASE-WAIVERS.md`) : approbation à deux
+  signatures humaines, champs risque/atténuation/propriétaire/expiration,
+  interdiction de déroger un `tier:L`, la sécurité, une perte de données ou une
+  revendication de confidentialité ; propositions `to-waive` marquées non
+  approuvées et blocs de signature vides (#972).
 
 ### Modifié
 
