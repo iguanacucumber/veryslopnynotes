@@ -124,7 +124,8 @@ catalogue : [`server/README.md`](server/README.md).
 
 Parcours humain (fork, PR, gate, signature) :
 [`CONTRIBUTING.md`](CONTRIBUTING.md). Règles et workflow :
-[`AGENTS.md`](AGENTS.md).
+[`AGENTS.md`](AGENTS.md). Support et problèmes connus :
+[`docs/SUPPORT.md`](docs/SUPPORT.md).
 
 ## État et limites
 

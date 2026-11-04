@@ -40,8 +40,10 @@ engagement contractuel.
 Le canal privé sert aux vulnérabilités, pas au support. Une question d'usage,
 un crash non exploitable, une incompatibilité QR/MFA/WebView ou une demande
 d'accessibilité s'ouvre en **issue publique** :
-<https://github.com/iguanacucumber/veryslopnynotes/issues/new/choose>. L'aide
-est communautaire, sans délai garanti. Ne jamais joindre de donnée scolaire :
+<https://github.com/iguanacucumber/veryslopnynotes/issues/new/choose>. Le
+processus complet, les délais et l'issue épinglée `[known-issues] vX.Y.Z` sont
+dans [`docs/SUPPORT.md`](docs/SUPPORT.md). L'aide est communautaire, sans délai
+garanti. Ne jamais joindre de donnée scolaire :
 version de l'app, version d'Android et de la WebView, écran, message exact et
 étapes suffisent. Les limites d'accessibilité et leur canal sont dans
 [`docs/ACCESSIBILITY.md`](docs/ACCESSIBILITY.md) ; les versions Android et

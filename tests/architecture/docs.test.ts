@@ -380,8 +380,9 @@ describe("registre d'invariants", () => {
       sousBudget: true,
     });
     // +800 pour l'installation et les mises à jour Obtainium (#973),
-    // +1 050 pour la migration debug → release (#968).
-    expect({ fichier: "README.md", sousBudget: README.length <= 7_500 }).toEqual({
+    // +1 050 pour la migration debug → release (#968),
+    // +100 pour le canal de support (#959).
+    expect({ fichier: "README.md", sousBudget: README.length <= 7_600 }).toEqual({
       fichier: "README.md",
       sousBudget: true,
     });
