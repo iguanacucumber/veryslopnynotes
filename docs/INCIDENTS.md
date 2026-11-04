@@ -67,9 +67,9 @@ pas « vert ».
 
 Un runbook est une fiche courte, lue pendant l'incident. Les quatre fiches
 ci-dessous suivent le même ordre : détection, triage, communication,
-confinement et correctif, retrait ou retour arrière. Le tableau de triage et les
-seuils de [`RELEASE-HEALTH.md`](RELEASE-HEALTH.md) restent l'autorité ; une fiche
-ne crée ni seuil ni priorité nouveaux.
+confinement et correctif, retrait ou retour arrière. Le tableau de triage
+ci-dessus et les seuils de [`RELEASE-HEALTH.md`](RELEASE-HEALTH.md) restent
+l'autorité ; une fiche ne crée ni seuil ni priorité nouveaux.
 
 Canaux autorisés, sans contact inventé :
 
@@ -91,20 +91,21 @@ sans reproduction et sans trace suit la règle de triage existante.
 
 | Runbook | Signal d'entrée | Priorité initiale | Retrait par défaut |
 |---|---|---|---|
-| Rupture de protocole | S4, ou S3 si le correctif casse le gate | P1 si l'appairage est impossible, sinon P2 | non : correctif |
-| Mauvaise release | S1, S2, S3, S4, S5 | P0 à P2 selon le tableau de triage | oui si l'artefact est fautif |
+| Rupture de protocole | S4, ou S3 sur le commit du correctif | P1 si appairage ou session impossibles, sinon P2 | non : correctif |
+| Mauvaise release | S1 à S6 | P0 à P3 selon le tableau de triage | oui si l'artefact est fautif |
 | Clé exposée | S4 sécurité, scan secret, Advisory | P0 | oui si un artefact publié contient la clé |
-| Incompatibilité d'établissement | S4 | P2 si régression, sinon P3 | non : limitation |
+| Incompatibilité d'établissement | S4 | P1/P2 si régression de l'app, sinon P3 | non : limitation |
 
 ### Rupture de protocole
 
 **Détection.** Trois rapports indépendants du même symptôme sur la même version
 en 7 jours (S4), ou un échec d'appairage, d'ouverture de session ou de ressource,
-avec la version de l'app et le message exact. Un gate rouge (S3) sur le correctif
-compte aussi. Reproduire avec la démonstration publique et, si un mainteneur
-dispose d'un compte autorisé, avec un établissement appairé ; consigner un
-échange Pronote caviardé dans `tests/fixtures/pronote/` (gitignoré, jamais
-publié). Distinguer trois ruptures : QR illisible ou refusé, session non ouverte,
+avec la version de l'app et le message exact. Un gate rouge (S3) sur le commit
+du correctif bloque sa publication. Reproduire avec la démonstration publique
+et, si un mainteneur dispose d'un compte autorisé, avec un établissement
+appairé ; consigner un échange Pronote caviardé dans
+`tests/fixtures/pronote/` (gitignoré, jamais publié). Distinguer trois ruptures :
+QR illisible ou refusé, session non ouverte,
 ressource dont le schéma a changé.
 
 **Triage.** P0 si perte de données, démarrage cassé ou faille exploitable — la
@@ -147,8 +148,9 @@ comme `known-issues` et clore l'incident avec la preuve, pas avec un faux
 **Détection.** S3 : gate rouge sur le commit taggé ou artefact non reproductible.
 S5 : SHA-256, certificat `apksigner` ou digest d'image différent de la
 publication. S1/S2 : seuils de crash ou d'ANR. S4 : perte de données ou même
-symptôme. Vérifier d'abord si l'artefact est publié (Play, release GitHub,
-sideload) ou seulement construit : cela change le retrait, pas le triage.
+symptôme. S6 : santé du serveur si l'image publiée est en cause. Vérifier d'abord
+si l'artefact est publié (Play, release GitHub, sideload) ou seulement construit :
+cela change le retrait, pas le triage.
 
 **Triage.** Appliquer le tableau existant : P0 pour perte de données, démarrage
 cassé, faille ou clé exposée ; P1 pour crash/ANR au-dessus du seuil de pause ou
@@ -190,8 +192,8 @@ révoque d'abord, on retire ensuite.
 
 | Clé | Où elle vit | Révocation | Effet |
 |---|---|---|---|
-| OpenRouter (utilisateur) | préférences chiffrées de l'appareil, jamais le serveur | tableau de bord OpenRouter, par le détenteur | l'ancienne clé cesse d'être acceptée ; saisir une nouvelle clé ; l'app ne peut pas révoquer à distance |
-| Signature release | keystore hors dépôt | Play Console (réinitialisation de la clé d'upload ou rotation de signature) ou nouvelle identité | les mises à jour signées par l'ancienne clé ne sont plus acceptées ; sideload : réinstallation, donc perte des données locales |
+| OpenRouter (utilisateur) | préférences chiffrées de l'appareil, jamais le serveur | tableau de bord OpenRouter, par le détenteur | ancienne clé refusée ; saisir la nouvelle ; pas de révocation à distance depuis l'app |
+| Signature release | keystore hors dépôt | Play Console (clé d'upload ou rotation de signature) ; sinon nouvelle identité | mises à jour par l'ancienne clé refusées ; sideload : réinstallation, données locales perdues |
 | `SCRAPER_TOKEN` | environnement de l'opérateur, mode public seulement | remplacer la valeur et redémarrer | l'ancien jeton reçoit 401 ; le cookie jar reste local |
 | Secret CI/GitHub | réglages du dépôt | révoquer et recréer dans GitHub | rejouer le gate et vérifier les artefacts |
 
@@ -242,11 +244,12 @@ ou l'Advisory.
 
 **Détection.** S4 : un ou plusieurs rapports sur un établissement, avec message
 exact et versions. Chercher dans la matrice
-[`COMPATIBILITY.md`](COMPATIBILITY.md) : portail sans QR, MFA, SSO d'ENT,
-version Pronote qui change le QR ou une ressource. Si le cas est déjà listé « non
-pris en charge », ce n'est pas une régression. Si le même établissement
-fonctionnait avant une release de l'app, appliquer « Mauvaise release ». Ne
-demander ni URL, ni nom d'établissement, ni donnée scolaire.
+[`COMPATIBILITY.md`](COMPATIBILITY.md) : portail sans QR, MFA, SSO d'ENT. Une
+version Pronote qui change le QR ou une ressource relève de « Rupture de
+protocole ». Si le cas est déjà listé « non pris en charge », ce n'est pas une
+régression. Si le même établissement fonctionnait avant une release de l'app,
+appliquer « Mauvaise release ». Ne demander ni URL, ni nom d'établissement, ni
+donnée scolaire.
 
 **Triage.** P3 pour une configuration explicitement non prise en charge : réponse
 documentée, pas de correctif. P2 pour une régression d'un cas pris en charge,
@@ -264,7 +267,7 @@ limite est confirmée, par PR. Ne jamais publier l'identité de l'établissement
 
 **Confinement et correctif.** Aucun ajout de mot de passe, SSO, MFA ou scraping
 de portail sans ADR qui change le contrat QR
-([`COMPATIBILITY.md`](COMPATIBILITY.md), [ADR-002](adr/002-pronote-provider.md),
+([`COMPATIBILITY.md`](COMPATIBILITY.md),
 [ADR-003](adr/003-client-direct.md)). Si le cas est pris en charge : reproduire
 avec un compte autorisé, caviarder la fixture, corriger le parseur ou le message,
 tester la parité TS/Kotlin, publier un correctif. Si le message est ambigu, le
