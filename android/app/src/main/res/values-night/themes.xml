@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Version SOMBRE du même thème : sinon une app en thème sombre s'ouvre
-         sur un fond de fenêtre clair. -->
-    <style name="Theme.Veryslopynotes" parent="@android:style/Theme.Material.NoActionBar" />
+         sur un fond de fenêtre clair. Le splash garde la teinte de marque. -->
+    <style name="Theme.Veryslopynotes" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@drawable/ic_launcher_splash</item>
+        <item name="android:colorBackground">@color/ic_launcher_background</item>
+    </style>
 </resources>

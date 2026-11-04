@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- API 31+ : splash système natif (icône adaptative + fond de marque). -->
+    <style name="Theme.Veryslopynotes" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowSplashScreenBackground">@color/ic_launcher_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/ic_launcher_background</item>
+        <item name="android:windowBackground">@drawable/ic_launcher_splash</item>
+        <item name="android:colorBackground">@color/ic_launcher_background</item>
+    </style>
+</resources>
