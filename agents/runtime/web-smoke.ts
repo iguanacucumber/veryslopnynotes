@@ -305,6 +305,8 @@ try {
     // Le scan lit le QR PUIS vide le PIN : on attend le QR avant de saisir.
     await flow.getByRole("button", { name: "Rescanner le QR" }).waitFor({ timeout: DELAI_UI_MS });
     await flow.locator("#pairing-pin").fill("1234");
+    // PRV-12 : l'appairage réel exige l'attestation avant d'ouvrir la session.
+    await flow.locator("#pairing-attestation").check();
     await flow.getByRole("button", { name: "Ouvrir la session" }).click();
     await flow.waitForURL(/#\/$/, { timeout: DELAI_UI_MS }).catch(() => undefined);
     // Le garde-fou « pas de session » renverrait vers /pairing quelques

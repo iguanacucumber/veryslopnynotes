@@ -10,7 +10,7 @@ contribuer, voir `AGENTS.md`.
 
 | Route | Écran | Ce que tu y trouves |
 |---|---|---|
-| `/pairing` | Appairage | Scan du QR de l'établissement + PIN, session ouverte en direct, sans serveur intermédiaire. Un build de développement expose en plus « Connexion démo » (établissement public, sans QR ni PIN) ; la release ne montre ni ce bouton ni la méthode native. |
+| `/pairing` | Appairage | Attestation d’autorisation scolaire ou parentale, puis scan du QR de l'établissement + PIN, session ouverte en direct, sans serveur intermédiaire. Un build de développement expose en plus « Connexion démo » (établissement public, sans QR ni PIN) ; la release ne montre ni ce bouton ni la méthode native. |
 | `/` | Accueil | Moyenne, dernière note, prochains cours, devoirs à faire, alertes et accès rapides. |
 | `/calendar` | Cours | Navigation par semaine, professeur, salle, cours en cours / prochain, annulés et déplacés. |
 | `/tasks` | Tâches | Devoirs de la semaine, consigne, pièces jointes, case « fait » écrite dans Pronote, aide IA, photo d'énoncé et création d'une fiche de révision. |

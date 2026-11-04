@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useLocation } from "react-router-dom";
 import { useViewNavigate as useNavigate } from "../../ui/viewTransition";
 import { bridge } from "../../bridge/client";
@@ -8,11 +8,14 @@ import { Card, Page } from "../../ui/components";
 import { IconCamera, IconChevronLeft, IconLock } from "../../ui/icons";
 import { STORAGE_UNAVAILABLE_MESSAGE, mustPair } from "../../lib/session";
 import { ExportBeforePurge, useExportBeforePurge } from "../settings/ExportBeforePurge";
+import { PairingAuthorization } from "./Authorization";
 import {
+  PAIRING_AUTHORIZATION_REQUIRED,
   PIN_MAX_CHARS,
   demoErrorMessage,
   normalizePin,
   pairErrorMessage,
+  pairingAllowed,
   pinError,
   qrHost,
   scanErrorMessage,
@@ -63,6 +66,9 @@ export default function PairingScreen() {
   const exportState = useExportBeforePurge();
   const [qr, setQr] = useState<ScannedQr | null>(null);
   const [pin, setPin] = useState("");
+  const [attested, setAttested] = useState(false);
+  const [attestationError, setAttestationError] = useState("");
+  const attestationRef = useRef<HTMLInputElement>(null);
   const [scanning, setScanning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [scanError, setScanError] = useState("");
@@ -86,7 +92,8 @@ export default function PairingScreen() {
   }, []);
 
   const host = qr ? qrHost(qr.url) : "";
-  const ready = qr !== null && normalizePin(pin) !== "";
+  const qrReady = qr !== null && normalizePin(pin) !== "";
+  const ready = pairingAllowed(qrReady, attested);
 
   async function scan(): Promise<void> {
     setScanError("");
@@ -124,6 +131,11 @@ export default function PairingScreen() {
   async function submit(event: FormEvent): Promise<void> {
     event.preventDefault();
     if (exportState.exporting) return;
+    if (!attested) {
+      setAttestationError(PAIRING_AUTHORIZATION_REQUIRED);
+      attestationRef.current?.focus();
+      return;
+    }
     if (!qr) {
       setPairError("Scanne d'abord le QR affiché par ton application.");
       return;
@@ -259,7 +271,8 @@ export default function PairingScreen() {
 
           <div className="row row--wrap">
             <StepChip label="1 · Scanner" done={qr !== null} />
-            <StepChip label="2 · PIN" done={qr !== null && normalizePin(pin) !== ""} />
+            <StepChip label="2 · PIN" done={qrReady} />
+            <StepChip label="3 · Autorisation" done={attested} />
           </div>
 
           <Card className="card--flat">
@@ -349,7 +362,7 @@ export default function PairingScreen() {
               </div>
             ) : null}
 
-            {!ready ? (
+            {!qrReady ? (
               <p className="t-body-m muted" style={{ margin: 0 }}>
                 {qr === null && normalizePin(pin) !== ""
                   ? "QR manquant : scanne le code affiché par ton application."
@@ -358,6 +371,17 @@ export default function PairingScreen() {
                     : "Il faut le QR affiché par ton application + son PIN."}
               </p>
             ) : null}
+
+            <PairingAuthorization
+              checked={attested}
+              error={attestationError}
+              disabled={submitting || scanning}
+              inputRef={attestationRef}
+              onChange={(checked) => {
+                setAttested(checked);
+                if (attestationError) setAttestationError("");
+              }}
+            />
 
             <button type="submit" className="btn" disabled={!ready || submitting || scanning || exportState.exporting}>
               {submitting ? "Connexion…" : "Ouvrir la session"}
