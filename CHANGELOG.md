@@ -65,3 +65,6 @@ la section `0.1.0` le jour du tag.
 - Démo de l'éditeur limitée au debug (`DEMO_MODE`) : bouton absent en release,
   `pairing.pairDemo` refusée par le pont, session de démo non restaurée et pont
   factice web exclu du bundle de production (DAT-06).
+- Contrôle CI des licences : inventaire Bun + Gradle, allowlist explicite,
+  échec sur licence inconnue ou incompatible ; MPL-2.0 limitée aux outils
+  build/test non distribués (`lightningcss`, `axe-core`).

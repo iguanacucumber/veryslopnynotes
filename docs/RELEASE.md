@@ -30,9 +30,10 @@ vivent toutes dans `android/gradle/libs.versions.toml` :
 racine = CI, et refuse toute version en dur dans un `build.gradle.kts`.
 
 Les dépendances applicatives sont compatibles MIT (MIT, Apache-2.0,
-BSD-3-Clause). Vite 8 tire `lightningcss` (MPL-2.0) uniquement comme outil de
-build : il n'est pas embarqué dans l'APK, la licence de l'application reste
-MIT. Nouvelle dép = justifiée, épinglée, licence MIT-compatible (ADR-001).
+BSD-3-Clause). `lightningcss` (Vite) et `axe-core` (tests) sont MPL-2.0 mais
+restent des outils de build/test, non embarqués : la licence reste MIT.
+`bun run check:licenses` refuse toute licence nouvelle ou inconnue.
+Nouvelle dép = justifiée, épinglée, compatible (ADR-001).
 
 ## Android toolchain
 
