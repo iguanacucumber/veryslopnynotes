@@ -42,6 +42,11 @@ la section `0.1.0` le jour du tag.
 - Conditions d’utilisation (`TERMS.md`) : usage personnel, autorisation
   scolaire, limites de l’IA, intégrité académique, âge, garanties et
   responsabilité ; revue juridique en attente.
+- Notice de confidentialité (`PRIVACY.md`), version 1 : responsable et contact,
+  catégories, finalités, bases proposées, destinataires, transferts, rétention,
+  suppression et portabilité, mineurs, droits et CNIL, absence de publicité et
+  de télémétrie, limites de l’IA, stockage local et sécurité ; points ouverts
+  signalés avant la release publique.
 - Consentement IA versionné : un changement matériel du texte ou du périmètre
   redemande l’accord ; un accord d’une autre version, un refus ou un
   enregistrement illisible ne réactive jamais l’IA.
