@@ -116,4 +116,31 @@ describe("santé de release (#834)", () => {
       expect({ terme, présent: INCIDENTS_TEXT.includes(terme) }).toEqual({ terme, présent: true });
     }
   });
+
+  test("chaque runbook porte détection, triage, communication, correctif et retrait", () => {
+    // Une fiche amputée d'une étape se lit comme une procédure complète : le
+    // titre seul ne prouve rien, les cinq étapes doivent rester dans chaque bloc.
+    const runbooks = [
+      "Rupture de protocole",
+      "Mauvaise release",
+      "Clé exposée",
+      "Incompatibilité d'établissement",
+    ];
+    const steps = ["Détection", "Triage", "Communication", "Confinement et correctif", "Retrait ou retour arrière"];
+    for (const titre of runbooks) {
+      const start = INCIDENTS_TEXT.indexOf(`### ${titre}\n`);
+      expect({ titre, présent: start >= 0 }).toEqual({ titre, présent: true });
+      const nextRunbook = INCIDENTS_TEXT.indexOf("\n### ", start + 1);
+      const nextSection = INCIDENTS_TEXT.indexOf("\n## ", start + 1);
+      const end = nextRunbook === -1 ? nextSection : nextRunbook;
+      const body = INCIDENTS_TEXT.slice(start, end === -1 ? undefined : end);
+      for (const step of steps) {
+        expect({ titre, step, présent: body.includes(`**${step}.**`) }).toEqual({
+          titre,
+          step,
+          présent: true,
+        });
+      }
+    }
+  });
 });
