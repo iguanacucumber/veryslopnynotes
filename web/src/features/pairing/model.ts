@@ -39,6 +39,20 @@ export function validateScannedQr(value: unknown): ScannedQr | null {
   return { handle, login, url };
 }
 
+/** Attestation exigée avant l'appairage : compte personnel et autorisation
+ *  scolaire ou parentale. Sans elle, aucun appairage ne part. */
+export const PAIRING_AUTHORIZATION_ATTESTATION =
+  "Je confirme que ce compte est mon compte personnel et que j’ai l’autorisation de mon établissement ou de mes parents (représentants légaux) pour l’utiliser.";
+
+export const PAIRING_AUTHORIZATION_DETAIL =
+  "Sans cette confirmation, aucun appairage n’est lancé : l’app ne se connecte pas à l’établissement et n’écrit aucune donnée.";
+
+export const PAIRING_AUTHORIZATION_REQUIRED = "Coche l’attestation avant d’ouvrir la session.";
+
+export function pairingAllowed(ready: boolean, attested: boolean): boolean {
+  return ready && attested;
+}
+
 export function normalizePin(raw: string): string {
   return raw.trim();
 }
