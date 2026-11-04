@@ -95,20 +95,13 @@ par `tests/unit/version-from-tags.test.ts`.
 
 ## APK release (clé hors repo, repli debug #297)
 
-1. Générer keystore une fois, hors repo (jamais commité, `.gitignore`
-   `*.keystore/*.jks`) :
-   ```sh
-   keytool -genkeypair -keystore ~/.keystore/vsn-release.jks -alias vsn -keyalg RSA -keysize 2048 -validity 9125
-   ```
-2. Configurer sans commiter (`~/.gradle/gradle.properties` ou env) :
-   ```properties
-   release.storeFile=/home/user/.keystore/vsn-release.jks
-   release.storePassword=...
-   release.keyAlias=vsn
-   release.keyPassword=...
-   ```
-   ou env `STORE_FILE/STORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD`.
-3. Builder :
+Cycle de vie complet — génération `keytool`, custody, secrets de
+l'environnement `release`, empreinte publiée, vérification `apksigner`,
+rotation, compromission — et check-list : [SIGNING.md](SIGNING.md). La clé et
+ses mots de passe restent TOUJOURS hors dépôt ; aucun secret dans un log ou un
+artefact.
+
+1. Builder (clé locale configurée selon [SIGNING.md](SIGNING.md)) :
    ```sh
    make buildRelApk   # equivalent : cd android && ./gradlew assembleRelease
    ```
@@ -129,8 +122,9 @@ par `tests/unit/version-from-tags.test.ts`.
    n'existent qu'en debug). La release pose `DEMO_MODE=false` : démo refusée,
    bouton absent, session non restaurée
    (`tests/architecture/demo-mode.test.ts`).
-4. Vérifier : `apksigner verify --print-certs`, aucune clé/secret dans
-   l'artefact, `git status` propre (APK ignoré `*.apk`).
+2. Vérifier : `apksigner verify --print-certs <apk>`, empreinte égale à celle
+   publiée ([SIGNING.md](SIGNING.md)), aucune clé/secret dans l'artefact,
+   `git status` propre (APK ignoré `*.apk`).
 
 ## Budget de taille APK (#974)
 
