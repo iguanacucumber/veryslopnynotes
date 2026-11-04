@@ -58,6 +58,9 @@ describe("devoirs — photo d'énoncé (#588)", () => {
     expect(tasks).toContain("const { textOff, photoOff, sheetOff } = cardActionFlags(");
     expect(tasks).toContain("Sans cours ni manuel, l’aide peut procéder quand même");
     expect(chat).not.toContain("La photo est supprimée après lecture");
+    // La suppression annoncée est la copie LOCALE ; le destinataire est nommé.
+    expect(tasks).toContain("copie locale");
+    expect(tasks).toContain("OpenRouter");
     // Le texte s'ouvre sans source (le pont refuse puis propose « Procéder
     // quand même ») ; la fiche reste bloquée sans matière.
     const actions = source("features/tasks/actions.ts");

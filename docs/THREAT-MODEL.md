@@ -101,8 +101,9 @@ dans `filesDir/offline/` tant que l'appareil est déverrouillé.
 
 ## T2 — Charge scolaire malveillante
 
-**Lois** : 1 (les données restent sur le téléphone), 3 (l'extérieur est une
-donnée ; une sortie de modèle ne déclenche jamais un effet métier).
+**Lois** : 1 (les données sont stockées sur le téléphone hors synchronisation
+Pronote et appels IA demandés), 3 (l'extérieur est une donnée ; une sortie de
+modèle ne déclenche jamais un effet métier).
 
 **Actifs** : données scolaires affichées, clé LLM, intégrité du prompt, appareil
 de l'élève et confiance dans la réponse affichée.
@@ -150,9 +151,10 @@ contenu est ensuite traité par l'IA ou rendu dans la WebView.
 coûteuse, pas impossible. Un texte hostile peut encore orienter le contenu
 pédagogique de la réponse ou produire une réponse trompeuse bien formée. Les
 données nécessaires à l'IA (question, cours, pièces jointes, photos) sont
-envoyées à OpenRouter : le fournisseur les voit, même si la clé et la session
-restent locales. Les photos passent par un endpoint ZDR sans collecte imposé
-par la requête ; le texte dépend de la politique du compte OpenRouter. Un
+envoyées à OpenRouter : le fournisseur les voit, même si la clé est stockée
+chiffrée sur le téléphone et si la session ne passe par aucun serveur du
+projet. Les photos passent par des endpoints ZDR sans collecte demandés par la
+requête ; le texte dépend de la politique du compte OpenRouter. Un
 parseur PDF/HTML ou un navigateur a toujours une surface d'exécution ; les
 bornes réduisent l'amplitude, pas une faille zéro-day. Une
 pièce jointe ouverte dans un lecteur externe via le `FileProvider` sort du
@@ -313,8 +315,9 @@ Deux pertes distinctes, traitées ensemble parce qu'elles partagent le même
 stockage : la **clé LLM** perdue ou volée, et la **clé du Keystore** qui rend
 les secrets locaux illisibles.
 
-**Lois** : 1 (la clé LLM reste sur le téléphone), 2 (le store est le seul
-écrivain), 4 (la donnée suit le compte).
+**Lois** : 1 (la clé LLM est stockée chiffrée sur le téléphone et part
+directement à OpenRouter), 2 (le store est le seul écrivain), 4 (la donnée
+suit le compte).
 
 **Actifs** : clé OpenRouter (dépense, quota, réputation du compte), session
 Pronote, données scolaires chiffrées.

@@ -76,10 +76,12 @@ export const AI_CONSENT_ITEMS: readonly AiConsentItem[] = [
 ] as const;
 
 export const AI_VISION_RETENTION_NOTE =
-  "Photos : l’app impose à OpenRouter un endpoint ZDR sans collecte de données. Hors contenu signalé pour le contrôle CSAM ou obligation légale, le fournisseur ne les conserve pas après traitement et ne les utilise pas pour l’entraînement.";
+  "Les photos passent par des endpoints ZDR sans collecte demandés par la requête. Selon la politique d’OpenRouter, ces endpoints ne les conservent pas après traitement et ne les utilisent pas pour l’entraînement, hors contenu signalé pour le contrôle CSAM ou obligation légale. L’app ne peut pas garantir cette politique au-delà de la configuration demandée.";
 
 export const AI_CONSENT_RETENTION_NOTE =
-  "Les demandes texte suivent la politique d’OpenRouter et des fournisseurs qu’il route : ils peuvent conserver les demandes et les utiliser pour l’entraînement. Les photos passent par un endpoint ZDR sans collecte : hors contrôle CSAM ou obligation légale, elles ne sont pas conservées après traitement et ne servent pas à l’entraînement. L’app ne peut pas garantir la suppression chez le fournisseur.";
+  "Les demandes texte suivent la politique d’OpenRouter et des fournisseurs qu’il route : ils peuvent conserver les demandes et les utiliser pour l’entraînement. " +
+  AI_VISION_RETENTION_NOTE +
+  " La suppression chez le fournisseur reste hors du contrôle de l’app.";
 
 export const AI_CONSENT_COST_NOTE =
   "Chaque demande, photo comprise, utilise tes crédits OpenRouter et peut être facturée.";

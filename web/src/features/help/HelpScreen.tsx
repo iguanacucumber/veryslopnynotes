@@ -8,7 +8,7 @@ export default function HelpScreen() {
     <Page className="help">
       <Card className="card--flat">
         <p className="help-lead">
-          Cette aide reste sur ton téléphone et fonctionne hors ligne. Elle décrit
+          Cette aide est intégrée à l’app et fonctionne hors ligne. Elle décrit
           l’appairage, le réseau, la caméra, l’assistant et les gestes de dépannage.
         </p>
         <nav className="help-actions" aria-label="Raccourcis de l’aide">
@@ -51,7 +51,7 @@ export default function HelpScreen() {
           <ul className="help-list">
             <li>Scanne d’abord le QR, puis saisis le PIN demandé par l’établissement.</li>
             <li>Un nouveau QR peut changer le PIN : rescane et saisis le PIN qui l’accompagne.</li>
-            <li>Le PIN reste sur cet appareil : il n’est ni journalisé ni envoyé à un serveur du projet.</li>
+            <li>Le PIN n’est pas enregistré : il est utilisé sur cet appareil, ni journalisé ni envoyé à un serveur du projet.</li>
             <li>La double authentification (MFA) n’est pas prise en charge : l’app le dit au lieu de bloquer sans explication.</li>
           </ul>
         </Card>

@@ -26,6 +26,7 @@ import {
   IconWarning,
 } from "../../ui/icons";
 import { AiOutputLabel, AiReportButton } from "../assistant/AiOutput";
+import { AI_VISION_RETENTION_NOTE } from "../assistant/consent";
 import "./course-notes.css";
 
 function messageOf(error: unknown, fallback: string): string {
@@ -240,8 +241,9 @@ export function CourseNotesScreen() {
   }
 
   /** Photo de cours -> brouillon. La photo ne passe jamais par la WebView : le
-   *  natif l'envoie au fournisseur puis la supprime. Une reprise garde le
-   *  brouillon jusqu'à la nouvelle transcription ; une annulation ne touche à rien. */
+   *  natif efface sa copie locale après préparation, puis l'envoie au
+   *  fournisseur. Une reprise garde le brouillon jusqu'à la nouvelle
+   *  transcription ; une annulation ne touche à rien. */
   async function addPhoto(subject: string, source: PhotoSource, retake = false) {
     // Le ref ferme la course entre deux taps : l'état n'est pas encore rendu.
     if (photoBusyRef.current) return;
@@ -338,8 +340,8 @@ export function CourseNotesScreen() {
               <IconShield size={18} />
             </span>
             <span className="grow">
-              <strong className="t-body-m">Tes cours restent sur ton téléphone</strong>
-              <span className="tiny muted">Sources privées, utilisées seulement quand tu demandes de l’aide.</span>
+              <strong className="t-body-m">Tes cours sont stockés sur ton téléphone</strong>
+              <span className="tiny muted">Sources envoyées à OpenRouter seulement quand tu demandes de l’aide.</span>
             </span>
             <span className="course-notes-privacy__chevron" aria-hidden="true">
               <IconChevronRight size={16} />
@@ -351,9 +353,10 @@ export function CourseNotesScreen() {
               devoirs et les fiches de révision, même quand tu n’as pas de manuel.
             </p>
             <p className="tiny muted">
-              Ces cours restent sur ton téléphone et sont supprimés à la déconnexion. Ils partent
-              directement au fournisseur d’IA, avec ta clé, uniquement quand tu demandes de l’aide ;
-              une photo est transcrite puis elle est supprimée, et le texte revient ici pour relecture.
+              Ces cours sont stockés sur ton téléphone et supprimés à la déconnexion. Ils partent
+              directement à OpenRouter, avec ta clé, uniquement quand tu demandes de l’aide.
+              Une photo est envoyée à OpenRouter pour transcription ; sa copie locale est effacée
+              après préparation, et le texte revient ici pour relecture.
             </p>
           </div>
         </details>
@@ -488,7 +491,7 @@ export function CourseNotesScreen() {
         title="Photo de cours"
         description={
           photoTarget
-            ? `${photoTarget} · La photo est transcrite, puis effacée. Le texte revient ici pour relecture.`
+            ? `${photoTarget} · La photo part à OpenRouter pour transcription ; sa copie locale est effacée après préparation. Le texte revient ici pour relecture.`
             : undefined
         }
         busy={photoBusy !== null}
@@ -531,6 +534,9 @@ export function CourseNotesScreen() {
             <span>Choisir une image</span>
           </button>
         </div>
+        <p className="tiny muted" style={{ margin: "10px 0 0" }}>
+          {AI_VISION_RETENTION_NOTE}
+        </p>
       </Dialog>
 
       <Dialog
@@ -538,7 +544,7 @@ export function CourseNotesScreen() {
         title="Transcription de la photo"
         description={
           photoBusy
-            ? `${photoBusy} · La photo est lue par le fournisseur puis effacée. Le texte reviendra ici pour relecture.`
+            ? `${photoBusy} · La photo est envoyée à OpenRouter pour lecture ; sa copie locale sera effacée après préparation. Le texte reviendra ici pour relecture.`
             : undefined
         }
         busy
@@ -570,8 +576,8 @@ export function CourseNotesScreen() {
         }
       >
         <p className="tiny muted" style={{ margin: "8px 0 0" }}>
-          La photo n’a pas été gardée. Une photo plus nette, cadrée sur la page, a plus de chances
-          d’aboutir.
+          La copie locale de la photo n’a pas été gardée. Une photo plus nette, cadrée sur la page,
+          a plus de chances d’aboutir.
         </p>
       </Dialog>
 
@@ -678,7 +684,7 @@ export function CourseNotesScreen() {
                     <span className="tiny muted">
                       {photoBusy !== null
                         ? "Ce brouillon sera remplacé à la fin de la transcription."
-                        : "La photo a été effacée. Relis le texte et corrige les erreurs avant d’enregistrer."}
+                        : "La copie locale de la photo a été effacée ; OpenRouter a reçu la photo pour la transcription. Relis le texte et corrige les erreurs avant d’enregistrer."}
                     </span>
                   </p>
                   {photoBusy === null ? (

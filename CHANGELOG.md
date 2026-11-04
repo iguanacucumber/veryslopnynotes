@@ -65,6 +65,10 @@ la section `0.1.0` le jour du tag.
   redémarrage tant que la session est active, puis part à la déconnexion, au
   changement de compte, à la mort de session ou avec « Supprimer toutes mes
   données ». Le consentement IA passe en version 4 et redemande l’accord.
+- Copie de confidentialité corrigée : les promesses « aucun entraînement »,
+  « reste sur ton téléphone » et « photo supprimée » nomment désormais le
+  destinataire (OpenRouter) et la condition (geste, copie locale) ; notice,
+  carte des données et interface alignées sur le consentement IA version 4.
 - Licence du dépôt actée en GPL-3.0-only (ADR-008) : contributions sous la
   même licence, source correspondante publiée et dérivés Papillon crédités.
 - Statut MIT antérieur documenté : relicence au commit `2def868` (2026-11-04),

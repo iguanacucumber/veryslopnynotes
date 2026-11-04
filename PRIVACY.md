@@ -122,7 +122,7 @@ entrée à l’instant exact de son TTL.
 | Messages Pronote | Liste des fils : cache de 15 min et purge du compte. Corps d’un fil : mémoire seule, effacé à la déconnexion ou à la mort du processus |
 | Cahier de cours, fiches de révision, fil du professeur, manuel, préférences de matières | Jusqu’à suppression par toi, déconnexion ou suppression totale ; pas de purge par ancienneté |
 | Pièces jointes | LRU de 24 fichiers et 32 Mio par dossier, 10 Mio par fichier ; purge du compte |
-| Photos de cours | Copie locale effacée à la déconnexion et lors de la création d’une nouvelle activité ; l’original de galerie n’est pas conservé |
+| Photos de cours | Copie locale effacée dès la préparation, à la déconnexion et lors de la création d’une nouvelle activité ; l’original de galerie n’est pas conservé |
 | Exports | Jusqu’à « Supprimer toutes mes données » ou LRU de 24 fichiers et 32 Mio ; un export survit à une déconnexion ou à un changement de compte |
 | Clé LLM | Jusqu’à « oublier la clé », la déconnexion, un changement de compte ou « Supprimer toutes mes données ». Elle reste chiffrée après un redémarrage tant que la session est active |
 | Consentement et attestation IA | Jusqu’au retrait ou suppression totale ; ils survivent à une déconnexion |
@@ -282,6 +282,11 @@ Limites à connaître :
 - OpenRouter et les fournisseurs de modèles qu’il route **peuvent conserver**
   les demandes selon leurs propres politiques. L’app ne peut garantir ni leur
   suppression, ni l’absence d’entraînement.
+- Les photos passent par des endpoints ZDR sans collecte demandés par la
+  requête. Selon la politique d’OpenRouter, ces endpoints ne les conservent pas
+  après traitement et ne les utilisent pas pour l’entraînement, hors contenu
+  signalé pour le contrôle CSAM ou obligation légale. L’app ne peut garantir
+  cette politique au-delà de la configuration demandée.
 - Les messages Pronote ne font pas partie des sources envoyées à l’IA.
 - Chaque demande utilise tes crédits OpenRouter et peut être facturée.
 - L’assistant n’est ni un service officiel de l’établissement, ni un correcteur
@@ -290,10 +295,10 @@ Limites à connaître :
 Le consentement IA est un réglage de l’appareil, pas du compte : il survit à
 une déconnexion et il est effacé par « Supprimer toutes mes données ». La
 version actuelle est la **version 4** : elle inclut l’attestation d’âge ou
-d’autorisation parentale et la durée de vie locale de la clé. Un changement
-**matériel** (catégorie de données
-ajoutée ou retirée, destinataire ou règle de conservation modifiée, usage
-élargi, attestation ajoutée ou modifiée) incrémente cette version et redemande
+d’autorisation parentale, la durée de vie locale de la clé et la règle de
+rétention des photos. Un changement **matériel** (catégorie de données ajoutée
+ou retirée, destinataire ou règle de conservation modifiée, usage élargi,
+attestation ajoutée ou modifiée) incrémente cette version et redemande
 l’accord et l’attestation ; l’IA reste désactivée jusque-là. Une reformulation
 sans effet sur les données ne change pas la version. Un accord d’une autre
 version, ou sans attestation, n’est jamais réutilisé.

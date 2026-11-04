@@ -1,8 +1,8 @@
 package fr.veryslopnynotes.core
 
 // Cahier de cours local : l'élève garde ses cours par matière, et l'assistant
-// les reçoit comme SOURCES à chaque demande. Rien n'est entraîné, rien ne quitte
-// le téléphone sans une demande explicite.
+// les reçoit comme SOURCES à chaque demande. Le fournisseur peut conserver ou
+// entraîner selon sa politique ; rien ne quitte le téléphone sans demande explicite.
 //
 // Le texte est une DONNÉE (I6) : marqué Untrusted par le prompt, borné ici.
 //

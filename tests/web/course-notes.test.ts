@@ -84,7 +84,7 @@ describe("course notes — bridge and screen (#586)", () => {
     expect(screen).toContain("bridge.addLessonPhoto");
     expect(screen).toContain("Prendre une photo");
     expect(screen).toContain("Choisir une image");
-    expect(screen).toContain("puis elle est supprimée");
+    expect(screen).toContain("sa copie locale est effacée");
   });
 
   test("subjects without notes are compact rows, not cards", () => {
@@ -102,7 +102,7 @@ describe("course notes — bridge and screen (#586)", () => {
   test("one privacy note, one photo picker", () => {
     const screen = source("features/course-notes/CourseNotesScreen.tsx");
     // The privacy note is global: one occurrence only.
-    expect(screen.match(/puis elle est supprimée/g)).toHaveLength(1);
+    expect(screen.match(/Tes cours sont stockés sur ton téléphone/g)).toHaveLength(1);
     expect(screen).not.toContain("La photo part directement");
     // The camera/gallery choice is one dialog at screen level.
     expect(screen.match(/Prendre une photo/g)).toHaveLength(1);
@@ -124,7 +124,7 @@ describe("course notes — bridge and screen (#586)", () => {
     // The dialog is no longer the manual entry one.
     expect(screen).toContain("Vérifier la photo");
     expect(screen).toContain("Photo transcrite");
-    expect(screen).toContain("La photo a été effacée");
+    expect(screen).toContain("La copie locale de la photo a été effacée");
     // Retake without losing the draft until capture succeeds.
     expect(screen).toContain("retakePhoto");
     expect(screen).toContain("Reprendre");

@@ -503,8 +503,11 @@ export function TeacherView({
               <details className="teacher-footnote">
                 <summary>Fil local et confidentialité</summary>
                 <p className="tiny muted">
-                  Le fil de discussion reste sur cet appareil, pour ce compte. Il est supprimé à la
-                  déconnexion. Aucun entraînement : rien n’est envoyé sans ton action, avec ta clé.
+                  Le fil est stocké sur cet appareil, pour ce compte, et supprimé à la déconnexion.
+                  Chaque question part à OpenRouter avec ta clé et l’historique utile quand tu
+                  l’envoies. Les demandes texte peuvent être conservées ou servir à l’entraînement
+                  selon la politique d’OpenRouter : l’app ne peut pas garantir leur suppression
+                  chez le fournisseur.
                 </p>
               </details>
             </div>

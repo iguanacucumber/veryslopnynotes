@@ -757,7 +757,7 @@ class VsnBridge(
             .put(
                 "message",
                 if (result.ok) {
-                    "Toutes les données locales ont été supprimées."
+                    "Données du compte et de l’assistant supprimées ; les réglages d’interface restent."
                 } else {
                     "Suppression incomplète : réessaie. Éléments restants : " +
                         failures.joinToString(", ") { it.id } + "."

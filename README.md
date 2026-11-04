@@ -33,7 +33,7 @@ dépôt est facultatif : il ne sert qu'au scraper de manuels.
 - **Session locale** : QR + PIN lus dans l'app, jeton chiffré sur l'appareil,
   purgé à la déconnexion ([ADR-003](docs/adr/003-client-direct.md)).
 - **Aucun relais** : seul `android/pronote/` contacte l'établissement ; ni
-  session ni clé OpenRouter ne passent par un serveur.
+  session ni clé OpenRouter ne passent par un serveur du projet.
 - **IA sans outils** : clé chiffrée localement, contenu externe délimité et
   marqué non fiable avant tout prompt ([I4–I6](docs/architecture/INVARIANTS.md)).
 - **Hors-ligne d'abord** : cache + TTL par ressource, cache affiché avant le

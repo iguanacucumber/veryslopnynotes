@@ -122,6 +122,8 @@ describe("IA — rappel de coût avant l'usage", () => {
     expect(AI_VISION_RETENTION_NOTE).toContain("ZDR");
     expect(AI_VISION_RETENTION_NOTE).toContain("CSAM");
     expect(AI_VISION_RETENTION_NOTE).toContain("entraînement");
+    expect(AI_VISION_RETENTION_NOTE).toContain("Selon la politique d’OpenRouter");
+    expect(AI_VISION_RETENTION_NOTE).toContain("ne peut pas garantir");
     expect(AI_VISION_RETENTION_NOTE).not.toMatch(/zéro rétention|zéro conservation|jamais conserv/i);
     expect(source(join(WEB, "features/tasks/TasksScreen.tsx"))).toContain("AI_VISION_RETENTION_NOTE");
     expect(source(join(WEB, "features/help/HelpScreen.tsx"))).toContain("AI_VISION_RETENTION_NOTE");

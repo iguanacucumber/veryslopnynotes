@@ -2,8 +2,9 @@
 
 Ce document définit ce qu'est une release en bonne santé sans collecter de
 télémétrie. Il applique les cinq lois d'[`AGENTS.md`](../AGENTS.md) : les données
-scolaires restent sur l'appareil et aucun signal ne sort de l'app sans geste
-humain. Le modèle de menace est dans
+scolaires restent sur l'appareil hors synchronisation Pronote et appels IA
+demandés, et aucun signal de télémétrie ne sort de l'app sans geste humain. Le
+modèle de menace est dans
 [`THREAT-MODEL.md`](THREAT-MODEL.md), la procédure d'incident dans
 [`INCIDENTS.md`](INCIDENTS.md).
 
