@@ -64,6 +64,19 @@ L'interface React est reconstruite avant Gradle (`preBuild` →
 d'embarquer une UI absente. Détails : [`android/README.md`](android/README.md),
 [`web/README.md`](web/README.md), [`docs/RELEASE.md`](docs/RELEASE.md).
 
+## Installer et mettre à jour l'APK
+
+Aucune release n'est encore publiée. Dès qu'une release taguée joindra un APK
+à la page [Releases](https://github.com/iguanacucumber/veryslopnynotes/releases),
+deux voies de mise à jour existent — les deux exigent une signature identique
+à celle de l'app installée : Android refuse une mise à jour signée avec une
+autre clé, et désinstaller efface les données locales.
+
+- **Manuel** : télécharger l'APK et l'installer par-dessus l'app.
+- **Obtainium (facultatif)** : ajouter l'URL du dépôt et suivre les releases
+  avec APK. Obtainium interroge GitHub périodiquement ; l'app, elle, ne fait
+  aucune vérification de mise à jour.
+
 ## Scraper de manuels (facultatif)
 
 ```bash
