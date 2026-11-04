@@ -69,7 +69,7 @@ et `gitleaks` doivent être verts avant le merge
 
 Chaque commit porte son `Signed-off-by: Nom <email>`, l'identité Git
 (`user.name`, `user.email`), qui atteste que tu peux publier la contribution
-sous MIT :
+sous GPL-3.0-only :
 
 ```bash
 git commit -s                    # ajoute le trailer au commit
@@ -108,5 +108,6 @@ La documentation et les commentaires sont en français. Un commentaire ne dit
 que ce que le code ne peut pas dire : contrainte, piège mesuré, invariant
 `I<n>`. Pas d'historique, pas de code commenté, pas de bannière.
 
-Licence : MIT ([`LICENSE`](LICENSE)). En contribuant, tu acceptes que ta
-contribution soit publiée sous cette licence.
+Licence : GPL-3.0-only ([`LICENSE`](LICENSE)). En contribuant, tu acceptes que
+ta contribution soit publiée sous cette licence ; la décision est consignée
+dans [ADR-008](docs/adr/008-relicense-gpl.md).

@@ -29,11 +29,11 @@ vivent toutes dans `android/gradle/libs.versions.toml` :
 `tests/architecture/gradle-versions.test.ts` verrouille catalogue = classpath
 racine = CI, et refuse toute version en dur dans un `build.gradle.kts`.
 
-Les dépendances applicatives sont compatibles MIT (MIT, Apache-2.0,
+Les dépendances applicatives sont compatibles GPL-3.0-only (MIT, Apache-2.0,
 BSD-3-Clause). `lightningcss` (Vite) et `axe-core` (tests) sont MPL-2.0 mais
-restent des outils de build/test, non embarqués : la licence reste MIT.
-`bun run check:licenses` refuse toute licence nouvelle ou inconnue.
-Nouvelle dép = justifiée, épinglée, compatible (ADR-001).
+restent des outils de build/test, non embarqués : la licence reste
+GPL-3.0-only. `bun run check:licenses` refuse toute licence nouvelle ou
+inconnue. Nouvelle dép = justifiée, épinglée, compatible (ADR-008).
 
 ## Android toolchain
 
@@ -106,9 +106,9 @@ make build   # check-secrets + docker build (skip si daemon absent)
    L'interface React est construite avant Gradle (`bun run build:web`, tâche
    Gradle `preBuild`) et copiée dans les assets de l'APK ; `MainActivity`
    l'affiche dans la WebView locale (ADR-004). Les notices de licence tierces
-   (`web/public/licenses/` : GPL de l'application, MIT, Apache-2.0, SN Pro OFL,
-   Papicons MIT) sont copiées dans `assets/web/licenses/` et voyagent donc avec
-   l'APK ; l'inventaire versionné est `THIRD_PARTY_NOTICES.md`.
+   (`web/public/licenses/` : GPL de l'app, MIT, Apache-2.0, SN Pro OFL,
+   Papicons MIT) sont copiées dans `assets/web/licenses/` et voyagent donc
+   avec l'APK ; l'inventaire versionné est `THIRD_PARTY_NOTICES.md`.
    Produit deux artefacts signés :
    - APK : `android/app/build/outputs/apk/release/app-release.apk` (sideload)
    - AAB : `android/app/build/outputs/bundle/release/app-release.aab` (Play Store)

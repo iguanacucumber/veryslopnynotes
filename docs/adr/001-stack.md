@@ -15,5 +15,6 @@ L'app parle directement à Pronote ; le serveur n'est pas dans le flux de l'app
 
 ## Conséquences
 
-- Toute nouvelle dépendance doit être justifiée, épinglée, auditée et compatible MIT.
+- Toute nouvelle dépendance doit être justifiée, épinglée, auditée et
+  compatible avec la licence du projet ([ADR-008](008-relicense-gpl.md)).
 - Les contrôles de `make check` doivent rester reproductibles localement.

@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
+  <a href="LICENSE"><img alt="License: GPL-3.0-only" src="https://img.shields.io/badge/license-GPL--3.0--only-blue.svg"></a>
   <a href="shared/contracts/api.openapi.yaml"><img alt="Contracts 0.11.0" src="https://img.shields.io/badge/contracts-0.11.0-blue.svg"></a>
   <a href="https://bun.sh"><img alt="Bun 1.4.4" src="https://img.shields.io/badge/bun-1.4.4-f9f1de.svg"></a>
 </p>
@@ -139,9 +139,12 @@ sans jeton ; pas de compte Pronote réel dans la suite par défaut (fixtures
 synthétiques et états hors-ligne).
 Accessibilité : [`docs/ACCESSIBILITY.md`](docs/ACCESSIBILITY.md).
 
-## License
+## Licence
 
-MIT — voir [`LICENSE`](LICENSE). Port du protocole Pronote crédité à
-`pronotets` (MIT).
+GPL-3.0-only — voir [`LICENSE`](LICENSE). Copyright (c) 2026
+veryslopnynotes contributors. Le port du protocole Pronote est crédité à
+`pronotets` (MIT) ; notices tierces dans
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). Décision de relicence :
+[ADR-008](docs/adr/008-relicense-gpl.md).
 
 <!-- vim: set tw=80: -->
