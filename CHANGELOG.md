@@ -25,6 +25,8 @@ la section `0.1.0` le jour du tag.
   l'export des notes, fiches de révision et conversations du professeur est
   proposé, avec la perte définitive expliquée ; continuer sans exporter reste
   possible et l'échec d'export est affiché.
+- CI : APK release construit avec une clé éphémère, signature et mapping R8
+  vérifiés, APK + mapping en artefact court ; workflow réutilisable par un tag.
 - Smoke CI sur émulateur : APK debug installé, appairage démo, accueil vérifié,
   captures et logcat en artefact (non bloquant tant que non stable).
 - Tests instrumentés sur émulateur : clé chiffrée, Keystore dégradé puis sain,
