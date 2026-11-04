@@ -19,6 +19,15 @@ const TEMPLATE = Bun.YAML.parse(read(TEMPLATE_FILE)) as {
   body: Field[];
 };
 
+const KNOWN_TEMPLATE_FILE = ".github/ISSUE_TEMPLATE/known_issues.yml";
+const KNOWN_TEMPLATE = Bun.YAML.parse(read(KNOWN_TEMPLATE_FILE)) as {
+  name: string;
+  description: string;
+  title: string;
+  labels: string[];
+  body: Field[];
+};
+
 type Field = {
   type: string;
   id?: string;
@@ -31,6 +40,7 @@ const SECTIONS = [
   "Installer et mettre à jour",
   "Aucune télémétrie",
   "Consentement et vie privée",
+  "Checklist de consentement",
   "Donner un retour",
   "Triage et problèmes connus",
   "Sortir de la bêta",
@@ -107,6 +117,7 @@ describe("kit de bêta privée (#969)", () => {
     for (const terme of [
       "GitHub Issues",
       "beta_feedback.yml",
+      "known_issues.yml",
       "`[known-issues] vX.Y.Z`",
       "Revue de bêta",
       "J+0, J+1, J+3, J+7",
@@ -126,6 +137,19 @@ describe("kit de bêta privée (#969)", () => {
       expect({ terme, présent: BETA.includes(terme) }).toEqual({ terme, présent: true });
     }
     expect(BETA).not.toMatch(/mailto:|support@|contact@/i);
+  });
+
+  test("le consentement reste hors dépôt, avec autorisations et retrait", () => {
+    for (const terme of [
+      "Accord explicite recueilli avant l'installation",
+      "hors du dépôt public",
+      "Autorisation de l'établissement",
+      "représentant légal",
+      "retirer son accord à tout moment",
+      "sans publier l'identité du participant",
+    ]) {
+      expect({ terme, présent: BETA.includes(terme) }).toEqual({ terme, présent: true });
+    }
   });
 
   test("chaque lien relatif du kit résout depuis docs/", () => {
@@ -180,6 +204,50 @@ describe("kit de bêta privée (#969)", () => {
     }
     expect(links.some((link) => link.endsWith("/SECURITY.md"))).toBe(true);
     expect(links.some((link) => link.endsWith("/docs/BETA.md"))).toBe(true);
+  });
+
+  test("le modèle known-issues porte les champs de suivi et la gravité", () => {
+    expect(KNOWN_TEMPLATE.name).toBe("Problèmes connus");
+    expect(KNOWN_TEMPLATE.title).toBe("[known-issues] v");
+    expect(KNOWN_TEMPLATE.labels).toEqual(["bug"]);
+    expect(KNOWN_TEMPLATE.description).toContain("sans donnée scolaire");
+
+    const fields = KNOWN_TEMPLATE.body.filter((field) => field.id);
+    for (const id of [
+      "version",
+      "symptome",
+      "contournement",
+      "proprietaire",
+      "version-cible",
+      "gravite",
+    ]) {
+      expect({ id, requis: fields.find((field) => field.id === id)?.validations?.required }).toEqual({
+        id,
+        requis: true,
+      });
+    }
+    const gravite = fields.find((field) => field.id === "gravite")?.attributes?.options ?? [];
+    expect(gravite).toHaveLength(4);
+    for (const priorite of ["P0", "P1", "P2", "P3"]) {
+      expect({ priorite, présente: gravite.some((option) => option.startsWith(priorite)) }).toEqual({
+        priorite,
+        présente: true,
+      });
+    }
+  });
+
+  test("le modèle known-issues avertit sur les données scolaires", () => {
+    const markdown = KNOWN_TEMPLATE.body
+      .filter((field) => field.type === "markdown")
+      .map((field) => field.attributes?.value ?? "")
+      .join("\n");
+    expect(markdown).toContain("Ne joins aucune donnée scolaire");
+    expect(markdown).toContain("SECURITY.md");
+    expect(markdown).toContain("/docs/BETA.md");
+    expect(markdown).toContain("/docs/SUPPORT.md");
+    const donnees = KNOWN_TEMPLATE.body.find((field) => field.id === "donnees");
+    expect(donnees?.type).toBe("checkboxes");
+    expect(donnees?.attributes?.label).toBe("Données et sécurité");
   });
 
   test("RELEASE.md renvoie vers le kit sans dupliquer la procédure", () => {
