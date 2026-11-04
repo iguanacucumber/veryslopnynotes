@@ -112,6 +112,10 @@ la section `0.1.0` le jour du tag.
 
 ### Modifié
 
+- Dossier de validation juridique rafraîchi en révision 2 (2026-11-04) : chaque
+  sujet lie sa preuve courante et nomme la décision humaine restante ; #827,
+  #826, #828, #829 et #906 sont closes, #831 et #838 restent ouvertes, les sept
+  statuts restent `pending` et aucune signature n'est revendiquée (#976).
 - Kit d'annonce v1.0.0 relié aux preuves de release existantes : checklist,
   dérogations, dossier juridique, bêta et dogfood ; les gates humains restants
   (#919, #976, #972, #969, #965) et les champs de signature vides sont nommés

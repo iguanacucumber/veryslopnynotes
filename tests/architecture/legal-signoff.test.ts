@@ -1,6 +1,7 @@
 // #976 : le dossier de validation est une pièce de procédure, pas une
-// signature. Ce test verrouille les sept sujets, les questions, les preuves et
-// les blocs de signature vides tant qu'aucune décision écrite n'existe.
+// signature. Ce test verrouille les sept sujets, les questions, les preuves,
+// la dernière vérification et les blocs de signature vides tant qu'aucune
+// décision écrite n'existe.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -27,6 +28,17 @@ const SIGNATURE_FIELDS = [
   "- Réserves",
 ] as const;
 
+/** Preuve courante que chaque section doit lier, en plus de #976. */
+const EVIDENCE = {
+  "## 1. GPL et relicence": "](RELICENSING.md)",
+  "## 2. Notice de confidentialité": "](CONTROLLER.md)",
+  "## 3. Assistant IA et mineurs": "](../adr/009-ai-eligibility.md)",
+  "## 4. Autorisation Pronote et établissement": "](CONTROLLER.md)",
+  "## 5. Marque et nom public": "](NAME.md)",
+  "## 6. Droit d'auteur des manuels et du scraper": "](manual-scraper.md)",
+  "## 7. Sécurité et garde des clés": "](../SIGNING.md)",
+} as const satisfies Record<(typeof SECTIONS)[number], string>;
+
 /** Corps d'une section `## …` jusqu'au prochain titre de même niveau. */
 function section(md: string, heading: string): string {
   const start = md.indexOf(`${heading}\n`);
@@ -45,6 +57,8 @@ describe("dossier de validation juridique (#976)", () => {
   test("le fichier annonce l'absence de signature et ne clôt pas la revue", () => {
     expect(TEXT.startsWith("# Dossier de validation juridique et vie privée\n")).toBe(true);
     expect(TEXT).toContain("aucune signature de conseil enregistrée");
+    expect(TEXT).toContain("Révision : **2**");
+    expect(TEXT).toContain("Dernière vérification : **2026-11-04**");
     expect(TEXT).toContain("#976");
     expect(TEXT).not.toContain("Closes #976");
   });
@@ -78,6 +92,20 @@ describe("dossier de validation juridique (#976)", () => {
         });
       }
       expect({ heading, questions: body.includes("1. ") }).toEqual({ heading, questions: true });
+    }
+  });
+
+  test("chaque sujet nomme la décision humaine restante et sa preuve courante", () => {
+    for (const heading of SECTIONS) {
+      const body = section(TEXT, heading);
+      expect({ heading, décision: body.includes("- Décision humaine restante : ") }).toEqual({
+        heading,
+        décision: true,
+      });
+      expect({ heading, preuve: body.includes(EVIDENCE[heading]) }).toEqual({
+        heading,
+        preuve: true,
+      });
     }
   });
 
@@ -119,7 +147,7 @@ describe("dossier de validation juridique (#976)", () => {
   });
 
   test("les faits ouverts renvoient aux issues de suivi", () => {
-    for (const issue of ["#827", "#828", "#829", "#831", "#976"]) {
+    for (const issue of ["#826", "#827", "#828", "#829", "#831", "#838", "#906", "#976"]) {
       expect({ issue, cité: TEXT.includes(issue) }).toEqual({ issue, cité: true });
     }
   });

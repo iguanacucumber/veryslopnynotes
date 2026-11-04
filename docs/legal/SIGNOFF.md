@@ -1,7 +1,8 @@
 # Dossier de validation juridique et vie privée
 
 Statut du dossier : **ouvert — aucune signature de conseil enregistrée**.
-Révision : **1** — date du constat : **2026-11-04**. Issue de suivi :
+Révision : **2** — date du constat : **2026-11-04**.
+Dernière vérification : **2026-11-04**. Issue de suivi :
 [#976](https://github.com/iguanacucumber/veryslopnynotes/issues/976).
 
 > Ce dossier prépare une revue de conseil. Il ne vaut pas avis juridique et ne
@@ -27,13 +28,13 @@ validation juridique.
 
 | # | Sujet | Statut | Faits ouverts |
 |---|---|---|---|
-| 1 | GPL et relicence | `pending` | #827, #838 |
-| 2 | Notice de confidentialité | `pending` | #831, #829, #906 |
-| 3 | Assistant IA et mineurs | `pending` | #829 |
-| 4 | Autorisation Pronote et établissement | `pending` | #831 |
-| 5 | Marque et nom public | `pending` | #826 |
-| 6 | Droit d'auteur des manuels et du scraper | `pending` | #976 |
-| 7 | Sécurité et garde des clés | `pending` | #828 |
+| 1 | GPL et relicence | `pending` | #827 close ; #838 ouverte |
+| 2 | Notice de confidentialité | `pending` | #831 ouverte ; #829 et #906 closes |
+| 3 | Assistant IA et mineurs | `pending` | #829 close ; copie et mention magasin à valider |
+| 4 | Autorisation Pronote et établissement | `pending` | #831 ouverte ; aucune autorisation archivée |
+| 5 | Marque et nom public | `pending` | #826 close ; recherche d'antériorité à mener |
+| 6 | Droit d'auteur des manuels et du scraper | `pending` | #976 ouverte ; aucune autorisation d'éditeur |
+| 7 | Sécurité et garde des clés | `pending` | #828 close ; engagements du détenteur à confirmer |
 
 ## 1. GPL et relicence
 
@@ -41,8 +42,13 @@ validation juridique.
 - Portée : distribution du dépôt et des binaires sous `GPL-3.0-only`, relicence
   depuis MIT, contributions, dérivés Papillon et offre de source correspondante.
 - Dépend de : [#827](https://github.com/iguanacucumber/veryslopnynotes/issues/827)
-  (voie de relicence), [#838](https://github.com/iguanacucumber/veryslopnynotes/issues/838)
-  (inventaire des fichiers dérivés de Papillon).
+  (**close** — voie de relicence documentée dans
+  [`RELICENSING.md`](RELICENSING.md)), [#838](https://github.com/iguanacucumber/veryslopnynotes/issues/838)
+  (**ouverte** — inventaire des fichiers dérivés de Papillon). La validation
+  écrite du conseil reste requise.
+- Décision humaine restante : faire valider par écrit la relicence MIT →
+  `GPL-3.0-only`, l'attribution Papillon et l'offre de source ; achever #838
+  avant toute distribution binaire.
 
 **Ce que le dépôt permet de vérifier**
 
@@ -52,10 +58,13 @@ validation juridique.
 - [`ADR-008`](../adr/008-relicense-gpl.md) consigne la décision : relicence au
   commit `2def868`, contributions entrantes sous la même licence, sign-off DCO,
   pas de CLA, aucune release binaire avant le changement.
+- [`RELICENSING.md`](RELICENSING.md) reproduit l'avis MIT, relève les ayants
+  droit dans Git, décrit la politique inbound = outbound / DCO et rappelle que
+  les fichiers Papillon restent sous GPL-3.0 avec leur attribution.
 - [`docs/RELEASE.md`](../RELEASE.md) décrit la publication de la source
   correspondante, les textes de licence embarqués et la signature de l'APK.
-- La preuve détaillée de la voie MIT → GPL et l'inventaire Papillon sont suivis
-  dans #827 et #838 ; ils ne sont pas remplacés par ce dossier.
+- #827 est close : la voie d'ingénierie est consignée, pas l'avis juridique.
+  #838 reste ouverte et son inventaire n'est pas remplacé par ce dossier.
 
 **Questions au conseil**
 
@@ -79,7 +88,7 @@ validation juridique.
 **Preuves** : [`LICENSE`](../../LICENSE),
 [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md),
 [`ADR-008`](../adr/008-relicense-gpl.md), [`docs/RELEASE.md`](../RELEASE.md),
-#827, #838.
+[`RELICENSING.md`](RELICENSING.md), #827 (close), #838 (ouverte).
 
 **Bloc de signature — à remplir uniquement après décision écrite**
 
@@ -93,12 +102,19 @@ validation juridique.
 
 - Statut : `pending`
 - Portée : [`PRIVACY.md`](../../PRIVACY.md) version 1 (2026-11-04),
-  [`docs/legal/DATA-MAP.md`](DATA-MAP.md), bases légales, destinataires,
+  [`docs/legal/DATA-MAP.md`](DATA-MAP.md),
+  [`docs/legal/CONTROLLER.md`](CONTROLLER.md), bases légales, destinataires,
   transferts, rétention, droits et AIPD.
 - Dépend de : [#831](https://github.com/iguanacucumber/veryslopnynotes/issues/831)
-  (responsable et contact), [#829](https://github.com/iguanacucumber/veryslopnynotes/issues/829)
-  (mineurs), [#906](https://github.com/iguanacucumber/veryslopnynotes/issues/906)
-  (durée de vie de la clé IA).
+  (**ouverte** — dossier de décision livré, identité non désignée),
+  [#829](https://github.com/iguanacucumber/veryslopnynotes/issues/829)
+  (**close** — règle IA et mineurs consignée dans l'ADR-009),
+  [#906](https://github.com/iguanacucumber/veryslopnynotes/issues/906)
+  (**close** — durée de vie de la clé IA fixée).
+- Décision humaine restante : choisir le responsable (personne physique,
+  association ou société), remplir les champs de
+  [`CONTROLLER.md`](CONTROLLER.md), faire valider la notice et le rôle du
+  responsable par écrit, puis remplacer `PRIVACY.md` §1.
 
 **Ce que le dépôt permet de vérifier**
 
@@ -108,6 +124,10 @@ validation juridique.
   Sa section 15 liste les points qu'une décision humaine doit trancher.
 - [`docs/legal/DATA-MAP.md`](DATA-MAP.md) relie chaque catégorie à un chemin,
   une constante ou un test, et contient le crible AIPD.
+- [`docs/legal/CONTROLLER.md`](CONTROLLER.md) décrit les trois options
+  (personne physique, association, société), les champs de décision, le
+  représentant UE, le DPO et le texte exact de remplacement de `PRIVACY.md` §1.
+  Aucun champ n'y est rempli et aucun nom n'y est proposé comme décision.
 - Le code est local d'abord : aucun serveur du projet ne reçoit les données
   scolaires ; les seuls flux sont l'établissement, OpenRouter, le scraper
   facultatif, GitHub et l'application de partage choisie.
@@ -148,7 +168,9 @@ validation juridique.
 
 **Preuves** : [`PRIVACY.md`](../../PRIVACY.md),
 [`docs/legal/DATA-MAP.md`](DATA-MAP.md),
-[`docs/THREAT-MODEL.md`](../THREAT-MODEL.md), #831, #829, #906.
+[`docs/legal/CONTROLLER.md`](CONTROLLER.md),
+[`docs/THREAT-MODEL.md`](../THREAT-MODEL.md), #831 (ouverte),
+#829 et #906 (closes).
 
 **Bloc de signature — à remplir uniquement après décision écrite**
 
@@ -165,8 +187,11 @@ validation juridique.
   parentale, consentement versionné, retrait, photos et mention d'âge sur un
   magasin.
 - Dépend de : [#829](https://github.com/iguanacucumber/veryslopnynotes/issues/829)
-  (règle d'éligibilité ; décision d'ingénierie consignée, validation de conseil
-  encore attendue).
+  (**close** — décision d'ingénierie consignée dans l'ADR-009 ; la validation de
+  conseil de la copie et de la mention magasin reste attendue).
+- Décision humaine restante : choisir entre 18 ans stricts et l'attestation
+  disjonctive livrée, puis approuver mot pour mot l'attestation, le message de
+  refus et la mention d'âge du magasin.
 
 **Ce que le dépôt permet de vérifier**
 
@@ -181,7 +206,7 @@ validation juridique.
   professeur ; l'échec est signalé. Les cours, fiches et manuel restent.
 - OpenRouter exige 18 ans au moment de la rédaction ; l'app ne vérifie pas
   l'âge et ne remplace ni l'autorisation parentale ni les conditions du
-  fournisseur. Aucune approbation de conseil n'est revendiquée.
+  fournisseur. #829 est close sans revendiquer d'approbation de conseil.
 
 **Questions au conseil**
 
@@ -207,7 +232,7 @@ validation juridique.
 
 **Preuves** : [`ADR-009`](../adr/009-ai-eligibility.md),
 [`PRIVACY.md`](../../PRIVACY.md) §8 et §11, [`TERMS.md`](../../TERMS.md) §5,
-[`docs/legal/DATA-MAP.md`](DATA-MAP.md) section Mineurs, #829.
+[`docs/legal/DATA-MAP.md`](DATA-MAP.md) section Mineurs, #829 (close).
 
 **Bloc de signature — à remplir uniquement après décision écrite**
 
@@ -223,9 +248,13 @@ validation juridique.
 - Portée : accès au compte scolaire avec QR + PIN, absence d'affiliation, rôle de
   l'établissement, conditions de Pronote et autorisation d'usage.
 - Dépend de : [#831](https://github.com/iguanacucumber/veryslopnynotes/issues/831)
-  pour l'identité et le rôle du responsable ; aucune autorisation écrite de
-  Pronote, d'Index Éducation ou d'un établissement n'est présente dans le
-  dépôt.
+  (**ouverte**) pour l'identité et le rôle du responsable ; aucune autorisation
+  écrite de Pronote, d'Index Éducation ou d'un établissement n'est présente dans
+  le dépôt.
+- Décision humaine restante : déterminer si l'accès au compte avec QR + PIN
+  exige une autorisation écrite de Pronote, d'Index Éducation ou de
+  l'établissement ; si oui, l'obtenir et l'archiver avant toute release
+  publique. Aucune affiliation ne doit être revendiquée entre-temps.
 
 **Ce que le dépôt permet de vérifier**
 
@@ -241,6 +270,9 @@ validation juridique.
   archivé dans le dépôt. Le dépôt ne doit pas en revendiquer un.
 - L'établissement est présenté comme responsable des données scolaires qu'il
   héberge ; le projet ne reçoit pas ces données.
+- [`CONTROLLER.md`](CONTROLLER.md) rappelle que la qualification du traitement
+  local reste à trancher avec le conseil et ne peut pas être remplacée par la
+  mention « logiciel libre ».
 
 **Questions au conseil**
 
@@ -267,7 +299,8 @@ validation juridique.
 **Preuves** : [`PRIVACY.md`](../../PRIVACY.md) §2 et §4,
 [`TERMS.md`](../../TERMS.md) §2 et §10,
 [`docs/legal/DATA-MAP.md`](DATA-MAP.md) section Périmètre et rôles,
-[`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md), #831.
+[`docs/legal/CONTROLLER.md`](CONTROLLER.md),
+[`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md), #831 (ouverte).
 
 **Bloc de signature — à remplir uniquement après décision écrite**
 
@@ -284,14 +317,18 @@ validation juridique.
   revendications de marque, recherche d'antériorité, icône et usage des marques
   de tiers.
 - Dépend de : [#826](https://github.com/iguanacucumber/veryslopnynotes/issues/826)
-  (nom public et `applicationId`), aucune recherche professionnelle de marque
-  n'étant encore menée.
+  (**close** — nom et `applicationId` actés dans [`NAME.md`](NAME.md)). La
+  recherche professionnelle d'antériorité n'a pas été menée.
+- Décision humaine restante : mandater une recherche d'antériorité classes 9 et
+  42 (France, Union européenne, États-Unis), puis décider du dépôt de marque, de
+  la réservation du domaine et du nom de fiche magasin avant la bêta ou la
+  release publique.
 
 **Ce que le dépôt permet de vérifier**
 
 - [`docs/legal/NAME.md`](NAME.md) fixe le nom canonique, le libellé Android et
   l'`applicationId` `fr.veryslopnynotes.app`, et documente les vérifications
-  publiques effectuées le 2026-11-04.
+  publiques effectuées le 2026-11-04. #826 est close sur cette décision.
 - Aucune recherche professionnelle d'antériorité n'est consignée pour les
   classes 9 et 42 ; aucun domaine `veryslopnynotes.*` n'est enregistré ; aucune
   fiche de magasin n'existe.
@@ -324,7 +361,7 @@ validation juridique.
 **Preuves** : [`docs/legal/NAME.md`](NAME.md),
 [`TERMS.md`](../../TERMS.md) §10,
 [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md),
-[`ADR-008`](../adr/008-relicense-gpl.md) §4, #826.
+[`ADR-008`](../adr/008-relicense-gpl.md) §4, #826 (close).
 
 **Bloc de signature — à remplir uniquement après décision écrite**
 
@@ -340,8 +377,13 @@ validation juridique.
 - Portée : extraction de pages de manuel, conservation locale d'extraits,
   envoi à l'IA, attribution, `robots.txt`, conditions des sites sources et
   responsabilité de l'opérateur du scraper.
-- Dépend de : [#976](https://github.com/iguanacucumber/veryslopnynotes/issues/976) ;
-  aucune autorisation d'éditeur n'est archivée dans le dépôt.
+- Dépend de : [#976](https://github.com/iguanacucumber/veryslopnynotes/issues/976)
+  (ouverte) ; aucune autorisation d'éditeur n'est archivée dans le dépôt.
+- Décision humaine restante : faire qualifier par écrit l'extraction, la
+  conservation locale et l'envoi d'extraits à OpenRouter, puis décider des
+  changements obligatoires du scraper (`robots.txt`, User-Agent, attribution)
+  avant une release publique. Aucune autorisation d'éditeur ne doit être
+  supposée.
 
 **Ce que le dépôt permet de vérifier**
 
@@ -401,8 +443,13 @@ validation juridique.
   sauvegarde, clé de signature release, environnements GitHub, compromission et
   notification.
 - Dépend de : [#828](https://github.com/iguanacucumber/veryslopnynotes/issues/828)
-  (garde de la clé de signature). [`docs/SIGNING.md`](../SIGNING.md) contient
-  encore des placeholders tant que cette décision n'est pas prise.
+  (**close** — custody DEC-03 actée dans [`docs/SIGNING.md`](../SIGNING.md)).
+  Les engagements physiques du détenteur ne sont pas vérifiables par la CI et
+  restent à confirmer avant la première release.
+- Décision humaine restante : faire accepter par écrit la garde par un seul
+  mainteneur, puis confirmer réellement la génération hors ligne, les deux
+  sauvegardes chiffrées, la phrase de passe séparée et le test de restauration
+  avant la première release signée.
 
 **Ce que le dépôt permet de vérifier**
 
@@ -413,9 +460,14 @@ validation juridique.
 - [`docs/THREAT-MODEL.md`](../THREAT-MODEL.md) couvre l'appareil partagé, la
   charge scolaire malveillante, la dépendance compromise, le scraper local et
   la clé perdue.
-- [`docs/SIGNING.md`](../SIGNING.md) décrit la clé release hors dépôt, les
-  secrets de l'environnement `release`, l'empreinte publiée, la rotation et la
-  compromission ; la décision de custody elle-même reste suivie dans #828.
+- [`docs/SIGNING.md`](../SIGNING.md) acte la décision DEC-03 : détenteur unique
+  `iguanacucumber`, clé générée hors ligne, deux sauvegardes hors ligne, phrase
+  de passe séparée, environnement `release` avec relecteur obligatoire. Les
+  placeholders restants portent sur l'empreinte et la date, pas sur la custody.
+- Le dépôt prouve la déclaration et l'absence de fuite connue ; il ne prouve ni
+  la génération hors ligne, ni l'existence des sauvegardes, ni la possession
+  physique de la clé. #828 est close sur cette décision, pas sur ces preuves
+  physiques.
 - [`docs/BRANCH-PROTECTION.md`](../BRANCH-PROTECTION.md) décrit le ruleset de
   `main`, l'environnement `release` et le relecteur obligatoire ; les scans de
   secrets et de dépendances sont dans la CI.
@@ -449,7 +501,7 @@ validation juridique.
 **Preuves** : [`PRIVACY.md`](../../PRIVACY.md) §13,
 [`SECURITY.md`](../../SECURITY.md), [`docs/THREAT-MODEL.md`](../THREAT-MODEL.md),
 [`docs/SIGNING.md`](../SIGNING.md), [`docs/BRANCH-PROTECTION.md`](../BRANCH-PROTECTION.md),
-#828.
+#828 (close).
 
 **Bloc de signature — à remplir uniquement après décision écrite**
 
@@ -506,7 +558,10 @@ décision de conseil n'est `signed` que si les règles suivantes sont respectée
 ## Vérification
 
 - `bun test tests/architecture/legal-signoff.test.ts` : sections, statuts
-  `pending`, blocs de signature vides et liens.
+  `pending`, décisions humaines restantes, preuves courantes, dernière
+  vérification, blocs de signature vides et liens.
+- `bun test tests/architecture/controller-brief.test.ts` et
+  `tests/architecture/relicensing.test.ts` : dossiers #831 et #827.
 - Les liens relatifs de ce fichier sont vérifiés par
   `tests/architecture/docs.test.ts`.
 - Aucun test ne peut prouver une signature : seule la copie archivée et le
