@@ -46,8 +46,9 @@ export function DataExportCard() {
         actualités.
       </p>
       <p className="tiny muted" style={{ margin: "6px 0 0" }}>
-        Le partage passe par Android ; l’application n’envoie rien au réseau. Le jeton de session,
-        la clé de l’assistant, l’adresse du serveur et l’adresse du manuel ne sont jamais inclus.
+        Le partage passe par Android : l’application n’envoie rien elle-même au réseau, mais la
+        destination que tu choisis dans le sélecteur peut le faire. Le jeton de session, la clé de
+        l’assistant, l’adresse du serveur et l’adresse du manuel ne sont jamais inclus.
       </p>
       {error ? (
         <p className="tiny" role="alert" style={{ color: "var(--danger-ink)", margin: "6px 0 0" }}>

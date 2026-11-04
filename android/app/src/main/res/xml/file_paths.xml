@@ -3,6 +3,6 @@
     <!-- Seuls ces sous-dossiers du cache sont partageables. -->
     <cache-path name="attachments" path="attachments/" />
     <cache-path name="exports" path="exports/" />
-    <!-- Photo de cours : jamais exposée au JS, supprimée après usage. -->
+    <!-- Photo de cours : jamais exposée au JS, copie locale supprimée après usage. -->
     <cache-path name="photos" path="photos/" />
 </paths>

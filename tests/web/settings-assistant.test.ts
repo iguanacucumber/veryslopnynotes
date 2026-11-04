@@ -222,6 +222,7 @@ describe("profil — assistant découvrable (#612)", () => {
     expect(dialog).toContain("manuel enregistré");
     expect(dialog).toContain("clé de l’assistant");
     expect(dialog).toContain("fil du professeur IA");
+    expect(dialog).toContain("Le consentement IA");
     expect(dialog).not.toContain("seule la clé de l’assistant reste");
   });
 

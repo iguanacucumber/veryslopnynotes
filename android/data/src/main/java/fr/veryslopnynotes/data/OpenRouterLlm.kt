@@ -207,10 +207,11 @@ class OpenRouterLlm(
             .put("reasoning", JSONObject().put("enabled", false))
             // Meme contrainte de sortie que le texte (#708).
             .put("response_format", JSONObject().put("type", "json_object"))
-            // Photos : uniquement des endpoints ZDR qui ne collectent pas les
-            // donnees. Le fournisseur ne peut donc ni entrainer ni conserver
-            // la demande apres traitement, hors exceptions OpenRouter
-            // (controle CSAM, obligation legale) declarees a l'utilisateur.
+            // Photos : on demande des endpoints ZDR qui ne collectent pas les
+            // donnees. La politique OpenRouter annoncee ne conserve pas la
+            // demande apres traitement, hors exceptions (controle CSAM,
+            // obligation legale) declarees a l'utilisateur ; l'app ne peut pas
+            // garantir au-dela de cette configuration.
             .put(
                 "provider",
                 JSONObject()

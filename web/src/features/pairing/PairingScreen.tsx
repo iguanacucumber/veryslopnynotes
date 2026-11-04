@@ -225,7 +225,7 @@ export default function PairingScreen() {
                 <p className="t-body-m" style={{ margin: "6px 0 0", color: "var(--on-brand-soft)" }}>
                   {replacing
                     ? "Scanne le QR du compte à utiliser, puis son PIN. Le nouvel appairage remplace la session actuelle ; si le compte change, les données en cache du précédent sont purgées."
-                    : "Scanne le QR de l'application de ton établissement, puis saisis son PIN. Ta session reste sur ce téléphone."}
+                    : "Scanne le QR de l'application de ton établissement, puis saisis son PIN. Ta session est stockée sur ce téléphone ; elle ne passe par aucun serveur du projet."}
                 </p>
                 <p className="tiny" style={{ margin: "6px 0 0", color: "var(--on-brand-soft)" }}>
                   Compatibilité : QR + PIN uniquement, pas de mot de passe ni de double authentification.
@@ -263,7 +263,10 @@ export default function PairingScreen() {
           {replacing ? (
             <div className="card card--flat">
               <p className="tiny muted" style={{ margin: 0 }}>
-                La clé de l’assistant et les données du compte précédent sont effacées de cet appareil ; seuls tes réglages d’apparence restent.
+                La clé de l’assistant et les données du compte précédent sont effacées de cet
+                appareil. Le consentement IA, l’adresse du serveur de manuels, les exports déjà
+                préparés et tes réglages d’interface restent ; tu devras ressaisir la clé après le
+                nouvel appairage.
               </p>
               <ExportBeforePurge state={exportState} />
             </div>

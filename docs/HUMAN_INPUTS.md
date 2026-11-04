@@ -5,7 +5,8 @@ Seule source de la configuration du dépôt : le README y renvoie.
 ## Configuration
 
 **Pas de `.env` ni de secret côté serveur.** Le QR contient l'adresse de
-l'établissement ; le PIN et la session restent sur le téléphone.
+l'établissement ; le PIN n'est pas persisté et la session ne passe par aucun
+serveur du projet.
 
 | Variable | Usage | Secrète ? |
 |---|---|---|
@@ -17,7 +18,7 @@ l'établissement ; le PIN et la session restent sur le téléphone.
 
 ## Apports humains
 
-- **Compte Pronote** : l'utilisateur scanne le QR de l'application Pronote (il porte l'adresse de l'établissement) et saisit son PIN dans l'app. La session ne quitte pas le téléphone.
+- **Compte Pronote** : l'utilisateur scanne le QR de l'application Pronote (il porte l'adresse de l'établissement) et saisit son PIN dans l'app. La session est stockée sur le téléphone et n'est envoyée qu'à l'établissement dans les requêtes authentifiées.
 - **Clé OpenRouter** : saisie dans les réglages de l'app après le consentement et l'attestation d'âge ou d'autorisation parentale (18 ans ou plus, ou représentant légal gérant le compte OpenRouter), stockée chiffrée et envoyée directement à OpenRouter. Aucun modèle ni secret à configurer côté serveur.
 - **Scraper de manuels (facultatif)** : l'appelant fournit plateforme et URL de départ dans le corps de `POST /v1/manuals/scrape`. Dans l'app, l'adresse du manuel est demandée une seule fois, vide par défaut, et l'enregistrement reste bloqué tant que l'utilisateur n'atteste pas avoir le droit d'utiliser cette adresse (modifiable dans Réglages) ; elle est stockée sur l'appareil et n'est envoyée qu'au scraper. La classe et les spécialités sont déduites du profil et des matières suivies pour choisir l'ouvrage de la matière du devoir. Les identifiants du portail ne sont PAS acceptés : le scraper ne s'authentifie pas (sa session est son cookie jar local), un corps qui les porte est refusé. L'endpoint n'a pas d'authentification ; ne l'exposer qu'avec un proxy authentifié. Le cookie jar est local et gitignoré. Voir le risque SSRF dans [les invariants](architecture/INVARIANTS.md), et [attribution, robots et conditions](legal/manual-scraper.md).
 - **Page web (facultatif, #634)** : une URL http(s) publique peut être confiée à `POST /v1/web/scrape`. Même garde SSRF et même plafond que le manuel, mais aucun cookie jar et aucun identifiant : le contenu non textuel est refusé. La réponse ne contient que titre + texte, jamais l'URL ; l'app en fait une source citée « Web : titre », marquée Untrusted avant l'IA. Sans texte, aucune source n'est ajoutée.

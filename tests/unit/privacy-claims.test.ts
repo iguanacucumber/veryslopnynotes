@@ -590,3 +590,90 @@ describe("confidentialité — la purge efface les artefacts (#943)", () => {
     }
   });
 });
+
+describe("confidentialité — la copie livrée nomme destinataire et condition (#851)", () => {
+  const COPY_DOCS = [
+    "README.md",
+    "PRIVACY.md",
+    "TERMS.md",
+    "docs/PRODUCT.md",
+    "docs/HUMAN_INPUTS.md",
+    "docs/THREAT-MODEL.md",
+    "docs/RELEASE-HEALTH.md",
+    "docs/legal/DATA-MAP.md",
+  ];
+  const copies = [
+    ...COPY_DOCS.map((path) => ({ path, text: readFileSync(join(ROOT, path), "utf8") })),
+    ...listFiles(join(ROOT, "web", "src"))
+      .filter((path) => /\.(?:ts|tsx)$/.test(path))
+      .map((path) => ({ path: path.replace(`${ROOT}/`, ""), text: readFileSync(path, "utf8") })),
+  ];
+
+  // Phrases qui promettaient l'absolu sans nommer le destinataire ou la
+  // condition. Une reformulation qualifiée peut les remplacer, pas les répéter.
+  const BANNED: readonly [RegExp, string][] = [
+    [/aucun entra[iî]nement/i, "promesse absolue d'absence d'entraînement"],
+    [/(?:z[ée]ro|aucune?) (?:r[ée]tention|conservation)/i, "promesse de rétention nulle"],
+    [/jamais conserv/i, "promesse de non-conservation absolue"],
+    [/ne quitte jamais/i, "promesse d'immobilité absolue"],
+    [/reste(?:nt)? sur (?:ton|le|ce) t[ée]l[ée]phone/i, "donnée présentée comme immobile"],
+    [/toutes les donn[ée]es locales ont [ée]t[ée] supprim[ée]es/i, "suppression totale mensongère"],
+    [/l’app les supprime apr[èe]s lecture/i, "suppression locale confondue avec le fournisseur"],
+    [/La photo est transcrite, puis effacée/, "photo effacée sans destinataire"],
+    [/La photo est lue par le fournisseur puis effacée/, "photo effacée sans dire ce que le fournisseur reçoit"],
+    [/La photo a été effacée/, "photo effacée sans destinataire"],
+    [/une photo est transcrite puis elle est supprimée/, "photo supprimée sans destinataire"],
+  ];
+
+  test("aucune phrase absolue ne subsiste dans la copie livrée", () => {
+    const offenders: string[] = [];
+    for (const { path, text } of copies) {
+      for (const [pattern, reason] of BANNED) {
+        if (pattern.test(text)) offenders.push(`${path}: ${reason}`);
+      }
+    }
+    expect({ offenders }).toEqual({ offenders: [] });
+  });
+
+  test("la notice et la carte des données suivent la version de consentement du code", () => {
+    for (const path of ["PRIVACY.md", "docs/legal/DATA-MAP.md"]) {
+      const text = readFileSync(join(ROOT, path), "utf8");
+      expect({ path, version: text.includes(`version ${AI_CONSENT_VERSION}`) }).toEqual({
+        path,
+        version: true,
+      });
+    }
+  });
+
+  test("la rétention des photos est conditionnelle et nomme le fournisseur", () => {
+    for (const path of ["PRIVACY.md", "docs/legal/DATA-MAP.md"]) {
+      const text = readFileSync(join(ROOT, path), "utf8").replaceAll("’", "'");
+      expect({ path, politique: text.includes("Selon la politique d'OpenRouter") }).toEqual({
+        path,
+        politique: true,
+      });
+      expect({ path, csam: text.includes("CSAM") }).toEqual({ path, csam: true });
+      expect({ path, limite: text.includes("ne peut garantir") }).toEqual({ path, limite: true });
+    }
+  });
+
+  test("cours et photos nomment OpenRouter et la copie locale", () => {
+    const course = readFileSync(
+      join(ROOT, "web/src/features/course-notes/CourseNotesScreen.tsx"),
+      "utf8",
+    );
+    expect(course).toContain("OpenRouter");
+    expect(course).toContain("copie locale");
+    const teacher = readFileSync(
+      join(ROOT, "web/src/features/teacher/TeacherScreen.tsx"),
+      "utf8",
+    );
+    expect(teacher).toContain("peuvent être conservées ou servir à l’entraînement");
+    expect(teacher).toContain("OpenRouter");
+  });
+
+  test("README scope les flux hors du projet", () => {
+    const readme = readFileSync(join(ROOT, "README.md"), "utf8");
+    expect(readme).toContain("ne passent par un serveur du projet");
+  });
+});

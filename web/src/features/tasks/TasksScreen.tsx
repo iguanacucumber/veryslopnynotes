@@ -681,7 +681,7 @@ function TasksWeek({ week }: { week: string }) {
       <Dialog
         open={photoChooser !== null}
         title="Photos de l’énoncé"
-        description="Jusqu’à 3 photos depuis la galerie, ou une avec l’appareil photo. Elles partent directement à OpenRouter avec ta clé ; l’app les supprime après lecture."
+        description="Jusqu’à 3 photos depuis la galerie, ou une avec l’appareil photo. L’app efface sa copie locale après préparation ; la photo part ensuite à OpenRouter avec ta clé."
         icon={<IconCamera size={20} />}
         onClose={closePhotoChooser}
         actions={

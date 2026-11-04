@@ -38,7 +38,7 @@ export function DeleteAllCard() {
       closeSession();
       refresh();
       setAsk(false);
-      notify("Toutes les données locales ont été supprimées.");
+      notify("Données du compte et de l’assistant supprimées ; les réglages d’interface restent.");
       navigate("/pairing", { replace: true });
     } catch (cause) {
       setError(actionMessage(cause, "Suppression impossible : réessaie dans un instant."));
@@ -103,6 +103,10 @@ export function DeleteAllCard() {
             </li>
           ))}
         </ul>
+        <p className="tiny muted">
+          Les réglages d’interface (thème, schéma, rappel du manuel) restent sur cet appareil après
+          cette suppression.
+        </p>
         {error ? (
           <p className="delete-all__error tiny" role="alert">
             {error}

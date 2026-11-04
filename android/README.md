@@ -117,10 +117,11 @@ détruit plus l'assistant non plus : zxing déclare son activité
 l'appartenance `android:clearTaskOnLaunch="false"` + `tools:replace` dans
 `app/src/main/AndroidManifest.xml` annule ce drapeau (vérifié sur l'appareil).
 
-Aucun identifiant n'est saisi ni stocké sur le téléphone (le QR est la
-seule preuve de détention). Le QR et son PIN ne quittent pas l'appareil : le
-PIN déchiffre `login`+`jeton` en mémoire, au moment de l'appairage, et n'est
-ni persisté, ni journalisé.
+Aucun identifiant de connexion n'est saisi : le QR est la seule preuve de
+détention. L'identifiant de compte publié par l'établissement est conservé
+localement pour la liste des comptes (voir la carte des données). Le QR et son
+PIN ne quittent pas l'appareil : le PIN déchiffre `login`+`jeton` en mémoire,
+au moment de l'appairage, et n'est ni persisté, ni journalisé.
 
 Le QR se **scanne** (`app/VsnBridge.kt` via `ScanContract`,
 `zxing-android-embedded` 4.3.0 : décodeur dans l'APK, permission CAMERA déclarée

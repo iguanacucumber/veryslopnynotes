@@ -43,7 +43,8 @@ En plus des écrans :
 
 ```mermaid
 flowchart TB
-  %% Vue conceptuelle : session et clé LLM restent sur le téléphone.
+  %% Vue conceptuelle : la session et la copie chiffrée de la clé LLM restent
+  %% sur le téléphone ; l'appel IA part directement à OpenRouter.
   %% Aucun serveur applicatif ne relaie Pronote ni l'assistant.
 
   classDef phone fill:#e8f5e9,stroke:#2e7d32,color:#111;
@@ -100,7 +101,7 @@ requête, pour scraper une page de manuel. Il ne s'authentifie pas : sa session
 est son cookie jar local, et les identifiants de portail reçus dans le corps
 sont refusés.
 
-### Ce qui ne quitte pas le téléphone
+### Ce qui reste local ou part directement
 
 - Le **PIN** déchiffre le QR en mémoire et n'est jamais persisté ; seul le jeton
   tourné est stocké chiffré (`SessionStore`, `EncryptedSharedPreferences`).
