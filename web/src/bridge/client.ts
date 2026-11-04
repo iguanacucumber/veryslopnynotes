@@ -6,6 +6,7 @@ import {
   resourceTimeoutMs,
   type AiConsentResult,
   type AiContextSourceMeta,
+  type AppVersion,
   type BridgeError,
   type BridgeMethod,
   type DataExportResult,
@@ -281,7 +282,7 @@ export function call<T>(
 
 export const bridge = {
   ready: () => call<{ ok: true; demo: boolean }>("app.ready"),
-  version: () => call<{ version: string }>("app.version"),
+  version: () => call<AppVersion>("app.version"),
   theme: () => call<{ theme: SettingsSnapshot["theme"] }>("app.theme"),
   setTheme: (theme: SettingsSnapshot["theme"]) => call<{ ok: true }>("app.setTheme", { theme }),
   textSize: () => call<TextSizeState>("app.textSize"),

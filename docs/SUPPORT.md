@@ -107,7 +107,8 @@ jour (`versionName` `0.1.0`, projet en développement) ; l'app ne vérifie pas
 elle-même les mises à jour.
 
 La version installée se lit dans Réglages Android → Applications →
-VerySlopyNyNotes, ou dans le nom de l'APK ; le diagnostic la reprend. Une
+VerySlopyNyNotes, dans À propos (versionName, versionCode et empreinte SHA-256 du
+certificat), ou dans le nom de l'APK ; le diagnostic la reprend. Une
 installation debug et une release signée ne se mettent pas à jour l'une par
 l'autre : la migration exige une désinstallation, donc la perte des données
 locales. Les règles de build et de signature sont dans [`RELEASE.md`](RELEASE.md).

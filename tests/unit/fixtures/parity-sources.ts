@@ -274,6 +274,9 @@ export const PRODUCTION_SOURCES: string[] = [
   // MIME des pièces jointes, la traduction d'un échec natif en rejet et la
   // route de l'interface web (le chemin porté par le HASH de l'URL, #400).
   join(APP, "AttachmentMime.kt"),
+  // L'empreinte SHA-256 du certificat APK (identité PUBLIQUE, aucun secret).
+  // Fichier PUR : le harnais EXÉCUTE le format exact.
+  join(APP, "AppIdentity.kt"),
   // #878 : l'autorité FileProvider dérivée de l'`applicationId` et le refus
   // « aucun ouvreur ». Fichier PUR : le harnais l'EXÉCUTE avant tout lancement.
   join(APP, "AttachmentViewer.kt"),

@@ -14,6 +14,7 @@ import {
   MAX_NATIVE_WAIT_MS,
   MAX_PARALLEL_READS,
   NATIVE_WAIT_MS,
+  type AppVersion,
   type SessionStatus,
 } from "../../web/src/bridge/types";
 import { readBridgeSource } from "../unit/fixtures/bridge-source";
@@ -123,6 +124,26 @@ describe("pont : progression", () => {
     // Après règlement, une étape tardive ne rappelle plus l'écran fermé.
     g.__vsnProgress?.(requestId, JSON.stringify({ phase: "done" }));
     expect(seen).toHaveLength(1);
+  });
+});
+
+describe("pont : identité", () => {
+  test("app.version rend version, code, empreinte et build debug", async () => {
+    stubNative();
+    const identity: AppVersion = {
+      version: "1.4.2",
+      versionCode: 1_004_002,
+      fingerprint:
+        "3A:8B:12:CD:45:EF:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89",
+      debug: false,
+    };
+    const promise = call<AppVersion>("app.version");
+    expect(nativeCalls[0]!.method).toBe("app.version");
+    const g = globalThis as unknown as {
+      __vsnResolve?: (requestId: string, resultJson: string) => void;
+    };
+    g.__vsnResolve?.(nativeCalls[0]!.requestId, JSON.stringify(identity));
+    expect(await promise).toEqual(identity);
   });
 });
 

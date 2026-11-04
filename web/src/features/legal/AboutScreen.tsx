@@ -1,28 +1,68 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { bridge } from "../../bridge/client";
+import type { AppVersion } from "../../bridge/types";
 import { Card, Page, Section } from "../../ui/components";
-import { REPO_URL, SECURITY_URL, SUPPORT_URL } from "./legal";
+import {
+  RELEASES_URL,
+  releaseNotesUrl,
+  REPO_URL,
+  SECURITY_URL,
+  sourceTag,
+  SUPPORT_URL,
+} from "./legal";
 
-function useAppVersion(): string | null {
-  const [version, setVersion] = useState<string | null>(null);
+const FINGERPRINT_PATTERN = /^(?:[0-9A-F]{2}:){31}[0-9A-F]{2}$/;
+
+/** Le pont est une frontière : une réponse malformée ne devient jamais un
+ *  numéro ou une empreinte affichés. Champs invalides = repli explicite. */
+export function parseAppVersion(value: unknown): AppVersion | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  const version = typeof raw.version === "string" ? raw.version.trim().slice(0, 40) : "";
+  if (!version) return null;
+  const code =
+    typeof raw.versionCode === "number" &&
+    Number.isSafeInteger(raw.versionCode) &&
+    raw.versionCode >= 0
+      ? raw.versionCode
+      : -1;
+  return {
+    version,
+    versionCode: code,
+    fingerprint:
+      typeof raw.fingerprint === "string" && FINGERPRINT_PATTERN.test(raw.fingerprint)
+        ? raw.fingerprint
+        : null,
+    debug: raw.debug === true,
+  };
+}
+
+function useAppVersion(): AppVersion | null {
+  const [identity, setIdentity] = useState<AppVersion | null>(null);
   useEffect(() => {
     let alive = true;
     void bridge
       .version()
       .then((result) => {
-        if (alive && typeof result.version === "string" && result.version.trim()) {
-          setVersion(result.version.trim().slice(0, 40));
-        }
+        if (alive) setIdentity(parseAppVersion(result));
       })
       .catch(() => {
-        // Version absente : l'écran le dit, il n'invente pas un numéro.
+        // Identité absente : l'écran le dit, il n'invente ni numéro ni empreinte.
       });
     return () => {
       alive = false;
     };
   }, []);
-  return version;
+  return identity;
+}
+
+function fingerprintLabel(identity: AppVersion | null): string {
+  if (!identity) return "Empreinte indisponible : le pont natif n’a pas répondu.";
+  if (identity.fingerprint) return identity.fingerprint;
+  return identity.debug
+    ? "Empreinte du certificat indisponible (build de développement ou paquet non signé)."
+    : "Empreinte du certificat indisponible (paquet non signé).";
 }
 
 function ContactLine({ label, url }: { label: string; url: string }) {
@@ -34,20 +74,41 @@ function ContactLine({ label, url }: { label: string; url: string }) {
   );
 }
 
-export default function AboutScreen() {
-  const version = useAppVersion();
+export function AboutContent({ identity }: { identity: AppVersion | null }) {
+  const code = identity && identity.versionCode >= 0 ? ` · versionCode ${identity.versionCode}` : "";
+  const tag = identity ? sourceTag(identity.version) : null;
+  const notes = tag ? releaseNotesUrl(tag) : RELEASES_URL;
   return (
     <Page className="legal">
       <Card className="card--flat legal-lead">
         <strong className="legal-lead__name">VerySlopyNyNotes</strong>
         <span className="legal-lead__version">
-          {version ? `Version ${version}` : "Version indisponible"}
+          {identity ? `Version ${identity.version}${code}` : "Version indisponible"}
         </span>
         <p className="legal-lead__body">
           Client Android open source pour Pronote : le QR et le PIN restent sur
           ton téléphone, sans serveur du projet.
         </p>
       </Card>
+
+      <Section title="Identification de l’installation">
+        <Card className="card--flat legal-stack">
+          <div>
+            <strong>Empreinte du certificat (SHA-256)</strong>
+            <p className="legal-contact__url">{fingerprintLabel(identity)}</p>
+          </div>
+          {identity?.debug ? (
+            <p className="legal-note">
+              Build de développement : cette empreinte peut être celle du
+              certificat de debug, pas celle d’une release publiée.
+            </p>
+          ) : null}
+          <p className="legal-note">
+            Empreinte lue localement sur l’appareil, sans réseau ni service
+            Google.
+          </p>
+        </Card>
+      </Section>
 
       <Section title="Informations légales">
         <nav className="legal-links" aria-label="Informations légales">
@@ -65,13 +126,9 @@ export default function AboutScreen() {
 
       <Section title="Source et contact">
         <Card className="card--flat legal-stack">
-          <div>
-            <strong>Code source</strong>
-            <p className="legal-copy">
-              Le dépôt public publie le code, les releases et la documentation :
-              <span className="legal-contact__url"> {REPO_URL}</span>
-            </p>
-          </div>
+          <ContactLine label="Code source" url={REPO_URL} />
+          <ContactLine label="Tag source" url={tag ?? "Indisponible"} />
+          <ContactLine label="Notes de version" url={notes} />
           <ContactLine label="Support et bogues" url={SUPPORT_URL} />
           <ContactLine label="Faille de sécurité" url={SECURITY_URL} />
           <p className="legal-note">
@@ -112,4 +169,8 @@ export default function AboutScreen() {
       </Section>
     </Page>
   );
+}
+
+export default function AboutScreen() {
+  return <AboutContent identity={useAppVersion()} />;
 }

@@ -111,7 +111,15 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
       // Développement seulement : la démo est disponible dans ce pont factice.
       return ok({ ok: true, demo: true }) as Promise<T>;
     case "app.version":
-      return ok({ version: "0.1.0" }) as Promise<T>;
+      return ok({
+        version: "0.1.0",
+        versionCode: 1,
+        // Empreinte fictive complète : le pont réel rend celle du certificat
+        // installé, ou `null` quand la signature est illisible.
+        fingerprint:
+          "3A:8B:12:CD:45:EF:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89",
+        debug: true,
+      }) as Promise<T>;
     case "app.theme":
       return ok({ theme: settings.theme }) as Promise<T>;
     case "app.setTheme":
