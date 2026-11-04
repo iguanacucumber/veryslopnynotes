@@ -73,6 +73,10 @@ la section `0.1.0` le jour du tag.
   `fr.veryslopnynotes.app`) : vérifications GitHub, Play, F-Droid, DNS/RDAP et
   recherche web sans conflit public détecté, revue de marque formelle encore
   requise (`docs/legal/NAME.md`, #826).
+- Dossier de validation juridique et vie privée (`docs/legal/SIGNOFF.md`) :
+  sept sujets avec constat vérifiable, questions exactes au conseil, preuves,
+  blocs de signature vides et procédure d'archive ; tous les statuts restent
+  `pending`, aucune signature n'est revendiquée (#976).
 
 ### Modifié
 
