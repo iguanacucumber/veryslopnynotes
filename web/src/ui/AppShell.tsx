@@ -20,7 +20,7 @@ import {
 } from "../features/profile/model";
 import {
   IconBack,
-  IconButterfly,
+  IconBook,
   IconCalendar,
   IconChevronDown,
   IconGrades,
@@ -214,7 +214,7 @@ export function Shell() {
             </button>
           ) : meta.tab ? (
             <span className="topbar__mark" aria-hidden="true">
-              <IconButterfly size={24} />
+              <IconBook size={24} />
             </span>
           ) : null}
           <div className="topbar__heading">

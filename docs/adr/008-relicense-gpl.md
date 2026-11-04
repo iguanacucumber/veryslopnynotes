@@ -98,7 +98,7 @@ sont ni blanchis ni présentés comme clean-room. `docs/legal/PROVENANCE.md`
 portée. Tant qu'il est incomplet, un fichier ressemblant à un portage est
 traité comme dérivé et crédité.
 
-La communication du projet ne se présente pas comme « une copie de Papillon »
+La communication du projet ne se présente pas comme une réplique de Papillon
 (#843) : le crédit GPL reste, la revendication visuelle et la marque
 disparaissent. Aucun logo ni capture de Papillon n'est utilisé sans
 autorisation.

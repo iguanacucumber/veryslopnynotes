@@ -71,6 +71,9 @@ la section `0.1.0` le jour du tag.
   carte des données et interface alignées sur le consentement IA version 4.
 - Licence du dépôt actée en GPL-3.0-only (ADR-008) : contributions sous la
   même licence, source correspondante publiée et dérivés Papillon crédités.
+- Identité visuelle propre : langage de « copie » retiré, icône et marque de
+  barre supérieure remplacées, aucun logo ni capture de Papillon livré,
+  non-affiliation nommée et attribution GPL conservée (#843).
 - Statut MIT antérieur documenté : relicence au commit `2def868` (2026-11-04),
   aucun APK ni binaire public avant, droits MIT des copies déjà livrées
   préservés (#844).
