@@ -11,6 +11,7 @@
     "dev:web": "vite --config web/vite.config.ts",
     "test": "bun test",
     "test:visual": "playwright test --config tests/visual/playwright.config.ts",
+    "check:licenses": "bun run agents/runtime/check-licenses.ts",
     "lint": "bun run agents/runtime/check-secrets.ts"
   },
   "devDependencies": {

@@ -1,0 +1,43 @@
+# LIC-08 : inventaire de licences exécuté à chaque PR et sur `main`.
+#
+# Le script lit UNIQUEMENT des fichiers locaux (`bun.lock`, catalogue Gradle,
+# `licenses/inventory.json`) : aucune installation ni appel réseau à l'étape de
+# contrôle. Une dépendance nouvelle, une licence hors allowlist ou une exception
+# MPL-2.0 distribuée font échouer le job.
+#
+# Workflow SÉPARÉ de `ci.yml` : le gate garde son verdict, ce contrôle peut
+# rougir sans allonger les 45 min du job `check`.
+
+name: licenses
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: licenses-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.4"
+
+      # Pas de `bun install` : le contrôle ne lit que le lock, le TOML et
+      # l'inventaire. Le job prouve ainsi qu'aucun accès réseau n'est requis.
+      - name: Inventaire des licences
+        run: bun run check:licenses

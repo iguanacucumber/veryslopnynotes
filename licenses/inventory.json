@@ -1,0 +1,244 @@
+{
+  "allowed": [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "OFL-1.1"
+  ],
+  "bun": {
+    "@oxc-project/types": {
+      "license": "MIT"
+    },
+    "@playwright/test": {
+      "license": "Apache-2.0"
+    },
+    "@rolldown/pluginutils": {
+      "license": "MIT"
+    },
+    "@types/bun": {
+      "license": "MIT"
+    },
+    "@types/node": {
+      "license": "MIT"
+    },
+    "@types/react": {
+      "license": "MIT"
+    },
+    "@types/react-dom": {
+      "license": "MIT"
+    },
+    "@vitejs/plugin-react": {
+      "license": "MIT"
+    },
+    "axe-core": {
+      "license": "MPL-2.0",
+      "scope": "test-only",
+      "reason": "Tests d’accessibilité Playwright ; jamais embarqué dans l’APK"
+    },
+    "boolbase": {
+      "license": "ISC"
+    },
+    "bun-types": {
+      "license": "MIT"
+    },
+    "cheerio": {
+      "license": "MIT"
+    },
+    "cheerio-select": {
+      "license": "BSD-2-Clause"
+    },
+    "cookie": {
+      "license": "MIT"
+    },
+    "css-select": {
+      "license": "BSD-2-Clause"
+    },
+    "css-what": {
+      "license": "BSD-2-Clause"
+    },
+    "csstype": {
+      "license": "MIT"
+    },
+    "detect-libc": {
+      "license": "Apache-2.0"
+    },
+    "dom-serializer": {
+      "license": "MIT"
+    },
+    "domelementtype": {
+      "license": "BSD-2-Clause"
+    },
+    "domhandler": {
+      "license": "BSD-2-Clause"
+    },
+    "domutils": {
+      "license": "BSD-2-Clause"
+    },
+    "encoding-sniffer": {
+      "license": "MIT"
+    },
+    "entities": {
+      "license": "BSD-2-Clause"
+    },
+    "fdir": {
+      "license": "MIT"
+    },
+    "fsevents": {
+      "license": "MIT"
+    },
+    "htmlparser2": {
+      "license": "MIT"
+    },
+    "iconv-lite": {
+      "license": "MIT"
+    },
+    "lightningcss": {
+      "license": "MPL-2.0",
+      "scope": "build-only",
+      "reason": "Outil de build Vite ; jamais embarqué dans l’APK"
+    },
+    "nanoid": {
+      "license": "MIT"
+    },
+    "nth-check": {
+      "license": "BSD-2-Clause"
+    },
+    "parse5": {
+      "license": "MIT"
+    },
+    "parse5-htmlparser2-tree-adapter": {
+      "license": "MIT"
+    },
+    "parse5-parser-stream": {
+      "license": "MIT"
+    },
+    "picocolors": {
+      "license": "ISC"
+    },
+    "picomatch": {
+      "license": "MIT"
+    },
+    "playwright": {
+      "license": "Apache-2.0"
+    },
+    "playwright-core": {
+      "license": "Apache-2.0"
+    },
+    "postcss": {
+      "license": "MIT"
+    },
+    "pronotets": {
+      "license": "MIT"
+    },
+    "react": {
+      "license": "MIT"
+    },
+    "react-dom": {
+      "license": "MIT"
+    },
+    "react-router": {
+      "license": "MIT"
+    },
+    "react-router-dom": {
+      "license": "MIT"
+    },
+    "rolldown": {
+      "license": "MIT"
+    },
+    "safer-buffer": {
+      "license": "MIT"
+    },
+    "scheduler": {
+      "license": "MIT"
+    },
+    "set-cookie-parser": {
+      "license": "MIT"
+    },
+    "source-map-js": {
+      "license": "BSD-3-Clause"
+    },
+    "tinyglobby": {
+      "license": "MIT"
+    },
+    "tldts": {
+      "license": "MIT"
+    },
+    "tldts-core": {
+      "license": "MIT"
+    },
+    "tough-cookie": {
+      "license": "BSD-3-Clause"
+    },
+    "typescript": {
+      "license": "Apache-2.0"
+    },
+    "undici": {
+      "license": "MIT"
+    },
+    "undici-types": {
+      "license": "MIT"
+    },
+    "vite": {
+      "license": "MIT"
+    },
+    "whatwg-encoding": {
+      "license": "MIT"
+    },
+    "whatwg-mimetype": {
+      "license": "MIT"
+    }
+  },
+  "bunFamilies": [
+    {
+      "match": "@rolldown/binding-*",
+      "license": "MIT"
+    },
+    {
+      "match": "@typescript/typescript-*",
+      "license": "Apache-2.0"
+    },
+    {
+      "match": "lightningcss-*",
+      "license": "MPL-2.0",
+      "scope": "build-only",
+      "reason": "Binaires plateforme de lightningcss ; jamais embarqués dans l’APK"
+    }
+  ],
+  "gradle": {
+    "androidx.core:core-ktx": {
+      "license": "Apache-2.0"
+    },
+    "androidx.activity:activity-ktx": {
+      "license": "Apache-2.0"
+    },
+    "androidx.work:work-runtime-ktx": {
+      "license": "Apache-2.0"
+    },
+    "com.squareup.okhttp3:okhttp": {
+      "license": "Apache-2.0"
+    },
+    "androidx.exifinterface:exifinterface": {
+      "license": "Apache-2.0"
+    },
+    "androidx.security:security-crypto": {
+      "license": "Apache-2.0"
+    },
+    "com.journeyapps:zxing-android-embedded": {
+      "license": "Apache-2.0"
+    },
+    "androidx.test.ext:junit": {
+      "license": "Apache-2.0"
+    },
+    "androidx.test:runner": {
+      "license": "Apache-2.0"
+    },
+    "com.android.application": {
+      "license": "Apache-2.0"
+    },
+    "com.android.library": {
+      "license": "Apache-2.0"
+    }
+  }
+}
