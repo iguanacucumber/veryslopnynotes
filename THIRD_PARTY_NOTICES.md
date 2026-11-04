@@ -27,6 +27,16 @@ dans `web/public/licenses/`, copiés dans `assets/web/licenses/` de l'APK.
 | SN Pro | — | OFL-1.1 | `SN-PRO-OFL.txt` |
 | Papicons | 0.2.3 | MIT | `PAPICONS-MIT.txt` |
 
+## Attribution et affiliation
+
+- **Papillon** (Association Papillon) est distribué sous GPL-3.0. Les règles de
+  calcul et les conventions d'interface reprises dans ce dépôt restent
+  créditées à ses auteurs ; l'inventaire détaillé des fichiers dérivés est
+  établi séparément (#838). Aucun logo ni capture de Papillon n'est livré.
+- veryslopnynotes n'est affilié ni à Papillon / Association Papillon ni à
+  Pronote / Index Éducation. Les noms et marques appartiennent à leurs
+  propriétaires.
+
 ## Portée
 
 - **pronotets** est l'implémentation TypeScript de référence du protocole

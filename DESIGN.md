@@ -1,6 +1,6 @@
 ---
 name: VerySlopyNyNotes
-description: Relevé scolaire vivant, copie visuelle de Papillon 8.6.2.
+description: Relevé scolaire vivant, avec sa propre identité visuelle.
 colors:
   brand: "#29947a"
   brand-light: "#5ab09b"
@@ -132,17 +132,22 @@ components:
 
 ## Overview
 
-**North Star : la copie de Papillon 8.6.2.**
+**Un relevé scolaire lisible, avec sa propre identité visuelle.**
 
-L'interface web reprend la mise en page de Papillon 8.6.2 : même police SN Pro,
-même échelle typographique, mêmes surfaces, mêmes rayons, même dock flottant,
-mêmes en-têtes. Les fonctions propres à l'app — onglet Prof, aide devoirs,
+L'interface web applique un design system propre : SN Pro, échelle
+typographique courte, surfaces plates, rayons généreux, dock flottant et
+en-têtes réguliers. Les fonctions propres à l'app — onglet Prof, aide devoirs,
 fiches de révision, cahier de cours — gardent leur place et leur comportement.
 
 Les écrans d'IA parlent une langue distincte, inspirée des conversationnels :
 une surface de lecture calme, des réponses en pleine largeur, une bulle courte
-pour la question de l'élève et un compositeur unique. La coquille Papillon
+pour la question de l'élève et un compositeur unique. La coquille de l'app
 (tuiles, en-tête, dock) reste autour ; elle n'entre pas dans le fil.
+
+Papillon 8.6.2 (GPL-3.0, Association Papillon) a servi de repère de mise en
+page pour la première version. Le projet n'est ni affilié ni endossé par
+l'Association Papillon ; aucun logo, capture ou élément d'identité de Papillon
+n'est utilisé.
 
 **Key Characteristics:**
 
@@ -179,7 +184,7 @@ touche que les transformations, donc la garde globale de
 
 ### Primary
 
-- **Accent Papillon** (`#29947a`) : jauges, courbes, capsules actives, icônes
+- **Accent de marque** (`#29947a`) : jauges, courbes, capsules actives, icônes
   d'action.
 - **Accent plein accessible** (`#1c6653` en clair, `#6cc4a8` en sombre) :
   boutons pleins et pastilles actives, avec `--on-brand` pour le texte.
@@ -259,10 +264,10 @@ paysage sur téléphone à encoche, puis fenêtre libre réduite, puis clavier o
 sur le PIN — titre, dock, actions d'appairage et boutons de dialogue restent
 visibles et au-dessus du geste.
 
-L'accueil suit Papillon : en-tête sur papier peint, grille de raccourcis,
-widgets (cours, moyenne, devoirs) dans cet ordre. Les écrans de liste sont des
-cartes séparées, jamais un registre à filets. Réglages : profil centré, quatre
-tuiles teintées, puis sections ancrées.
+L'accueil garde les conventions d'un relevé scolaire : en-tête sur papier
+peint, grille de raccourcis, widgets (cours, moyenne, devoirs) dans cet ordre.
+Les écrans de liste sont des cartes séparées, jamais un registre à filets.
+Réglages : profil centré, quatre tuiles teintées, puis sections ancrées.
 
 ## Tokens
 
@@ -388,7 +393,7 @@ pastilles sont à `999px`.
 
 **Do**
 
-- Copier les métriques Papillon avant d'inventer une variante.
+- Partir des métriques du design system avant d'inventer une variante.
 - Teinter les matières avec une encre dérivée de la même couleur.
 - Garder les chiffres grands et tabulaires.
 - Vérifier les 4 palettes en clair et en sombre.

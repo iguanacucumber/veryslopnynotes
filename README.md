@@ -24,7 +24,8 @@ intermédiaire ne voit la session, et tout contenu externe — cours, devoirs,
 messages, manuels — est une **donnée**, jamais une instruction. Le serveur du
 dépôt est facultatif : il ne sert qu'au scraper de manuels.
 
-> Non affilié à Pronote / Index Éducation. Port Kotlin du protocole
+> Projet indépendant, non affilié à Pronote / Index Éducation ni à Papillon /
+> Association Papillon. Port Kotlin du protocole
 > [`pronotets`](https://www.npmjs.com/package/pronotets) (MIT), avec un compte
 > et une autorisation de l'établissement — à vérifier chez toi.
 
@@ -146,7 +147,8 @@ GPL-3.0-only — voir [`LICENSE`](LICENSE). Copyright (c) 2026
 veryslopnynotes contributors. Le projet a été sous MIT jusqu'au 2026-11-04 ;
 aucun binaire public n'a été publié. Si un binaire a circulé, ses droits MIT
 subsistent ([ADR-008 §5](docs/adr/008-relicense-gpl.md)). Port du protocole
-Pronote crédité à `pronotets` (MIT) ; notices :
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+Pronote crédité à `pronotets` (MIT) ; les règles et conventions reprises de
+Papillon (GPL-3.0, Association Papillon) restent créditées à leurs auteurs.
+Notices : [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 <!-- vim: set tw=80: -->

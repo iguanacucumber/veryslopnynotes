@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Teal de l'icône Papillon déjà publiée : identité de l'app, distinct du
-         vert de marque de l'interface (#29947a). -->
-    <color name="ic_launcher_background">#008673</color>
+    <!-- Fond de marque de l'app : vert profond, distinct du vert d'accent de
+         l'interface (#29947a). -->
+    <color name="ic_launcher_background">#1c6653</color>
 </resources>
