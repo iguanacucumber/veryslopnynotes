@@ -219,9 +219,8 @@ Signaux, seuils et retrait :
 
 ## Check-list avant livrable
 
-- [ ] `make build` OK (ou `check-secrets` + `tsc` si daemon absent).
-- [ ] `make web` OK (typecheck + tests + build local).
-- [ ] `bun audit` : 0 vulnérabilité.
-- [ ] `git status` : aucun `.env*`, `*.keystore`, `*.apk`, donnée perso.
-- [ ] `bun run agents/runtime/check-secrets.ts` : OK.
-- [ ] APK release : `am start` sur `veryslopnynotes://<route>` échoue (aucun deep link).
+La checklist signée, ordonnée et opposable vit dans
+[`RELEASE-CHECKLIST.md`](RELEASE-CHECKLIST.md) : gate, version, build,
+signature, SHA-256, licences, confidentialité, CHANGELOG, source GPL, tag,
+bêta, known-issues, annonce et retour arrière. Une release ne part qu'avec
+toutes les cases cochées, les preuves jointes et les signatures humaines.
