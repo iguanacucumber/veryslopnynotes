@@ -89,10 +89,10 @@
 
 <a id="i36"></a>
 
-## I36 — Un accord IA ne vaut que pour la version courante
-- Invariant : la décision et la version acceptées sont enregistrées ensemble ; seul `granted` à `AI_CONSENT_VERSION` autorise un appel. Un changement matériel (catégorie de données, destinataire, rétention, usage) incrémente la version et redemande l’accord ; une reformulation seule ne le fait pas. Un accord d’une autre version, un refus, un retrait ou un enregistrement illisible n’autorise rien et n’est jamais réutilisé. Refuser ou retirer garde l’IA désactivée ; le retrait persiste avant d’effacer clé et fil.
-- Test : `tests/unit/ai-consent-migration.test.ts`, `tests/unit/privacy-claims.test.ts`, `tests/web/settings-assistant.test.ts`.
+## I36 — Un accord IA ne vaut que pour la version courante, attesté
+- Invariant : la décision, la version et l’attestation d’âge ou d’autorisation parentale sont enregistrées ensemble ; seul `granted` attesté à `AI_CONSENT_VERSION` autorise un appel. Un changement matériel (catégorie de données, destinataire, rétention, usage, attestation) incrémente la version et redemande l’accord ; une reformulation seule ne le fait pas. Un accord d’une autre version, sans attestation, un refus, un retrait ou un enregistrement illisible n’autorise rien et n’est jamais réutilisé. Refuser ou retirer garde l’IA désactivée ; le retrait persiste avant d’effacer clé et fil.
+- Test : `tests/unit/ai-consent-migration.test.ts`, `tests/unit/privacy-claims.test.ts`, `tests/web/settings-assistant.test.ts`, `tests/web/ai-age-attestation.test.ts`.
 - Commande : `make check`.
 - Emplacement : `android/core/AiConsent.kt`, `android/data/AiConsentStore.kt`,
   `android/app/VsnBridgeSettings.kt`, `web/src/features/assistant/consent.ts`,
-  `web/src/features/settings/AssistantCards.tsx`.
+  `web/src/features/settings/AssistantCards.tsx`, `web/src/features/settings/AgeAttestation.tsx`.

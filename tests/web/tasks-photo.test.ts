@@ -22,7 +22,7 @@ function between(text: string, start: string, end: string): string {
 
 describe("devoirs — photo d'énoncé (#588)", () => {
   test("le pont factice rend un corrigé, jamais une image", async () => {
-    await mockCall("llm.setConsent", { decision: "granted" });
+    await mockCall("llm.setConsent", { decision: "granted", ageAttested: true });
     const result = await mockCall<{ ok: boolean; answer?: string; steps?: string[]; sources?: string[] }>(
       "llm.solvePhoto",
       {

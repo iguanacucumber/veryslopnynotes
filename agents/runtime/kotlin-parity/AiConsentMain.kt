@@ -1,8 +1,9 @@
-// AiConsentMain.kt — pilote JSON de la politique de consentement IA (PRV-04).
+// AiConsentMain.kt — pilote JSON de la politique de consentement IA
+// (PRV-04) et de l'attestation d'âge (PRV-05).
 //
 // OUTIL DE TEST uniquement : jamais Gradle, jamais l'APK. Il exécute le VRAI
 // fichier pur `android/core/.../AiConsent.kt` pour prouver qu'un accord est
-// versionné, qu'un refus persiste et qu'un retrait désactive l'IA.
+// versionné et attesté, qu'un refus persiste et qu'un retrait désactive l'IA.
 package fr.veryslopnynotes.parity.aiconsent
 
 import fr.veryslopnynotes.core.AI_CONSENT_VERSION
@@ -21,6 +22,9 @@ private fun JVal.Obj.str(key: String): String? = (fields[key] as? JVal.Str)?.val
 private fun JVal.Obj.num(key: String): Int? =
     (fields[key] as? JVal.Num)?.value?.toInt()
 
+private fun JVal.Obj.bool(key: String): Boolean? =
+    (fields[key] as? JVal.Bool)?.value
+
 private fun ok(vararg pairs: Pair<String, JVal>): JVal.Obj = JVal.Obj(linkedMapOf(*pairs))
 
 private class Driver {
@@ -33,14 +37,16 @@ private class Driver {
                 "version" to JVal.Num(record.version.toDouble()),
                 "allowsAi" to JVal.Bool(record.allowsAi),
                 "needsReconsent" to JVal.Bool(record.needsReconsent),
+                "ageAttested" to JVal.Bool(record.ageAttested),
             )
         }
         // Écrit puis relit : c'est le stockage versionné, pas un état en mémoire.
         "roundtrip" -> {
             val decision = AiConsentDecision.fromWire(op.str("decision"))
             val version = op.num("version") ?: AI_CONSENT_VERSION
+            val ageAttested = op.bool("ageAttested") ?: false
             val encoded = try {
-                encodeAiConsent(decision, version)
+                encodeAiConsent(decision, version, ageAttested)
             } catch (e: Exception) {
                 return ok(
                     "error" to JVal.Str(e.javaClass.simpleName),
@@ -54,6 +60,7 @@ private class Driver {
                 "version" to JVal.Num(record.version.toDouble()),
                 "allowsAi" to JVal.Bool(record.allowsAi),
                 "needsReconsent" to JVal.Bool(record.needsReconsent),
+                "ageAttested" to JVal.Bool(record.ageAttested),
             )
         }
         else -> throw IllegalArgumentException("pilote: opération inconnue : ${op.str("op")}")

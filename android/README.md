@@ -76,7 +76,9 @@ avant le prompt, comme le cours et la consigne.
 
 ## Aide devoirs (clé du fournisseur)
 
-Réglages → « Assistant devoirs » : saisie de la clé, puis « Oublier » pour l'effacer.
+Réglages → « Assistant » : attestation d'âge ou d'autorisation parentale,
+consentement, puis saisie de la clé ; « Oublier » pour l'effacer. Retirer le
+consentement efface aussi clé et fil du professeur.
 Elle est **chiffrée au repos** (`EncryptedSharedPreferences`), jamais affichée ailleurs,
 loggée ou mise en URL. L'app l'envoie directement à OpenRouter dans l'en-tête HTTPS
 `Authorization` ; la requête ne passe pas par le serveur de manuels.

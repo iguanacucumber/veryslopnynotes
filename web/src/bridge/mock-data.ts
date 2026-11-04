@@ -469,6 +469,7 @@ export const INITIAL_SETTINGS: SettingsSnapshot = {
   llmConfigured: false,
   aiConsent: "none",
   aiConsentVersion: 0,
+  aiAgeAttested: false,
   accountCount: 3,
   manualUrl: "",
   manualConfigured: false,

@@ -41,7 +41,12 @@ import type {
   TextSizeChoice,
 } from "./types";
 import { parseTextSize } from "../lib/textScale";
-import { AI_CONSENT_VERSION, aiConsentGranted } from "../features/assistant/consent";
+import {
+  AI_AGE_ATTESTATION_REQUIRED,
+  AI_CONSENT_REQUIRED_MESSAGE,
+  AI_CONSENT_VERSION,
+  aiConsentGranted,
+} from "../features/assistant/consent";
 
 const now = Date.now();
 
@@ -131,6 +136,7 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
         llmConfigured: false,
         aiConsent: "none",
         aiConsentVersion: 0,
+        aiAgeAttested: false,
         serverHost: "",
         accountCount: 0,
         manualUrl: "",
@@ -372,27 +378,33 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
       if (decision !== "granted" && decision !== "refused" && decision !== "withdrawn") {
         return ok({ ok: false, message: "Choix IA invalide." }) as Promise<T>;
       }
+      const ageAttested = p["ageAttested"] === true;
+      if (decision === "granted" && !ageAttested) {
+        return ok({ ok: false, code: "attestation", message: AI_AGE_ATTESTATION_REQUIRED }) as Promise<T>;
+      }
       settings = {
         ...settings,
         aiConsent: decision,
         aiConsentVersion: AI_CONSENT_VERSION,
+        aiAgeAttested: decision === "granted" && ageAttested,
         llmConfigured: decision === "withdrawn" ? false : settings.llmConfigured,
       };
       if (decision === "withdrawn") teacherThread = { subject: "", messages: [] };
       return ok({
         ok: true,
         decision,
-        version: 1,
+        version: AI_CONSENT_VERSION,
+        ageAttested: settings.aiAgeAttested,
         keyCleared: true,
         chatCleared: true,
       }) as Promise<T>;
     }
     case "llm.saveKey":
-      if (!aiConsentGranted(settings.aiConsent, settings.aiConsentVersion)) {
+      if (!aiConsentGranted(settings.aiConsent, settings.aiConsentVersion, settings.aiAgeAttested)) {
         return ok({
           ok: false,
           code: "consent",
-          message: "Consentement IA requis : lis l’aperçu des données et accepte dans Réglages > Assistant.",
+          message: AI_CONSENT_REQUIRED_MESSAGE,
         }) as Promise<T>;
       }
       settings = { ...settings, llmConfigured: Boolean(p["key"]) };
@@ -401,18 +413,18 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
       settings = { ...settings, llmConfigured: false };
       return ok({ ok: true }) as Promise<T>;
     case "llm.askHomework":
-      if (!aiConsentGranted(settings.aiConsent, settings.aiConsentVersion)) {
-        return ok({ ok: false, code: "consent", message: "Consentement IA requis : accepte dans Réglages > Assistant." }) as Promise<T>;
+      if (!aiConsentGranted(settings.aiConsent, settings.aiConsentVersion, settings.aiAgeAttested)) {
+        return ok({ ok: false, code: "consent", message: AI_CONSENT_REQUIRED_MESSAGE }) as Promise<T>;
       }
       return ok(HOMEWORK_REPLY) as Promise<T>;
     case "llm.solvePhoto":
-      if (!aiConsentGranted(settings.aiConsent, settings.aiConsentVersion)) {
-        return ok({ ok: false, code: "consent", message: "Consentement IA requis : accepte dans Réglages > Assistant." }) as Promise<T>;
+      if (!aiConsentGranted(settings.aiConsent, settings.aiConsentVersion, settings.aiAgeAttested)) {
+        return ok({ ok: false, code: "consent", message: AI_CONSENT_REQUIRED_MESSAGE }) as Promise<T>;
       }
       return ok(PHOTO_REPLY) as Promise<T>;
     case "llm.generateRevision": {
-      if (!aiConsentGranted(settings.aiConsent, settings.aiConsentVersion)) {
-        return ok({ ok: false, code: "consent", message: "Consentement IA requis : accepte dans Réglages > Assistant." }) as Promise<T>;
+      if (!aiConsentGranted(settings.aiConsent, settings.aiConsentVersion, settings.aiAgeAttested)) {
+        return ok({ ok: false, code: "consent", message: AI_CONSENT_REQUIRED_MESSAGE }) as Promise<T>;
       }
       const id = String(p["assignmentId"] ?? "");
       const assignment = (
@@ -438,8 +450,8 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
       }) as Promise<T>;
     }
     case "llm.teacherTurn": {
-      if (!aiConsentGranted(settings.aiConsent, settings.aiConsentVersion)) {
-        return ok({ ok: false, code: "consent", message: "Consentement IA requis : accepte dans Réglages > Assistant." }) as Promise<T>;
+      if (!aiConsentGranted(settings.aiConsent, settings.aiConsentVersion, settings.aiAgeAttested)) {
+        return ok({ ok: false, code: "consent", message: AI_CONSENT_REQUIRED_MESSAGE }) as Promise<T>;
       }
       const subject = String(p["subject"] ?? "").trim();
       const question = String(p["message"] ?? "").trim();
@@ -491,8 +503,8 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
       }) as Promise<T>;
     }
     case "exercises.help": {
-      if (!aiConsentGranted(settings.aiConsent, settings.aiConsentVersion)) {
-        return ok({ ok: false, code: "consent", message: "Consentement IA requis : accepte dans Réglages > Assistant." }) as Promise<T>;
+      if (!aiConsentGranted(settings.aiConsent, settings.aiConsentVersion, settings.aiAgeAttested)) {
+        return ok({ ok: false, code: "consent", message: AI_CONSENT_REQUIRED_MESSAGE }) as Promise<T>;
       }
       const subject = String(p["subject"] ?? "").trim();
       const number = String(p["number"] ?? "").trim();

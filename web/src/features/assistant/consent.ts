@@ -7,12 +7,22 @@ import type { AiConsentDecision } from "../../bridge/types";
  * Miroir testé de `AI_CONSENT_VERSION` (`android/core/.../AiConsent.kt`), seule
  * source côté web. À incrémenter dans les DEUX fichiers pour un changement
  * MATÉRIEL : catégorie de données ajoutée ou retirée, destinataire ou règle de
- * conservation modifiée, usage élargi. Une reformulation seule ne compte pas.
+ * conservation modifiée, usage élargi, attestation ajoutée ou modifiée. Une
+ * reformulation seule ne compte pas.
  */
-export const AI_CONSENT_VERSION = 1;
+export const AI_CONSENT_VERSION = 2;
 
 export const AI_CONSENT_REQUIRED_MESSAGE =
-  "Consentement IA requis : lis l’aperçu des données et accepte dans Réglages > Assistant.";
+  "Consentement IA requis : lis l’aperçu, atteste l’âge ou l’autorisation parentale et accepte dans Réglages > Assistant.";
+
+export const AI_AGE_ATTESTATION_REQUIRED =
+  "Coche l’attestation d’âge ou d’autorisation parentale avant d’activer l’assistant.";
+
+export const AI_AGE_ATTESTATION =
+  "Je certifie avoir 18 ans ou plus, ou, si je suis mineur, disposer de l’autorisation de mon représentant légal et d’un compte OpenRouter géré par un adulte.";
+
+export const AI_AGE_ATTESTATION_DETAIL =
+  "L’assistant passe par OpenRouter, qui exige d’avoir au moins 18 ans. Si tu es mineur, ton représentant légal doit autoriser cet usage et gérer le compte OpenRouter : l’app ne vérifie pas ton âge et ne remplace ni cette autorisation ni les conditions d’OpenRouter. Ce texte n’a pas encore fait l’objet d’une validation juridique.";
 
 export interface AiConsentItem {
   key: string;
@@ -71,12 +81,20 @@ export const AI_CONSENT_RETENTION_NOTE =
 export const AI_CONSENT_COST_NOTE =
   "Chaque demande utilise tes crédits OpenRouter et peut être facturée.";
 
-/** Un accord n'est valide que pour la version de texte affichée. */
-export function aiConsentGranted(decision: AiConsentDecision, version: number): boolean {
-  return decision === "granted" && version === AI_CONSENT_VERSION;
+/** Un accord n'est valide que pour la version affichée ET l'attestation recueillie. */
+export function aiConsentGranted(
+  decision: AiConsentDecision,
+  version: number,
+  ageAttested: boolean,
+): boolean {
+  return decision === "granted" && version === AI_CONSENT_VERSION && ageAttested;
 }
 
-/** Un accord d'une autre version redemande l'accord, jamais un usage silencieux. */
-export function aiConsentNeedsReconsent(decision: AiConsentDecision, version: number): boolean {
-  return decision === "granted" && version !== AI_CONSENT_VERSION;
+/** Un accord d'une autre version ou sans attestation redemande l'accord. */
+export function aiConsentNeedsReconsent(
+  decision: AiConsentDecision,
+  version: number,
+  ageAttested: boolean,
+): boolean {
+  return decision === "granted" && (version !== AI_CONSENT_VERSION || !ageAttested);
 }

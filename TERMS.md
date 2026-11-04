@@ -70,6 +70,12 @@ exigent d’avoir au moins 18 ans au moment de la rédaction de ce texte : un
 mineur ne doit pas ouvrir ni utiliser de compte OpenRouter. Un adulte responsable
 gère le compte et la clé.
 
+Avant d’enregistrer une clé, l’app demande une attestation explicite : avoir
+18 ans ou plus, ou disposer de l’autorisation de son représentant légal avec un
+compte OpenRouter géré par un adulte. L’app ne vérifie pas cette attestation ;
+sans elle, aucun appel IA n’est possible. Ce texte attend encore une revue
+juridique.
+
 ## 6. Licence du logiciel
 
 Le code source est distribué sous **GNU General Public License, version 3.0

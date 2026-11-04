@@ -126,3 +126,11 @@ Un accord d’une autre version n’est jamais réutilisé : l’app redemande
 l’accord et l’IA reste désactivée jusque-là. Refuser ou retirer le
 consentement laisse aussi l’IA désactivée. Un enregistrement illisible, absent
 ou d’une version inconnue est traité comme aucun accord (défaut sûr).
+
+Avant l’accord et la clé, l’écran explique que l’assistant passe par OpenRouter
+et demande une attestation explicite : 18 ans ou plus, ou autorisation du
+représentant légal avec un compte OpenRouter géré par un adulte. Sans cette
+attestation, aucune clé ne peut être enregistrée et aucun appel IA n’est
+possible ; la retirer avec le consentement efface la clé et le fil du
+professeur. L’app ne vérifie pas l’âge déclaré et ne prétend pas à une
+validation juridique : la revue de conseil reste en attente (DEC-04).
