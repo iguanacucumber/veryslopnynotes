@@ -1,6 +1,8 @@
 # Métadonnées du dépôt
 
-Ce que la page GitHub affiche, et comment le vérifier. Les valeurs ci-dessous
+La protection de `main`, l'environnement `release` et les permissions Actions
+sont décrits dans [`BRANCH-PROTECTION.md`](BRANCH-PROTECTION.md). Ce fichier-ci
+porte ce que la page GitHub affiche, et comment le vérifier. Les valeurs ci-dessous
 sont la source de vérité pour la description, les sujets et l'aperçu social ;
 un changement se fait dans l'interface ou par `gh api`, puis ici.
 
