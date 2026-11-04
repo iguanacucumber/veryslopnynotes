@@ -2,5 +2,8 @@
 <resources>
     <!-- Thème de FENÊTRE : la WebView peint sa propre UI, ceci ne sert qu'au fond
          et au splash. Variante sombre dans `values-night/`. -->
-    <style name="Theme.Veryslopynotes" parent="@android:style/Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Veryslopynotes" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@drawable/ic_launcher_splash</item>
+        <item name="android:colorBackground">@color/ic_launcher_background</item>
+    </style>
 </resources>
