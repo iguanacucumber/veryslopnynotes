@@ -294,6 +294,38 @@
   color: var(--danger-ink);
 }
 
+.diagnostic-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 0;
+}
+
+.diagnostic-field {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.diagnostic-field dt {
+  color: var(--secondary);
+}
+
+.diagnostic-field dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.diagnostic-field__error {
+  margin: 12px 0 0;
+  color: var(--danger-ink);
+}
+
 .subject-editor {
   animation: rise-in 220ms var(--ease) both;
 }

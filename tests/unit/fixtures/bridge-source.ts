@@ -30,6 +30,7 @@ const ATTENDUS = [
   "VsnBridgeSettings.kt",
   "VsnBridgeLessons.kt",
   "VsnBridgeDataExport.kt",
+  "VsnBridgeDiagnostics.kt",
   "VsnBridgeHomeworkAi.kt",
   "VsnBridgeTeacher.kt",
   "VsnBridgeRevision.kt",

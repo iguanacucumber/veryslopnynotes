@@ -100,6 +100,8 @@ private val EPOCH_GUARDED_READS = setOf(
     "lessons.load",
     "lessons.addPhoto",
     "data.export",
+    "diagnostics.preview",
+    "diagnostics.share",
     "teacher.load",
     "llm.askHomework",
     "llm.solvePhoto",
@@ -198,6 +200,9 @@ class VsnBridge(
     internal val profileRepo = ProfileRepository()
     internal val accounts = AccountStore(ctx, sessions)
     internal val llmKeys = LlmKeys.get(ctx)
+    /** #855 : dernier échec borné et aperçu figé du diagnostic de support. */
+    internal val diagnosticState = DiagnosticState()
+    internal val diagnosticPreview = DiagnosticPreviewStore()
 
     // #401 : l'échec du Keystore est DIT, ici (le pont), pas dans les stores :
     // le store tient le secret, la règle du dépôt est « jamais de log à côté
@@ -354,6 +359,7 @@ class VsnBridge(
         } catch (_: Throwable) {
             // #394 : une exception ici laisserait la promesse JS PENDANTE
             // (le pont n'a pas répondu du tout). Tout devient un rejet.
+            diagnosticState.record(method, "unknown", null)
             reject(requestId, "unknown", "Erreur native.")
         }
     }
@@ -421,13 +427,17 @@ class VsnBridge(
                         RequestScope.with(cancellation) {
                             val result = handle(requestId, method, params, epoch)
                             if (result != null) {
+                                noteDiagnosticOutcome(method, params, result)
                                 if (work != null && !work.canDeliver()) throw StaleSessionRead()
                                 deliver(requestId, method, epoch, result)
                             }
                         }
                     }
                     // Jamais le message brut : il peut nommer un hôte ou un compte.
-                    if (failure != null) reject(requestId, failure.code, failure.message)
+                    if (failure != null) {
+                        diagnosticState.record(method, failure.code, null)
+                        reject(requestId, failure.code, failure.message)
+                    }
                 } finally {
                     InFlight.finish(requestId)
                     inFlight.remove(requestId)
@@ -496,6 +506,7 @@ class VsnBridge(
         for (future in futures.values) future.cancel(true)
         futures.clear()
         photos.cancel()
+        diagnosticPreview.clear()
         executors.shutdown()
     }
 
@@ -563,6 +574,8 @@ class VsnBridge(
             "settings.dismissManualPrompt" -> dismissManualPrompt()
             "settings.subjectPrefs" -> subjectPrefs()
             "settings.saveSubject" -> saveSubject(p, epoch)
+            "diagnostics.preview" -> previewDiagnostic(epoch)
+            "diagnostics.share" -> shareDiagnostic(epoch)
             "lessons.list" -> lessonsList(epoch)
             "lessons.load" -> lessonsLoad(p, epoch)
             "lessons.save" -> lessonsSave(p, epoch)
@@ -637,7 +650,7 @@ class VsnBridge(
         return JSONObject().put("ok", true)
     }
 
-    private fun sessionStatus(): JSONObject {
+    internal fun sessionStatus(): JSONObject {
         val state = when {
             sessionReady -> "restored"
             sessions.hasSession() -> "offline"
@@ -703,6 +716,8 @@ class VsnBridge(
         sessionReady = false
         cachedProfile = null
         qrHandles.clear()
+        diagnosticState.clear()
+        diagnosticPreview.clear()
         // Le verrou de session sérialise la purge avec un appairage ou une
         // restauration EN VOL : aucun des deux ne peut republier l'ancien client.
         val purged = pairing.logoutBlocking()
@@ -727,6 +742,8 @@ class VsnBridge(
         sessionReady = false
         cachedProfile = null
         qrHandles.clear()
+        diagnosticState.clear()
+        diagnosticPreview.clear()
         val result = pairing.deleteAllBlocking()
         val failures = result.failed + result.missing
         return JSONObject()
@@ -761,6 +778,8 @@ class VsnBridge(
         sessionReady = false
         cachedProfile = null
         qrHandles.clear()
+        diagnosticState.clear()
+        diagnosticPreview.clear()
         // Même purge orchestrée que la déconnexion. Échec de purge : pas de
         // canal d'erreur ici (abonné de fond) ; le prochain appairage repurge
         // et, s'il échoue, le DIT.
@@ -958,6 +977,7 @@ class VsnBridge(
                 sessionReady = true
                 cachedProfile = null
                 qrHandles.clear()
+                diagnosticPreview.clear()
                 // I16 : `PairingRepository` a purgé TOUS les stores du compte
                 // précédent avant de publier le nouveau client.
                 // #397 : le compte appairé est ENREGISTRÉ et devient COURANT
@@ -999,6 +1019,7 @@ class VsnBridge(
             is PairingResult.Ok -> {
                 sessionReady = true
                 cachedProfile = null
+                diagnosticPreview.clear()
                 JSONObject().put("ok", true)
             }
             is PairingResult.Err -> JSONObject()

@@ -152,6 +152,10 @@ export const PRODUCTION_SOURCES: string[] = [
   // #857 : l'export portable (format, manifeste, aller-retour, clés
   // interdites). Fichier PUR : le harnais l'EXÉCUTE au lieu de relire la forme.
   join(DATA, "DataExport.kt"),
+  // #855 : le diagnostic de support est une liste FERMÉE de champs validés
+  // (version, Android, WebView, code, ressource, niveau, session). Fichier PUR :
+  // le harnais EXÉCUTE la redaction, aucune valeur hostile ne peut ressortir.
+  join(DATA, "DiagnosticExport.kt"),
   // #861 : l'inventaire des stores de compte et l'orchestrateur de purge.
   // Fichier PUR : le harnais EXÉCUTE l'ordre, les échecs et les stores absents.
   join(DATA, "AccountPurge.kt"),

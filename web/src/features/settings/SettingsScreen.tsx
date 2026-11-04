@@ -11,6 +11,7 @@ import { AppearanceCard } from "./AppearanceCard";
 import { AssistantCards } from "./AssistantCards";
 import { DataExportCard } from "./DataExportCard";
 import { DeleteAllCard } from "./DeleteAllCard";
+import { DiagnosticExportCard } from "./DiagnosticExportCard";
 import { ManualCard } from "./ManualCard";
 import { ServerCard } from "./ServerCard";
 import { SubjectPrefsCard } from "./SubjectPrefsCard";
@@ -177,6 +178,7 @@ export default function SettingsScreen() {
             onClick={() => navigate("/help")}
           />
         </Rows>
+        <DiagnosticExportCard />
       </Section>
 
       <Section id="reglages-donnees" title="Données">

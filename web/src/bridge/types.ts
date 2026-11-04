@@ -48,6 +48,8 @@ export const BRIDGE_METHODS = [
   "settings.localNetwork",
   "settings.saveManualUrl",
   "settings.dismissManualPrompt",
+  "diagnostics.preview",
+  "diagnostics.share",
   "settings.subjectPrefs",
   "settings.saveSubject",
   "lessons.list",
@@ -374,6 +376,25 @@ export interface DataExportResult {
   message?: string;
   sections?: DataExportSection[];
   withheld?: string[];
+}
+
+/** Valeur d'un diagnostic : version, compteur ou liste fermée de noms exclus. */
+export type DiagnosticValue = string | number | string[];
+
+/**
+ * Aperçu EXACT du futur fichier de diagnostic. L'interface l'affiche avant
+ * tout partage ; le natif fige ces octets et `share` ne peut pas en produire
+ * d'autres. Aucun payload, nom, URL ni secret n'y figure.
+ */
+export interface DiagnosticPreviewResult {
+  ok: boolean;
+  message?: string;
+  fields?: Record<string, DiagnosticValue>;
+}
+
+export interface DiagnosticShareResult {
+  ok: boolean;
+  message?: string;
 }
 
 /** Réponse de l'enregistrement du manuel : l'URL est gardée même si l'extrait

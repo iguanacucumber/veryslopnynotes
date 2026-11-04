@@ -9,6 +9,8 @@ import {
   type BridgeMethod,
   type DataExportResult,
   type DeleteAllResult,
+  type DiagnosticPreviewResult,
+  type DiagnosticShareResult,
   type ExerciseHelpParams,
   type ExerciseProposal,
   type ExerciseProposeParams,
@@ -347,6 +349,8 @@ export const bridge = {
     call<LessonPhotoResult>("lessons.addPhoto", { subject, source }, BRIDGE_TIMEOUTS["lessons.addPhoto"]),
   exportData: (newsReadIds: string[] = []) =>
     call<DataExportResult>("data.export", { newsReadIds }),
+  previewDiagnostic: () => call<DiagnosticPreviewResult>("diagnostics.preview"),
+  shareDiagnostic: () => call<DiagnosticShareResult>("diagnostics.share"),
 
   llmStatus: () => call<{ configured: boolean }>("llm.status"),
   saveLlmKey: (key: string) => call<{ ok: boolean; message?: string }>("llm.saveKey", { key }),
