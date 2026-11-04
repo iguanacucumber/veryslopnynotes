@@ -5,9 +5,11 @@
 > atténuation pour permettre une décision humaine, elles ne remplacent ni une
 > clôture d'issue, ni le gate, ni le sign-off juridique.
 
-Constat initial : **2026-11-04**, sur `origin/main` `c9dfc0d`. L'état des issues
-change : revérifier chaque lien et chaque statut avant une approbation ou un tag.
-Ce document ne clôt aucune issue et ne marque aucun gate comme satisfait.
+Constat initial : **2026-11-04**, sur `origin/main` `c9dfc0d`. Dernière
+vérification : **2026-11-04**, sur `origin/main` `dc63166`, avec les états
+GitHub et PR consultés le même jour. L'état des issues change : revérifier
+chaque lien et chaque statut avant une approbation ou un tag. Ce document ne
+clôt aucune issue et ne marque aucun gate comme satisfait.
 
 ## Politique de dérogation
 
@@ -94,18 +96,19 @@ Statuts autorisés :
 - `to-waive` : proposition écrite ci-dessous, **non approuvée** ;
 - `closed` : issue close avec une preuve liée.
 
+Vérifié le **2026-11-04** : les blocages clos [#827](https://github.com/iguanacucumber/veryslopnynotes/issues/827), [#828](https://github.com/iguanacucumber/veryslopnynotes/issues/828) et [#936](https://github.com/iguanacucumber/veryslopnynotes/issues/936) sont retirés des tableaux ; leurs preuves restent dans l'historique Git et les issues. Les deux lignes `to-waive` restent des **propositions non approuvées**.
+
 ### Bloqueurs `tier:B`
 
 | ID | Sujet | Statut | Risque | Atténuation | Propriétaire | Expiration | Preuve |
 |---|---|---|---|---|---|---|---|
-| [#831](https://github.com/iguanacucumber/veryslopnynotes/issues/831) | Responsable du traitement et contact vie privée | `open` | Notice publiée sans responsable ni contact : revendication de confidentialité non vérifiable. **Non dérogeable.** | Aucune : compléter `PRIVACY.md` et le dossier de sign-off. | `iguanacucumber` + conseil | — | [PRIVACY.md](../PRIVACY.md) §1 et §15, [SIGNOFF.md](legal/SIGNOFF.md) §2 |
-| [#838](https://github.com/iguanacucumber/veryslopnynotes/issues/838) | Audit des fichiers dérivés de Papillon et attribution | `to-waive` | Inventaire incomplet : attribution GPL incertaine et risque de contestation à la distribution. | `ADR-008` et `THIRD_PARTY_NOTICES.md` restent la base ; avis écrit du conseil sur le périmètre manquant avant le tag ; aucune release binaire sans cet avis. | `iguanacucumber` | `2026-12-31` ou tag `v1.0.0`, au premier des deux | [ADR-008](adr/008-relicense-gpl.md), [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md), [SIGNOFF.md](legal/SIGNOFF.md) §1 |
+| [#831](https://github.com/iguanacucumber/veryslopnynotes/issues/831) | Responsable du traitement et contact vie privée | `open` | Notice publiée sans responsable ni contact : revendication de confidentialité non vérifiable. **Non dérogeable.** | Aucune : choisir l'entité et le contact dans le dossier, puis mettre à jour `PRIVACY.md` et le sign-off. | `iguanacucumber` + conseil | — | [CONTROLLER.md](legal/CONTROLLER.md), PR [#1147](https://github.com/iguanacucumber/veryslopnynotes/pull/1147), [PRIVACY.md](../PRIVACY.md) §1 et §15, [SIGNOFF.md](legal/SIGNOFF.md) §2 |
+| [#838](https://github.com/iguanacucumber/veryslopnynotes/issues/838) | Audit des fichiers dérivés de Papillon et attribution | `to-waive` | Inventaire incomplet : attribution GPL incertaine et risque de contestation à la distribution. | Voie de relicence de [#827](https://github.com/iguanacucumber/veryslopnynotes/issues/827) close ; `ADR-008`, `RELICENSING.md` et `THIRD_PARTY_NOTICES.md` restent la base ; avis écrit du conseil sur le périmètre manquant avant le tag ; aucune release binaire sans cet avis. | `iguanacucumber` | `2026-12-31` ou tag `v1.0.0`, au premier des deux | [ADR-008](adr/008-relicense-gpl.md), [RELICENSING.md](legal/RELICENSING.md), [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md), [SIGNOFF.md](legal/SIGNOFF.md) §1 |
 | [#928](https://github.com/iguanacucumber/veryslopnynotes/issues/928) | Assertions CI sur l'artefact de release | `to-waive` | Une assertion manquante peut laisser passer un certificat debug, une notice absente, un secret embarqué, une permission inattendue ou une version incohérente. | Vérifications manuelles consignées dans la checklist signée de [`#956`](https://github.com/iguanacucumber/veryslopnynotes/issues/956) : `apksigner`, notices GPL, scan secret, permissions, version. Aucun tag sans checklist remplie. | `iguanacucumber` | `2026-12-31` ou tag `v1.0.0`, au premier des deux | [release-artifact.yml](../.github/workflows/release-artifact.yml), PR [#1138](https://github.com/iguanacucumber/veryslopnynotes/pull/1138) |
-| [#936](https://github.com/iguanacucumber/veryslopnynotes/issues/936) | Canal bêta pré-release | `closed` | — | Livré : tags `vX.Y.Z-beta.N` en pré-release, avec signature et checksums. | `iguanacucumber` | — | PR [#1132](https://github.com/iguanacucumber/veryslopnynotes/pull/1132), `README.md` § Canal bêta |
-| [#956](https://github.com/iguanacucumber/veryslopnynotes/issues/956) | Checklist de publication | `open` | Checklist absente ou non signée : aucune preuve de vérification manuelle avant le tag. **Pas de dérogation** : c'est la preuve exigée par #972. | Merger la PR [#1138](https://github.com/iguanacucumber/veryslopnynotes/pull/1138), puis faire signer la checklist par deux humains. | `iguanacucumber` | — | PR [#1138](https://github.com/iguanacucumber/veryslopnynotes/pull/1138), [RELEASE.md](RELEASE.md) |
-| [#972](https://github.com/iguanacucumber/veryslopnynotes/issues/972) | Ce document et la clôture des bloqueurs | `open` | Le processus de dérogation ne peut pas se déroger lui-même ; les `tier:L` restent ouverts. | Ce fichier prépare les décisions ; l'issue reste ouverte jusqu'à la clôture des `tier:L`. | `iguanacucumber` | — | Ce fichier, [#982](https://github.com/iguanacucumber/veryslopnynotes/issues/982) |
+| [#956](https://github.com/iguanacucumber/veryslopnynotes/issues/956) | Checklist de publication | `open` | Checklist absente ou non signée : aucune preuve de vérification manuelle avant le tag. **Pas de dérogation** : c'est la preuve exigée par #972. | Merger la PR [#1138](https://github.com/iguanacucumber/veryslopnynotes/pull/1138) qui ajoute `docs/RELEASE-CHECKLIST.md`, puis faire signer la checklist par deux humains. | `iguanacucumber` | — | PR [#1138](https://github.com/iguanacucumber/veryslopnynotes/pull/1138), [RELEASE.md](RELEASE.md) |
+| [#972](https://github.com/iguanacucumber/veryslopnynotes/issues/972) | Ce document et la clôture des bloqueurs | `open` | Le processus de dérogation ne peut pas se déroger lui-même ; les `tier:L` [#919](https://github.com/iguanacucumber/veryslopnynotes/issues/919), [#965](https://github.com/iguanacucumber/veryslopnynotes/issues/965) et [#969](https://github.com/iguanacucumber/veryslopnynotes/issues/969) restent ouverts. | Ce fichier consigne l'état vérifié ; l'issue reste ouverte jusqu'à la clôture des `tier:L`. | `iguanacucumber` | — | Ce fichier, [#982](https://github.com/iguanacucumber/veryslopnynotes/issues/982) |
 | [#976](https://github.com/iguanacucumber/veryslopnynotes/issues/976) | Sign-off juridique et vie privée | `open` | Signature juridique absente : lancement interdit par la règle de #982. **Non dérogeable.** | Aucune : le dossier [SIGNOFF.md](legal/SIGNOFF.md) doit passer de `pending` à `signed` avec preuve archivée. | `iguanacucumber` + conseil | — | [SIGNOFF.md](legal/SIGNOFF.md), PR [#1141](https://github.com/iguanacucumber/veryslopnynotes/pull/1141) |
-| [#978](https://github.com/iguanacucumber/veryslopnynotes/issues/978) | Tag `v1.0.0` et annonce | `open` | L'acte de publication lui-même ne se déroge pas ; il reste bloqué par les lignes ci-dessus. | Aucune : exécuter le tag et l'annonce après G4. | `iguanacucumber` | — | [#982](https://github.com/iguanacucumber/veryslopnynotes/issues/982) |
+| [#978](https://github.com/iguanacucumber/veryslopnynotes/issues/978) | Tag `v1.0.0` et annonce | `open` | L'acte de publication lui-même ne se déroge pas ; il reste bloqué par les lignes ci-dessus. | Aucune : exécuter le tag et l'annonce après G4. | `iguanacucumber` | — | [RELEASE-ANNOUNCEMENT.md](RELEASE-ANNOUNCEMENT.md), [#982](https://github.com/iguanacucumber/veryslopnynotes/issues/982) |
 
 ### Bloqueurs `tier:L` — non dérogeables
 
@@ -113,11 +116,9 @@ Aucune ligne de ce tableau ne peut passer `to-waive`. G4 exige leur clôture.
 
 | ID | Sujet | Statut | Preuve / état constaté |
 |---|---|---|---|
-| [#827](https://github.com/iguanacucumber/veryslopnynotes/issues/827) | Voie de relicence GPL-3.0-only | `open` | [ADR-008](adr/008-relicense-gpl.md) consigne la décision ; l'inventaire Papillon de [#838](https://github.com/iguanacucumber/veryslopnynotes/issues/838) manque encore. |
-| [#828](https://github.com/iguanacucumber/veryslopnynotes/issues/828) | Garde de la clé de signature | `open` | [SIGNING.md](SIGNING.md) garde des placeholders pour le détenteur, les sauvegardes et le coffre. |
 | [#919](https://github.com/iguanacucumber/veryslopnynotes/issues/919) | Échec sans vraie clé de signature | `open` | [`android/app/build.gradle.kts`](../android/app/build.gradle.kts) retombe encore sur la signature debug sans clé. |
-| [#965](https://github.com/iguanacucumber/veryslopnynotes/issues/965) | Dogfood interne de deux semaines | `open` | Aucun journal de dogfood ni checklist signée dans le dépôt. |
-| [#969](https://github.com/iguanacucumber/veryslopnynotes/issues/969) | Bêta privée par tag pré-release | `open` | Aucun tag ni release bêta ; le canal [#936](https://github.com/iguanacucumber/veryslopnynotes/issues/936) est prêt, la bêta n'a pas eu lieu. |
+| [#965](https://github.com/iguanacucumber/veryslopnynotes/issues/965) | Dogfood interne de deux semaines | `open` | Protocole [DOGFOOD.md](DOGFOOD.md) mergé (PR [#1144](https://github.com/iguanacucumber/veryslopnynotes/pull/1144)) ; aucun run, journal ni checklist signée : aucun résultat n'est revendiqué. |
+| [#969](https://github.com/iguanacucumber/veryslopnynotes/issues/969) | Bêta privée par tag pré-release | `open` | Kit [BETA.md](BETA.md) mergé (PR [#1143](https://github.com/iguanacucumber/veryslopnynotes/pull/1143)) et canal [#936](https://github.com/iguanacucumber/veryslopnynotes/issues/936) clos ; aucun tag, release bêta ni participant réel, donc la bêta n'a pas eu lieu. |
 
 ## Approbations
 
