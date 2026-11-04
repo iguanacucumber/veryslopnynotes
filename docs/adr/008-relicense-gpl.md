@@ -105,14 +105,15 @@ autorisation.
 
 ### 5. Statut MIT antérieur
 
-Aucune version binaire publique n'a été publiée sous MIT. Si une telle version
-apparaissait (tag, release, APK distribué), elle resterait sous MIT pour ses
-destinataires : la relicence ne s'applique pas aux copies déjà livrées. Une
-note de release le rappellerait au lieu de prétendre que le MIT a disparu.
+Sous MIT jusqu'au 2026-11-04 : le commit `2def868` remplace `LICENSE` par
+GPL-3.0-only (#1109). Aucun APK ni binaire public n'a été publié avant ce
+changement, vérifié le 2026-11-04 : aucun tag, aucune GitHub Release (CLI et
+API) ni `*.apk`/`*.aab` dans l'historique. Un binaire qui aurait circulé
+resterait sous MIT pour ses destinataires : la relicence ne révoque pas les
+copies déjà livrées ; une note de release le rappellerait.
 
-Le dépôt lui-même est couvert par la GPL-3.0-only à partir de cet ADR ; les
-commits antérieurs restent dans l'historique et leur combinaison avec le reste
-est distribuée sous GPL.
+Le dépôt passe sous GPL-3.0-only à ce commit ; les commits antérieurs restent
+dans l'historique et leur combinaison avec le reste est distribuée sous GPL.
 
 ### 6. Règle de dépôt (AGENTS.md)
 

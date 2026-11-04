@@ -142,9 +142,10 @@ Accessibilité : [`docs/ACCESSIBILITY.md`](docs/ACCESSIBILITY.md).
 ## Licence
 
 GPL-3.0-only — voir [`LICENSE`](LICENSE). Copyright (c) 2026
-veryslopnynotes contributors. Le port du protocole Pronote est crédité à
-`pronotets` (MIT) ; notices tierces dans
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). Décision de relicence :
-[ADR-008](docs/adr/008-relicense-gpl.md).
+veryslopnynotes contributors. Le projet a été sous MIT jusqu'au 2026-11-04 ;
+aucun binaire public n'a été publié. Si un binaire a circulé, ses droits MIT
+subsistent ([ADR-008 §5](docs/adr/008-relicense-gpl.md)). Port du protocole
+Pronote crédité à `pronotets` (MIT) ; notices :
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 <!-- vim: set tw=80: -->

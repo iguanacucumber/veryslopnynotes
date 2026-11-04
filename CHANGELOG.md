@@ -58,6 +58,9 @@ la section `0.1.0` le jour du tag.
 
 - Licence du dépôt actée en GPL-3.0-only (ADR-008) : contributions sous la
   même licence, source correspondante publiée et dérivés Papillon crédités.
+- Statut MIT antérieur documenté : relicence au commit `2def868` (2026-11-04),
+  aucun APK ni binaire public avant, droits MIT des copies déjà livrées
+  préservés (#844).
 - Version Android dérivée du tag git `vX.Y.Z` : `versionName` et `versionCode`
   monotone, repli déterministe `0.1.0`/`1` sans tag, pré-releases refusées.
 - Fontes SN Pro sous-ensemblées en WOFF2 (graisses réellement utilisées,
