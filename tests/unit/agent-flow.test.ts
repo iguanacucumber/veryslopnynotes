@@ -90,7 +90,6 @@ function fixture(): Fixture {
       'case "$1 $2" in',
       '  "pr view") printf \'https://example.invalid/pr/1\\n\'; exit 0 ;;',
       '  "pr create") printf \'https://example.invalid/pr/1\\n\'; exit 0 ;;',
-      '  "pr checks") exit "${GH_CHECKS_CODE:-0}" ;;',
       '  "pr merge") exit "${GH_MERGE_CODE:-0}" ;;',
       "esac",
       "exit 0",
@@ -175,41 +174,33 @@ describe("agents/protect-main.sh (#963)", () => {
   const RULESET = JSON.parse(
     /RULESET="\$\(cat <<'JSON'\n([\s\S]*?)\nJSON\n\)"/.exec(SCRIPT)![1]!,
   );
-  const RULES = RULESET.rules as Array<{ type: string; parameters?: { required_status_checks?: Array<{ context: string }> } }>;
-  const CONTEXTS = RULES.flatMap((rule) => rule.parameters?.required_status_checks ?? []).map(
-    (check) => check.context,
-  );
+  const RULES = RULESET.rules as Array<{ type: string }>;
 
-  test("le ruleset exige PR, gate, gitleaks, et refuse force-push et suppression", () => {
+  test("le ruleset exige la PR et refuse force-push et suppression, aucun check", () => {
     expect(RULES.map((rule) => rule.type).sort()).toEqual([
       "deletion",
       "non_fast_forward",
       "pull_request",
-      "required_status_checks",
     ]);
-    expect(CONTEXTS).toEqual(["check", "web-smoke", "gitleaks"]);
+    expect(RULES.some((rule) => rule.type === "required_status_checks")).toBe(false);
   });
 
-  test("les contextes requis existent comme jobs CI", () => {
-    const workflows = [
-      readFileSync(join(ROOT, ".github", "workflows", "ci.yml"), "utf8"),
-      readFileSync(join(ROOT, ".github", "workflows", "secret-scan.yml"), "utf8"),
-    ].join("\n");
-    for (const context of CONTEXTS) expect(workflows).toContain(`\n  ${context}:\n`);
-  });
-
-  test("la doc et le ruleset ne dérivent pas", () => {
+  test("les docs portent l'autorité du gate local (ADR-011)", () => {
     for (const path of [
-      "docs/architecture/BRANCH-PROTECTION.md",
+      "AGENTS.md",
       "CONTRIBUTING.md",
+      "docs/architecture/BRANCH-PROTECTION.md",
       "docs/adr/005-rules-and-architecture.md",
+      "docs/adr/011-local-gate-authority.md",
     ]) {
       const doc = readFileSync(join(ROOT, path), "utf8");
-      for (const context of CONTEXTS) expect({ path, context, cité: doc.includes(context) }).toEqual({
-        path,
-        context,
-        cité: true,
-      });
+      for (const marque of ["make check", "ADR-011"]) {
+        expect({ path, marque, cité: doc.includes(marque) }).toEqual({
+          path,
+          marque,
+          cité: true,
+        });
+      }
     }
     const protection = readFileSync(join(ROOT, "docs/architecture/BRANCH-PROTECTION.md"), "utf8");
     expect(protection).toContain("PR obligatoire");
@@ -310,15 +301,13 @@ describe("agents/ship.sh (#343, #753, #880)", () => {
     expect(r.out).toContain("flow: change a");
 
     const gh = readFileSync(join(f.base, "gh.log"), "utf8").trim().split("\n");
-    const check = gh.findIndex((line) => line.startsWith("gh pr checks"));
+    expect(gh.some((line) => line.startsWith("gh pr checks"))).toBe(false);
     const merge = gh.findIndex((line) => line.startsWith("gh pr merge"));
-    expect(check).toBeGreaterThanOrEqual(0);
-    expect(gh[check]).toContain("--watch --fail-fast");
-    expect(merge).toBeGreaterThan(check);
+    expect(merge).toBeGreaterThanOrEqual(0);
     expect(gh[merge]).toContain(`--match-head-commit ${head}`);
   });
 
-  test("attend les checks et ne fusionne jamais sur échec (#880)", () => {
+  test("ne fusionne pas si la PR refuse (#880)", () => {
     const f = fixture();
     mustGit(f.work, "switch", "-c", "agent/47-flow");
     writeFileSync(join(f.work, "a.txt"), "branch\n");
@@ -329,13 +318,12 @@ describe("agents/ship.sh (#343, #753, #880)", () => {
       `HEAD: ${head}\n## Standards\n- conforme\n## Spec\n- #880 couvert\n`,
     );
 
-    const r = run([SHIP, "47"], f.work, { ...envFor(f), GH_CHECKS_CODE: "1" });
+    const r = run([SHIP, "47"], f.work, { ...envFor(f), GH_MERGE_CODE: "1" });
 
     expect(r.code).toBe(1);
-    expect(r.err).toContain("NON fusionnée");
     const gh = readFileSync(join(f.base, "gh.log"), "utf8");
-    expect(gh).toContain("gh pr checks");
-    expect(gh).not.toContain("gh pr merge");
+    expect(gh).not.toContain("gh pr checks");
+    expect(gh).toContain("gh pr merge");
     expect(mustGit(f.origin, "rev-parse", "refs/heads/agent/47-flow")).toBe(head);
   });
 

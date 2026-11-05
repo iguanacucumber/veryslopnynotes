@@ -79,10 +79,10 @@ d'accueil, le DOM observé et le logcat de l'application partent en artefact
 `emulator-smoke` 7 jours, y compris en échec.
 
 Le job est **non bloquant** (`continue-on-error: true`) : l'émulateur et l'hôte
-de démonstration sont hors du dépôt. Il n'est donc pas requis au ruleset et ne
-bloque pas un merge. Sa promotion (retirer `continue-on-error`, puis ajouter le
-check requis) se décide sur des **runs réels** — une série verte sans reprise —
-jamais dans la PR qui l'introduit.
+de démonstration sont hors du dépôt. Il n'est donc pas un préalable au merge
+(ADR-011). Sa promotion (retirer `continue-on-error`) se décide sur des
+**runs réels** — une série verte sans reprise — jamais dans la PR qui
+l'introduit.
 
 ## Tests instrumentés Android (#887)
 
@@ -141,7 +141,8 @@ Baisser la base exige un **diff explicite** dans la PR ; une hausse de
 couverture remonte la base dans la même PR.
 
 Le job CI `coverage` rejoue `make coverage` et garde `coverage/` 7 jours,
-même en échec. Non requis au ruleset, mais `ship.sh` refuse un check rouge.
+même en échec. Non requis au ruleset ; un rouge s'instruit comme un incident
+(ADR-011).
 
 ## Autres cibles `make`
 

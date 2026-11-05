@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Applique le ruleset de `main` : PR obligatoire, checks `check`, `web-smoke`
-# et `gitleaks` requis, suppression et force-push interdits. Idempotent.
+# Applique le ruleset de `main` : PR obligatoire, suppression et force-push
+# interdits. Le gate local fait autorité, aucun check requis (ADR-011).
 # Usage: ./agents/protect-main.sh
 set -euo pipefail
 
@@ -30,17 +30,6 @@ RULESET="$(cat <<'JSON'
         "require_last_push_approval": false,
         "require_extra_approval_for_unattributed_changes": false,
         "required_review_thread_resolution": false
-      }
-    },
-    {
-      "type": "required_status_checks",
-      "parameters": {
-        "strict_required_status_checks_policy": false,
-        "required_status_checks": [
-          { "context": "check" },
-          { "context": "web-smoke" },
-          { "context": "gitleaks" }
-        ]
       }
     }
   ]

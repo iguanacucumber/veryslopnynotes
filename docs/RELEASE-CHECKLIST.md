@@ -26,8 +26,8 @@ rien, et un agent ne signe pas à la place d'un humain.
 - Une case de cette checklist reste ouverte, ou une preuve manque.
 - `make check` n'est pas vert sur le commit exact qui sera taggé, ou la
   compilation Kotlin a été sautée (`ALLOW_SKIP_ANDROID=1`).
-- Un check requis au ruleset (`check`, `web-smoke`, `gitleaks`) est rouge, ou
-  les jobs `release-artifact`, `licenses` ou `apk-size` du commit sont rouges.
+- Un job CI du commit (`check`, `web-smoke`, `gitleaks`, `release-artifact`,
+  `licenses`, `apk-size`) est rouge.
 - Le tag ne pointe pas le commit vérifié, plusieurs tags de version pointent
   `HEAD`, ou la version calculée diffère du tag.
 - L'APK porte `CN=Android Debug`, l'empreinte du certificat diffère de celle du
@@ -62,8 +62,8 @@ make check
       sera taggé : `android-compile` (Kotlin + Android Lint), `unit`,
       `typecheck`, `architecture`, `contracts`, `lint`, `audit`,
       `web-typecheck`, `web-test`.
-- [ ] Le commit est sur `main`, le diff de release a été relu, et aucun check
-      requis au ruleset n'a été contourné.
+- [ ] Le commit est sur `main`, le diff de release a été relu, et la CI du
+      commit de `main` est verte.
 - [ ] Les runs `gate`, `release-artifact`, `licenses` et `apk-size` de ce
       commit sont verts.
 - [ ] Aucun `ALLOW_SKIP_ANDROID=1`, `make -i` ni `MAKEFLAGS` n'a servi à

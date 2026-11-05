@@ -114,6 +114,10 @@ la section `0.1.0` le jour du tag.
 
 ### Modifié
 
+- Merge automatique sans attente de la CI : `ship.sh` fusionne après
+  `make check` vert et la revue du HEAD ; le ruleset de `main` garde la PR
+  obligatoire, suppression et force-push interdits, sans check requis ; la CI
+  contrôle a posteriori (ADR-011, #1157).
 - Dossier de validation juridique rafraîchi en révision 2 (2026-11-04) : chaque
   sujet lie sa preuve courante et nomme la décision humaine restante ; #827,
   #826, #828, #829 et #906 sont closes, #831 et #838 restent ouvertes, les sept

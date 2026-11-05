@@ -61,8 +61,9 @@ Commits : `<scope>: <objet>`, à l'impératif, une ligne. La PR cible `main`,
 cite `Closes #<issue>` et raconte le **pourquoi** ; le diff doit rester court
 et lisible.
 
-`main` est protégé : la PR est obligatoire et les checks `check`, `web-smoke`
-et `gitleaks` doivent être verts avant le merge
+`main` est protégé : la PR est obligatoire, force-push et suppression
+interdits. Le merge exige `make check` vert en local (ADR-011) ; la CI
+vérifie a posteriori, sans bloquer le merge
 ([`docs/architecture/BRANCH-PROTECTION.md`](docs/architecture/BRANCH-PROTECTION.md)).
 
 ## DCO (sign-off)
