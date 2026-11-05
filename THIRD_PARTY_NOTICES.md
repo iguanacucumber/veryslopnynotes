@@ -15,7 +15,7 @@ dans `web/public/licenses/`, copiés dans `assets/web/licenses/` de l'APK.
 | pronotets | 1.0.0 | MIT | `PRONOTETS-MIT.txt` |
 | react | 19.3.1 | MIT | `REACT-MIT.txt` |
 | react-dom | 19.3.1 | MIT | `REACT-MIT.txt` |
-| react-router-dom | 7.18.4 | MIT | `REACT-ROUTER-DOM-MIT.txt` |
+| react-router-dom | 7.18.5 | MIT | `REACT-ROUTER-DOM-MIT.txt` |
 | rolldown | 1.2.14 | MIT | `ROLLDOWN-MIT.txt` |
 | androidx.core:core-ktx | 1.19.1 | Apache-2.0 | `APACHE-2.0.txt` |
 | androidx.activity:activity-ktx | 1.13.0 | Apache-2.0 | `APACHE-2.0.txt` |

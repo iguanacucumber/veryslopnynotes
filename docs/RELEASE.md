@@ -18,7 +18,7 @@ perso dans le livrable. Clé signature TOUJOURS hors repo.
 | activity-ktx / OkHttp | 1.13.0 / 5.5.1 | `android/gradle/libs.versions.toml` | Apache-2.0 |
 | zxing-android-embedded | 4.3.0 | `android/gradle/libs.versions.toml` | Apache-2.0 |
 | react / react-dom | 19.3.1 | `package.json` exact + `bun.lock` | MIT |
-| react-router-dom | 7.18.4 | `package.json` exact + `bun.lock` | MIT |
+| react-router-dom | 7.18.5 | `package.json` exact + `bun.lock` | MIT |
 | vite / @vitejs/plugin-react | 8.3.5 / 6.1.2 | `package.json` exact + `bun.lock` | MIT |
 | rolldown (transitif) | 1.2.14 | `bun.lock` | MIT |
 | lightningcss (transitif) | 1.33.0 | `bun.lock` | MPL-2.0 (build uniquement, non distribué) |
