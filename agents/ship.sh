@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Termine une branche agent : rebase sur origin/main, revue obligatoire, check,
-# push, PR, attente des checks, merge. Usage: ./agents/ship.sh <issue-n> ["titre"]
+# Termine une branche agent : rebase sur origin/main, revue obligatoire,
+# make check local, push, PR, merge. La CI n'est jamais attendue (ADR-011).
+# Usage: ./agents/ship.sh <issue-n> ["titre"]
 set -euo pipefail
 
 N="${1:?issue requise}"; shift
@@ -79,15 +80,9 @@ if [ -z "$PR" ]; then
   PR="$(gh pr create --base main --head "$BRANCH" --title "$TITLE" --body-file "$BODY")"
 fi
 
-# Attendre les checks AVANT de merger : un rouge ne devient jamais un merge.
-# `--fail-fast` sort au premier échec et `set -e` interdit alors la fusion.
-# Aucun check (CI pas encore enregistrée) est aussi un échec : on ne fusionne
-# pas à l'aveugle, on relance. `--match-head-commit` épingle le SHA relu.
-if ! gh pr checks "$PR" --watch --fail-fast; then
-  echo "ship: checks ROUGES ou absents — PR $PR NON fusionnée." >&2
-  exit 1
-fi
+# Le gate local fait autorité (ADR-011) : pas d'attente des checks de la PR.
+# `--match-head-commit` épingle le SHA relu ; la CI tourne en a posteriori.
 gh pr merge "$PR" --merge --delete-branch --match-head-commit "$HEAD_SHA"
 
-printf 'ship: OK\n  branche : %s\n  titre   : %s\n  PR      : %s\n  merge   : checks verts, fusionnée\n  corps   : %s\n' \
+printf 'ship: OK\n  branche : %s\n  titre   : %s\n  PR      : %s\n  merge   : make check vert, fusionnée\n  corps   : %s\n' \
   "$BRANCH" "$TITLE" "$PR" "$BODY"

@@ -36,8 +36,8 @@ Une loi ne change que par ADR. Une PR qui la viole est refusée.
    absente ou d'un autre HEAD ; un rebase change le HEAD, donc relire avant de
    relancer.
 4. **Merge auto.** `./agents/ship.sh <n> "<titre>"` (fetch, rebase, revue, check,
-   push, PR, `gh pr checks --watch`, merge). Rouge = pas de merge ; `main`
-   sous ruleset. Enfin `git fetch --prune`.
+   push, PR, merge — jamais d'attente CI, ADR-011 ; `make check` local fait
+   autorité. Enfin `git fetch --prune`.
 5. **Incident.** Même échec trois fois ⇒ issue incident.
 6. **Livraison par défaut.** Après revue et gate vert ⇒ committer, pousser,
    ouvrir la PR et la merger sur `main` sans attendre une demande. Jamais de

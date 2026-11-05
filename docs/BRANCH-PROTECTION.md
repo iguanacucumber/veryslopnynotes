@@ -1,6 +1,6 @@
 # Protection de `main`, environnement `release` et Actions
 
-État vérifié le 2026-11-04 par l'API GitHub. Ce fichier est la source de
+État vérifié le 2026-11-05 par l'API GitHub. Ce fichier est la source de
 vérité des réglages de sécurité du dépôt : toute modification se fait par
 l'interface ou `gh api`, puis se reporte ici. Les commandes de vérification
 doivent rendre les valeurs décrites, pas une approximation.
@@ -27,7 +27,9 @@ recréé). Il vise `refs/heads/main`, en `active`, sans acteur de contournement.
 | `deletion` | suppression de `main` interdite |
 | `non_fast_forward` | force-push interdit |
 | `pull_request` | merge uniquement via PR, 0 approbation requise, merge/squash/rebase autorisés |
-| `required_status_checks` | `check`, `web-smoke` et `gitleaks` requis, sans politique stricte |
+
+Aucun check requis depuis ADR-011 : le gate de merge est `make check` local ;
+la CI contrôle a posteriori.
 
 `agents/protect-main.sh` réapplique ce ruleset de façon idempotente.
 `GET /repos/.../branches/main/protection` rend **404** : la protection vient
@@ -112,8 +114,8 @@ justifie dans la PR ou l'issue.
   -f allowed_actions=all -F sha_pinning_required=false` rétablit « toutes les
   actions, sans épinglage ». La méthode est `PUT` ; `PATCH` rend 404.
 - **Ruleset `main`** : `gh api --method DELETE
-  repos/iguanacucumber/veryslopnynotes/rulesets/26465268` retire le gate de
-  `main` (PR, checks, force-push, suppression). À éviter ; `agents/protect-main.sh`
+  repos/iguanacucumber/veryslopnynotes/rulesets/26465268` retire PR,
+  force-push et suppression de `main`. À éviter ; `agents/protect-main.sh`
   le recrée.
 - **2FA** : réglage du compte, jamais modifiable par l'API du dépôt.
 

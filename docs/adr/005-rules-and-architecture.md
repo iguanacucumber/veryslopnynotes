@@ -132,16 +132,18 @@ compilation Kotlin à la place de la faire tourner.
 
 Le circuit issue → branche → PR → merge reste automatique, sans attente humaine.
 Cette autonomie n'est justifiée que par le gate : `ship.sh` rejoue `make check`
-après rebase, et la CI rejoue le même gate sur la PR. Une PR dont le gate n'a pas
-tourné n'est jamais fusionnée. Depuis #880, `ship.sh` attend
-`gh pr checks --watch` et ne fusionne jamais un check rouge ; un ruleset exige
-`check`, `web-smoke` et `gitleaks` sur `main`
-([`BRANCH-PROTECTION.md`](../architecture/BRANCH-PROTECTION.md)). Si le gate est
-allégé ou contourné, l'automatisme s'arrête : c'est le gate qui tient lieu de
-relecture finale, pas la confiance.
+après rebase, avant de pousser et de merger. Depuis #880, la PR était en outre
+conditionnée aux checks GitHub ; [ADR-011](011-local-gate-authority.md) y
+substitue le seul gate local : `make check` fait autorité, la CI vérifie a
+posteriori, et le ruleset garde PR obligatoire, suppression et force-push
+interdits sans exiger de check
+([`BRANCH-PROTECTION.md`](../architecture/BRANCH-PROTECTION.md)). Si le gate
+est allégé ou contourné, l'automatisme s'arrête : c'est le gate qui tient lieu
+de relecture finale, pas la confiance.
 Amendé par [ADR-007](007-agent-review-before-ship.md) : le gate ne juge ni le
 périmètre ni la lisibilité, donc `ship.sh` exige en plus une note de revue liée
-au HEAD.
+au HEAD. Amendé par [ADR-011](011-local-gate-authority.md) : le gate local fait
+autorité, sans attente des checks de la PR.
 
 ## Alternatives rejetées
 

@@ -1,4 +1,4 @@
-# Le gate de merge, en CI (#491).
+# Le gate, en CI (#491) — vérification, jamais un préalable (ADR-011).
 #
 # AVANT : le gate n'existait que comme convention locale (`agents/ship.sh`
 # appelle `make check`), sans aucune CI. Une PR fusionnée par un autre chemin
@@ -17,7 +17,7 @@
 # attrape ce que les tests de rendu statiques ne voient pas (parcours
 # d'appairage, déconnexion, débordements, erreurs console). #970 y ajoute les
 # scans axe (WCAG A/AA, clair et sombre), les contrastes appliqués et les
-# baselines visuelles : le job requis `web-smoke` porte aussi ces verdicts.
+# baselines visuelles : le job `web-smoke` porte aussi ces verdicts.
 #
 # Politique anti-flake (#924) : attentes d'ÉVÉNEMENT bornées par des délais
 # explicites, jamais de sleep fixe ; UNE reprise navigateur au maximum, dans
@@ -458,9 +458,9 @@ jobs:
   # échecs identiques sont un défaut, pas un flake (#924).
   #
   # NON BLOQUANT : l'émulateur et l'hôte de démonstration ne sont pas dans le
-  # dépôt ; tant que le job n'a pas une série verte, il reste un AVIS et ne doit
-  # pas être requis au ruleset. La promotion (retirer `continue-on-error`, ajouter
-  # le check requis) se décide sur des runs réels, pas sur cette PR.
+  # dépôt ; tant que le job n'a pas une série verte, il reste un AVIS et ne
+  # peut pas servir de préalable au merge (ADR-011). La promotion (retirer
+  # `continue-on-error`) se décide sur des runs réels, pas sur cette PR.
   emulator-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 40
