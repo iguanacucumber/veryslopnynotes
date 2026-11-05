@@ -54,8 +54,11 @@ describe("câblage des écritures durables (#879)", () => {
     const manuals = source("Manuals.kt");
     expect(manuals).toContain('File(context.applicationContext.filesDir, "offline/manual.json")');
     expect(manuals).toContain("DurableFile.read(it, ::parseObject)");
-    // Même chemin durable ET même garde d'époque que les trois autres stores.
-    expect(manuals).toContain("OfflineArtifacts.writeText(target, obj.toString(), SessionEpoch.current())");
+    // Même chemin durable ET même garde d'époque que les trois autres stores ;
+    // l'époque est capturée à l'ENTRÉE de l'opération publique, pas après la
+    // lecture de l'ancien état.
+    expect(manuals).toContain("OfflineArtifacts.writeText(target, obj.toString(), epoch)");
+    expect(manuals).toContain("private fun update(epoch: Long, block: (JSONObject) -> Unit): Boolean");
     // Cible, `.bak` ET quarantaine partent avec le compte (I16) : l'effacement
     // vérifié vit dans le seam pur joué par la parité.
     expect(source("ManualAccountData.kt")).toContain("DurableFile.delete(it)");

@@ -62,8 +62,11 @@ describe("CI : artefact release (#883, #928)", () => {
     expect(SCRIPT).toContain("secret potentiel");
     expect(SCRIPT).toContain("permission inattendue");
     expect(SCRIPT).toContain("tag");
-    // Un tag pousse le même build : la version est alors croisée avec l'APK.
-    expect(WORKFLOW).toMatch(/^ {4}tags: \["v\*"\]$/m);
+    // Un tag passe par `release.yml`, qui appelle CE workflow : pas de second
+    // déclencheur direct (même groupe de concurrence = runs annulés).
+    expect(WORKFLOW).not.toMatch(/^ {4}tags: \["v\*"\]$/m);
+    expect(read(".github/workflows/release.yml")).toMatch(/^ {4}tags: \["v\*"\]$/m);
+    expect(read(".github/workflows/release.yml")).toContain("uses: ./.github/workflows/release-artifact.yml");
   });
 
   test("R8 a bien produit mapping et seeds", () => {

@@ -39,11 +39,11 @@ class EncryptedLlmKeyStore(context: Context) : LlmKeyStore {
     override fun apiKey(): String? =
         prefs.getString(KEY_API_KEY, null)?.trim()?.takeIf { isValidLlmKey(it) }
 
-    override fun clear() {
-        // Même raison : sans `commit()`, l'effacement pouvait ne jamais
-        // atteindre le disque. Un échec JETTE, et le repli passe alors par
+    override fun clear(): Boolean {
+        // `commit()` synchrone, et son Boolean est RENDU : un échec ne doit pas
+        // être annoncé comme un effacement. Le repli passe alors par
         // l'effacement DUR du fichier (`discard`) : la clé ne ressuscite pas.
-        check(prefs.edit().remove(KEY_API_KEY).commit()) { "clé LLM non effacée" }
+        return prefs.edit().remove(KEY_API_KEY).commit()
     }
 
     companion object {

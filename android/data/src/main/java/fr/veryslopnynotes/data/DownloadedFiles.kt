@@ -135,9 +135,22 @@ object DownloadedFiles {
         return SessionEpoch.writeIfCurrent(epoch) {
             prune(root, MAX_CACHED_FILES - 1, MAX_CACHE_BYTES - size)
             dir.mkdirs()
-            if (!source.renameTo(file)) source.inputStream().use { input -> file.outputStream().use { input.copyTo(it) } }
-            // Une copie interrompue ne doit pas devenir une pièce TRONQUÉE
-            // servie ensuite comme valide.
+            if (!source.renameTo(file)) {
+                // Repli copie : le contenu va dans un temporaire du même
+                // dossier, sa taille est vérifiée, puis un rename atomique le
+                // met en place. Un arrêt pendant la copie ne laisse jamais une
+                // pièce TRONQUÉE servie ensuite comme valide.
+                try {
+                    writeFileAtomically(file, ByteArray(0)) { target, _ ->
+                        source.inputStream().use { input ->
+                            target.outputStream().use { output -> input.copyTo(output) }
+                        }
+                        check(target.length() == size) { "copie tronquée" }
+                    }
+                } catch (_: Exception) {
+                    return@writeIfCurrent null
+                }
+            }
             if (file.isFile && file.length() == size) {
                 file
             } else {

@@ -430,7 +430,7 @@ class SyncedRepository(
         // Alertes : balayage des contenus DÉJÀ en cache, aucun réseau (marche
         // hors ligne) — ce n'est pas une lecture du client.
         if (resource == CachePolicy.SECURITY_ALERTS) return alertsPayload(scanTexts(epoch))
-        return cachedRead(client, resource, query, previous, schoolTime)
+        return cachedRead(client, resource, query, previous, schoolTime, epoch)
     }
 
     private fun scanTexts(epoch: Long): List<SecurityAlert.ScannableText> {

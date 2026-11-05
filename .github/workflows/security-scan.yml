@@ -214,9 +214,10 @@ jobs:
             -v "$RUNNER_TEMP/tls:/tls:ro" \
             veryslopnynotes-server:scan
 
-      # Disponibilité RÉELLE : le jar est inscriptible et Chromium installé
-      # (Dockerfile). Sans jeton la route doit refuser (I8) : un 200 anonyme
-      # serait une régression de sécurité, pas un succès de smoke.
+      # Disponibilité RÉELLE : le jar est inscriptible et Chromium DÉMARRE
+      # réellement (sandbox comprise), pas seulement un binaire présent. Sans
+      # jeton la route doit refuser (I8) : un 200 anonyme serait une régression
+      # de sécurité, pas un succès de smoke.
       - name: Disponibilité
         env:
           SCRAPER_TOKEN: ci-server-image-smoke

@@ -202,7 +202,11 @@ export function TasksWidget({
       <WidgetHeader title="Devoirs" icon={<IconTasks size={24} />} onMore={onMore} />
       <span className="sr-only">{total} devoirs à faire</span>
       {tasks.length === 0 ? (
-        <p className="home-widget__empty">Rien à rendre</p>
+        // Un devoir en retard compte dans `total` : « Rien à rendre » ne vaut
+        // que si le compte est vraiment nul.
+        <p className="home-widget__empty">
+          {total === 0 ? "Rien à rendre" : "Aucun devoir à venir"}
+        </p>
       ) : (
         <div className="home-tasks">
           {tasks.map((task) => {

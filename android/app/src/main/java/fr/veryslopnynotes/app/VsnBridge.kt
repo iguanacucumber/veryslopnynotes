@@ -106,6 +106,7 @@ private val EPOCH_GUARDED_READS = setOf(
     "llm.askHomework",
     "llm.solvePhoto",
     "llm.generateRevision",
+    "revision.exportPdf",
     "llm.teacherTurn",
     "exercises.help",
 )
@@ -591,8 +592,19 @@ class VsnBridge(
             "llm.setConsent" -> setAiConsent(p)
             "llm.saveKey" -> saveLlmKey(p)
             "llm.forgetKey" -> {
-                llmKeys.clear()
-                JSONObject().put("ok", true)
+                // « Oubliée » seulement si le chiffré a réellement disparu :
+                // une mémoire vidée seule ressusciterait au prochain lancement.
+                val cleared = try {
+                    llmKeys.clear() && !llmKeys.isConfigured()
+                } catch (_: Exception) {
+                    false
+                }
+                if (cleared) {
+                    JSONObject().put("ok", true)
+                } else {
+                    JSONObject().put("ok", false)
+                        .put("message", "Clé non supprimée : réessaie dans un instant.")
+                }
             }
             "llm.askHomework" -> askHomework(p, epoch, requestId)
             "llm.solvePhoto" -> solveHomeworkPhoto(p, epoch, requestId)

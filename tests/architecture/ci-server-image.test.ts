@@ -84,6 +84,24 @@ describe("CI : image serveur (#920)", () => {
     expect(health).toContain("exit 1");
   });
 
+  test("le HEALTHCHECK vise un hôte joignable, pas 127.0.0.1 codé en dur", () => {
+    // HOST=0.0.0.0/vide -> boucle locale ; un HOST concret (IP ou nom) est
+    // sondé tel quel, sinon le HEALTHCHECK échoue sur un bind non-loopback.
+    const health = /^HEALTHCHECK[\s\S]*?process\.exit/m.exec(DOCKERFILE)?.[0] ?? "";
+    expect(health).toContain("process.env.HOST");
+    expect(health).toContain('raw==="0.0.0.0"');
+    expect(health).toContain("127.0.0.1");
+  });
+
+  test("le CMD refuse un couple TLS blanc (pas seulement absent)", () => {
+    const cmd = /^CMD \[[\s\S]*$/m.exec(DOCKERFILE)?.[0] ?? "";
+    // `[ -z ]` laisse passer "   " ; le serveur le trime ensuite en vide.
+    expect(cmd).toContain("[![:space:]]");
+    expect(cmd).toContain("TLS_CERT_FILE");
+    expect(cmd).toContain("TLS_KEY_FILE");
+    expect(cmd).toContain("exec bun run server/infrastructure/http.ts");
+  });
+
   test("journaux et nettoyage tournent même en échec", () => {
     expect(step("Journaux du conteneur")).toContain("if: always()");
     const cleanup = step("Nettoyage du conteneur");

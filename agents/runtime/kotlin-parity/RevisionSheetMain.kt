@@ -11,6 +11,8 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.PrintStream
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 private fun JVal.Obj.str(key: String): String? = (fields[key] as? JVal.Str)?.value
 
@@ -47,6 +49,44 @@ private fun sheetFrom(op: JVal.Obj): RevisionSheet = RevisionSheet(
     createdAt = op.str("createdAt") ?: "2026-10-19T08:00:00Z",
 )
 
+private fun validSheet(id: String): RevisionSheet = RevisionSheet(
+    id = id,
+    examId = "devoir-1",
+    subject = "Mathematiques",
+    date = "2026-10-19",
+    title = "Fiche revision Mathematiques",
+    body = "Rappel du cours.",
+    sources = listOf("Cours"),
+    templateVersion = REVISION_TEMPLATE_VERSION,
+    createdAt = "2026-10-19T08:00:00Z",
+)
+
+/**
+ * KV qui force la course du lire-modifier-écrire : les deux sauvegardes
+ * lisent l'index AVANT que l'une ait écrit. Sous verrou, la seconde attend le
+ * délai puis relit l'index à jour ; sans verrou, une fiche est perdue.
+ */
+private class BarrierKv : RevisionKv {
+    private val data = LinkedHashMap<String, ByteArray>()
+    private val indexReads = CountDownLatch(2)
+
+    @Synchronized
+    override fun get(key: String): ByteArray? {
+        val value = data[key]?.copyOf()
+        if (key == "revision:index" || key == "revision:index:journal") {
+            indexReads.countDown()
+            indexReads.await(200, TimeUnit.MILLISECONDS)
+        }
+        return value
+    }
+
+    @Synchronized
+    override fun set(key: String, value: ByteArray, epoch: Long): Boolean {
+        data[key] = value.copyOf()
+        return true
+    }
+}
+
 private fun driver(op: JVal.Obj): JVal = when (op.str("op")) {
     // Les lignes que l'export dessine (le PDF les pagine).
     "pdfLines" -> {
@@ -70,6 +110,25 @@ private fun driver(op: JVal.Obj): JVal = when (op.str("op")) {
     "sources" -> {
         val sources = revisionSheetSources(op.str("fiche") ?: "", op.strList("canonical"))
         sheetOk("sources" to JVal.Arr(sources.map { JVal.Str(it) }))
+    }
+    // Deux sauvegardes LLM simultanées : l'index et le journal ne doivent
+    // perdre aucun id (sérialisation par RevisionKv).
+    "concurrentSave" -> {
+        val store = BarrierKv()
+        val start = CountDownLatch(1)
+        val threads = listOf("fiche-a", "fiche-b").map { id ->
+            Thread {
+                start.await()
+                saveRevisionSheet(store, validSheet(id), 0L)
+            }
+        }
+        threads.forEach { it.start() }
+        start.countDown()
+        threads.forEach { it.join(5000) }
+        sheetOk(
+            "ids" to JVal.Arr(listRevisionSheets(store).map { JVal.Str(it.id) }),
+            "alive" to JVal.Bool(threads.any { it.isAlive }),
+        )
     }
     else -> throw IllegalArgumentException("pilote: opération inconnue : ${op.str("op")}")
 }

@@ -177,7 +177,8 @@ export function AssistantCards({ snapshot, loading }: { snapshot: SettingsSnapsh
     setLlmError("");
     setForgettingKey(true);
     try {
-      await bridge.forgetLlmKey();
+      const result = await bridge.forgetLlmKey();
+      if (!result.ok) throw new Error(result.message ?? "");
       setLlmConfigured(false);
       notify("Clé de l'assistant oubliée.");
     } catch (error) {

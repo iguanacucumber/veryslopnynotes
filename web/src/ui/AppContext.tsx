@@ -87,10 +87,28 @@ function parseTheme(raw: string | null): Theme {
   return raw === "LIGHT" || raw === "DARK" || raw === "SYSTEM" ? raw : "SYSTEM";
 }
 
+/** Le stockage de la WebView peut être absent, plein ou refusé (SecurityError) :
+ *  l'état mémoire reste la source, jamais une exception pendant le rendu. */
+function readStored(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStored(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Quota ou stockage indisponible : le choix reste appliqué en mémoire.
+  }
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => parseTheme(localStorage.getItem("vsn:theme")));
+  const [theme, setThemeState] = useState<Theme>(() => parseTheme(readStored("vsn:theme")));
   const [systemDark, setSystemDark] = useState(() => matchMedia("(prefers-color-scheme: dark)").matches);
-  const [scheme, setSchemeState] = useState<string>(() => parseScheme(localStorage.getItem("vsn:scheme")));
+  const [scheme, setSchemeState] = useState<string>(() => parseScheme(readStored("vsn:scheme")));
   const [textSize, setTextSizeState] = useState<TextSizeChoice>("SYSTEM");
   const [textZoom, setTextZoom] = useState(100);
   const [refreshTick, setRefreshTick] = useState(0);
@@ -110,21 +128,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.dataset["theme"] = dark ? "dark" : "light";
-    // Le bootstrap de `index.html` a posé la barre système avant le rendu ;
-    // un changement de thème à chaud la suit. La couleur vient de `--page`
-    // (tokens.css), jamais d'un littéral dans un composant.
-    const meta = document.querySelector('meta[name="theme-color"]');
-    const page = getComputedStyle(document.documentElement).getPropertyValue("--page").trim();
-    if (meta && page) meta.setAttribute("content", page);
   }, [dark]);
 
   // Palette posée en variables CSS sur `<html>` : un seul point d'écriture,
   // aucun re-rendu des écrans (elles lisent `var(--…)`).
   useEffect(() => {
     const root = document.documentElement;
-    for (const [name, value] of Object.entries(cssVarsOf(palette, dark))) {
+    const vars = cssVarsOf(palette, dark);
+    for (const [name, value] of Object.entries(vars)) {
       root.style.setProperty(name, value);
     }
+    // La barre système suit la palette RÉELLEMENT posée : changer de palette
+    // change `--page` sans changer `dark`, donc elle ne peut pas dépendre de lui seul.
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", palette.page);
   }, [palette, dark]);
 
   // Publiée en `data-scheme` : chaque matière (`styles/liquid-glass.css`,
@@ -159,7 +176,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Le natif est déjà l'écrivain de `app.setTheme` ; ici on ne fait que réparer
   // un cache local effacé par une purge de compte (I16).
   useEffect(() => {
-    if (localStorage.getItem("vsn:theme") !== null) return;
+    if (readStored("vsn:theme") !== null) return;
     let alive = true;
     void bridge
       .theme()
@@ -167,7 +184,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (!alive) return;
         const restored = parseTheme(state.theme);
         setThemeState(restored);
-        localStorage.setItem("vsn:theme", restored);
+        writeStored("vsn:theme", restored);
       })
       .catch(() => undefined);
     return () => {
@@ -245,7 +262,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next);
-    localStorage.setItem("vsn:theme", next);
+    writeStored("vsn:theme", next);
     void bridge.setTheme(next).catch(() => undefined);
   }, []);
 
@@ -254,7 +271,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setScheme = useCallback((next: string) => {
     const id = parseScheme(next);
     setSchemeState(id);
-    localStorage.setItem("vsn:scheme", id);
+    writeStored("vsn:scheme", id);
   }, []);
 
   // Le natif reste l'écrivain : il persiste le choix et applique `textZoom`.

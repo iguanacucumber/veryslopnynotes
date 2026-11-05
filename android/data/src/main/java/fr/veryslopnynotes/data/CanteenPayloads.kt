@@ -31,7 +31,9 @@ private data class MenusPayload(
 internal fun menusPayload(client: Client, clock: Clock = schoolClock()): String {
     val (from, to) = currentWeekLocal(clock)
     val fromMs = from.atZone(SCHOOL_ZONE).toInstant().toEpochMilli()
-    val toMs = to.plusDays(1).atZone(SCHOOL_ZONE).toInstant().toEpochMilli() - 1
+    // `to` finit déjà le dimanche 23:59:59 : +999 garde la borne milliseconde
+    // inclusive sans déborder sur le lundi suivant.
+    val toMs = to.atZone(SCHOOL_ZONE).toInstant().toEpochMilli() + 999
     var seq = 0
     val read = client.menusPartial(from, to)
     val menus = read.value.mapNotNull { m ->

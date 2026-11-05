@@ -14,7 +14,9 @@ function quiet(): void {
 }
 
 function launch(env: Record<string, string>): ReturnType<typeof Bun.serve> {
-  const server = start({ PORT: "0", ...env });
+  // Clair hors boucle locale réservé aux tests : l'override explicite évite de
+  // faire de `NODE_ENV=test` une porte de production.
+  const server = start({ PORT: "0", VSN_TEST_ALLOW_CLEARTEXT: "1", ...env });
   servers.push(server);
   return server;
 }

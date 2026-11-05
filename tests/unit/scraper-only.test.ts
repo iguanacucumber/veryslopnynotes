@@ -151,6 +151,7 @@ describe("scraper-only (#209)", () => {
     // La table ne liste plus que le vivant ; les routes métier supprimées sont 404.
     expect(API_ROUTES).toEqual([
       { method: "GET", path: "/v1/health" },
+      { method: "GET", path: "/v1/ready" },
       { method: "POST", path: "/v1/manuals/scrape" },
       { method: "POST", path: "/v1/web/scrape" },
     ]);

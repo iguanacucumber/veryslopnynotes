@@ -10,13 +10,15 @@
 // re-vérifiées.
 // I8 : PORT/HOST, chemins TLS et jeton public = seules variables lues, dans start().
 import { createHash, timingSafeEqual } from "node:crypto";
-import { accessSync, constants, existsSync, readFileSync } from "node:fs";
+import { accessSync, constants, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { CONTRACTS_VERSION } from "../../shared/contracts/models";
 import {
+  HEALTH_PATH,
   MANUALS_SCRAPE_MAX_BODY_CHARS,
   MANUALS_SCRAPE_PATH,
   MAX_SCRAPE_BODY_BYTES,
+  READY_PATH,
   WEB_SCRAPE_MAX_BODY_CHARS,
   WEB_SCRAPE_PATH,
   isManualsScrapeDoc,
@@ -26,7 +28,7 @@ import {
 } from "../../shared/contracts/api";
 import { prepareJarStore } from "./jar-store";
 import type { ManualDoc } from "./manuals";
-import { DEFAULT_AUTH_FILE, ScrapeManualsError, scrapeManuals } from "./manuals-scrape";
+import { CHROMIUM_LAUNCH_OPTIONS, DEFAULT_AUTH_FILE, ScrapeManualsError, scrapeManuals } from "./manuals-scrape";
 import { PublicAdmission } from "./rate-limit";
 import type { HostResolver } from "./ssrf";
 import { scrapeWebPage } from "./web-scrape";
@@ -54,6 +56,10 @@ export interface ScraperDeps {
       readonly defaultAuthFile?: string;
       readonly signal?: AbortSignal;
       readonly resolveHost?: HostResolver;
+      /** Temps restant avant l'échéance HTTP absolue. */
+      readonly timeoutMs?: number;
+      /** Journal du serveur (compteurs seulement, jamais l'URL). */
+      readonly logger?: (message: string) => void;
     },
   ) => Promise<ManualDoc[]>;
   /**
@@ -65,6 +71,8 @@ export interface ScraperDeps {
       readonly startUrl: string;
       readonly signal?: AbortSignal;
       readonly resolveHost?: HostResolver;
+      readonly timeoutMs?: number;
+      readonly logger?: (message: string) => void;
     },
   ) => Promise<WebDoc[]>;
   /**
@@ -110,23 +118,27 @@ export interface App {
   readonly markDraining: () => void;
 }
 
-const HEALTH_PATH = "/v1/health";
-const READY_PATH = "/v1/ready";
-
 /** Le drain laisse finir un scrape de 30 s, avec une marge de 5 s. */
 export const DRAIN_TIMEOUT_MS = 35_000;
 
 type Closable = { readonly stop: (closeActiveConnections?: boolean) => Promise<void> | void };
 
 /**
- * Sonde réelle, sans lancer Chromium : le binaire doit exister et le
- * répertoire du jar être inscriptible. Un scrape qui échouerait pour l'un ou
- * l'autre ne doit pas recevoir de trafic.
+ * Sonde réelle : le jar doit être inscriptible et Chromium doit POUVOIR
+ * DÉMARRER. `existsSync` ne suffit pas : un seccomp qui refuse les user
+ * namespaces laisse le binaire en place et fait échouer chaque scrape.
+ * Le lancement est court et mis en cache : `/v1/ready` reste une sonde, pas
+ * un scrape déguisé.
  */
+const READY_BROWSER_LAUNCH_TIMEOUT_MS = 3_000;
+const READY_BROWSER_PROBE_TTL_MS = 60_000;
+let browserProbeCache: { readonly at: number; readonly ok: boolean } | null = null;
+let browserProbePending: Promise<boolean> | null = null;
+
 async function defaultReadiness(authFile: string): Promise<Record<string, boolean>> {
   return {
     jar: jarWritable(authFile),
-    browser: await browserInstalled(),
+    browser: await browserLaunchable(),
   };
 }
 
@@ -139,13 +151,41 @@ function jarWritable(authFile: string): boolean {
   }
 }
 
-async function browserInstalled(): Promise<boolean> {
+async function browserLaunchable(): Promise<boolean> {
+  const now = Date.now();
+  if (browserProbeCache !== null && now - browserProbeCache.at < READY_BROWSER_PROBE_TTL_MS) {
+    return browserProbeCache.ok;
+  }
+  // Un seul lancement à la fois : deux HEALTHCHECK simultanés ne doivent pas
+  // empiler deux Chromium.
+  if (browserProbePending !== null) return browserProbePending;
+  browserProbePending = probeBrowserLaunch()
+    .then((ok) => {
+      browserProbeCache = { at: Date.now(), ok };
+      return ok;
+    })
+    .finally(() => {
+      browserProbePending = null;
+    });
+  return browserProbePending;
+}
+
+/** Lance puis ferme Chromium ; toute erreur (binaire, sandbox, délai) = faux. */
+async function probeBrowserLaunch(): Promise<boolean> {
+  let browser: { close: () => Promise<void> } | undefined;
   try {
-    const pw = (await import("playwright")) as { chromium: { executablePath: () => string } };
-    const executable = pw.chromium.executablePath();
-    return Boolean(executable) && existsSync(executable);
+    const pw = (await import("playwright")) as {
+      chromium: { launch: (options: Record<string, unknown>) => Promise<{ close: () => Promise<void> }> };
+    };
+    browser = await pw.chromium.launch({
+      ...CHROMIUM_LAUNCH_OPTIONS,
+      timeout: READY_BROWSER_LAUNCH_TIMEOUT_MS,
+    });
+    return true;
   } catch {
     return false;
+  } finally {
+    if (browser !== undefined) await browser.close().catch(() => {});
   }
 }
 
@@ -341,14 +381,35 @@ function discardBody(req: Request): void {
   void req.body.cancel().catch(() => {});
 }
 
+/** Course d'une promesse contre l'échéance : un corps lent n'immobilise pas le slot. */
+function readWithAbort<T>(pending: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return pending;
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener("abort", onAbort, { once: true });
+    pending.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (err) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(err);
+      },
+    );
+  });
+}
+
 /**
  * Corps JSON lu EN STREAMING et borné en OCTETS : un `req.text()` bufferisait
  * tout le corps avant de mesurer, donc une route ouverte pouvait être remplie
  * avec une taille arbitraire. Le `content-type` est exigé AVANT toute lecture ;
  * au-delà du plafond, la lecture s'arrête et le flux est annulé.
  */
-async function readJsonBody(req: Request): Promise<ReadJsonBody> {
+async function readJsonBody(req: Request, signal?: AbortSignal): Promise<ReadJsonBody> {
   const mediaType = (req.headers.get("content-type") ?? "").split(";", 1)[0]?.trim().toLowerCase();
+  if (signal?.aborted) throw signal.reason;
   if (mediaType !== "application/json") {
     discardBody(req);
     return {
@@ -367,7 +428,7 @@ async function readJsonBody(req: Request): Promise<ReadJsonBody> {
   let size = 0;
   try {
     for (;;) {
-      const { done, value } = await reader.read();
+      const { done, value } = await readWithAbort(reader.read(), signal);
       if (done) break;
       if (!value || value.byteLength === 0) continue;
       size += value.byteLength;
@@ -377,8 +438,9 @@ async function readJsonBody(req: Request): Promise<ReadJsonBody> {
       }
       chunks.push(value);
     }
-  } catch {
+  } catch (err) {
     await reader.cancel().catch(() => {});
+    if (signal?.aborted) throw signal.reason;
     return { ok: false, response: error("bad_request", 400, "invalid JSON body") };
   }
   const bytes = new Uint8Array(size);
@@ -388,6 +450,62 @@ async function readJsonBody(req: Request): Promise<ReadJsonBody> {
     offset += chunk.byteLength;
   }
   return { ok: true, text: new TextDecoder().decode(bytes) };
+}
+
+interface RequestDeadline {
+  readonly controller: AbortController;
+  /** Temps restant avant l'échéance absolue (jamais 0). */
+  readonly remainingMs: () => number;
+  readonly dispose: () => void;
+}
+
+/**
+ * UNE échéance pour tout le handler : lecture du corps, résolution DNS, scrape
+ * et lecture du HTML. `idleTimeout` de Bun ne borne que l'inactivité du
+ * transport : un corps qui goutte indéfiniment ne déclenche jamais ce délai.
+ */
+function startRequestDeadline(req: Request, timeoutMs: number): RequestDeadline {
+  const controller = new AbortController();
+  const deadlineAt = Date.now() + timeoutMs;
+  const timer = setTimeout(() => controller.abort(timeoutError(timeoutMs)), timeoutMs);
+  const onClientAbort = () => controller.abort(new ScrapeManualsError("client aborte"));
+  if (req.signal) {
+    if (req.signal.aborted) onClientAbort();
+    else req.signal.addEventListener("abort", onClientAbort, { once: true });
+  }
+  return {
+    controller,
+    remainingMs: () => Math.max(1, deadlineAt - Date.now()),
+    dispose: () => {
+      clearTimeout(timer);
+      req.signal?.removeEventListener("abort", onClientAbort);
+    },
+  };
+}
+
+/** Annulation avant le scrape : client parti = 502, échéance = 504. */
+function abortedResponse(req: Request, controller: AbortController): Response {
+  if (req.signal?.aborted) return error("school_unreachable", 502, "scrape impossible");
+  const reason = controller.signal.reason;
+  if (reason instanceof ScrapeManualsError && reason.reason !== "timeout") {
+    return error("school_unreachable", 502, "scrape impossible");
+  }
+  return error("timeout", 504, "delai de scrape depasse");
+}
+
+/** Rejette avec le motif de l'abandon (délai typé, client, navigateur). */
+function abortRejection(controller: AbortController, timeoutMs: number): Promise<never> {
+  return new Promise<never>((_, reject) => {
+    const onAbort = () => {
+      const reason = controller.signal.reason;
+      reject(reason instanceof Error ? reason : timeoutError(timeoutMs));
+    };
+    if (controller.signal.aborted) {
+      onAbort();
+      return;
+    }
+    controller.signal.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 async function handleScrape(
@@ -418,12 +536,22 @@ async function handleScrape(
     onSettled();
   };
   let scrapeStarted = false;
+  // Échéance ABSOLUE dès l'arrivée de la requête : le corps lent, le DNS et
+  // le scrape partagent le même budget. Sans elle, `idleTimeout` (inactivité)
+  // laissait un corps goutte-à-goutte tenir le slot indéfiniment.
+  const deadline = startRequestDeadline(req, timeoutMs);
   // Annulation : le délai dépassé ou le client parti doivent TUER le
   // navigateur, pas seulement rejeter la promesse (Chromium fantôme).
-  const controller = new AbortController();
+  const controller = deadline.controller;
   let done = false;
   try {
-    const read = await readJsonBody(req);
+    let read: ReadJsonBody;
+    try {
+      read = await readJsonBody(req, controller.signal);
+    } catch (err) {
+      if (controller.signal.aborted) return abortedResponse(req, controller);
+      throw err;
+    }
     if (!read.ok) return read.response;
     if (read.text.length > MANUALS_SCRAPE_MAX_BODY_CHARS) {
       return error("bad_request", 400, "invalid body");
@@ -451,10 +579,8 @@ async function handleScrape(
     if (hasAuthFileField(body)) {
       return error("bad_request", 400, "authFile : le jar de session est choisi par le serveur");
     }
-    if (req.signal?.aborted) return error("school_unreachable", 502, "scrape impossible");
+    if (controller.signal.aborted) return abortedResponse(req, controller);
     let docs: ManualDoc[];
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let onClientAbort: (() => void) | undefined;
     try {
       const scrapeP = runScrape(
         { platform: body.platform },
@@ -469,6 +595,9 @@ async function handleScrape(
           resolveHost,
           // Le délai dépassé ou le client parti tuent le navigateur.
           signal: controller.signal,
+          // Budget RESTANT : le corps déjà lu ne rallonge pas le scrape.
+          timeoutMs: deadline.remainingMs(),
+          logger: log,
         },
       );
       // La course peut être perdue (délai, abandon) : la rejection tardive du
@@ -478,33 +607,9 @@ async function handleScrape(
       // part vite, mais le slot reste tenu tant que le navigateur n'a pas fini.
       scrapeStarted = true;
       void scrapeP.then(releaseSlot, releaseSlot);
-      const timeoutP = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          // Rejetter PUIS annuler : la course tranche sur le délai, pas sur
-          // l'erreur du navigateur fermé.
-          reject(timeoutError(timeoutMs));
-          controller.abort();
-        }, timeoutMs);
-      });
-      const abortP = new Promise<never>((_, reject) => {
-        if (!req.signal) return;
-        onClientAbort = () => {
-          reject(new ScrapeManualsError("client aborte"));
-          controller.abort();
-        };
-        if (req.signal.aborted) {
-          onClientAbort();
-          return;
-        }
-        req.signal.addEventListener("abort", onClientAbort, { once: true });
-      });
-      try {
-        docs = await Promise.race([scrapeP, timeoutP, abortP]);
-        done = true;
-      } finally {
-        if (timer) clearTimeout(timer);
-        if (onClientAbort) req.signal?.removeEventListener("abort", onClientAbort);
-      }
+      // L'échéance est déjà armée : elle rejette avec le motif `timeout` (504).
+      docs = await Promise.race([scrapeP, abortRejection(controller, timeoutMs)]);
+      done = true;
     } catch (err) {
       // Le sandbox est une exigence, pas une option : un hôte qui refuse les
       // user namespaces fait échouer le lancement. On le dit franchement,
@@ -546,6 +651,7 @@ async function handleScrape(
     if (!Array.isArray(docs) || !docs.every(isManualsScrapeDoc)) return error("internal", 500, "invalid payload");
     return Response.json(payload);
   } finally {
+    deadline.dispose();
     // Scrape non terminé (erreur, exception) : on annule pour ne pas laisser
     // un Chromium orphelin en arrière-plan.
     if (!done) controller.abort();
@@ -582,10 +688,18 @@ async function handleWebScrape(
     onSettled();
   };
   let scrapeStarted = false;
-  const controller = new AbortController();
+  // Même échéance ABSOLUE que le scrape de manuel : corps + DNS + scrape.
+  const deadline = startRequestDeadline(req, timeoutMs);
+  const controller = deadline.controller;
   let done = false;
   try {
-    const read = await readJsonBody(req);
+    let read: ReadJsonBody;
+    try {
+      read = await readJsonBody(req, controller.signal);
+    } catch (err) {
+      if (controller.signal.aborted) return abortedResponse(req, controller);
+      throw err;
+    }
     if (!read.ok) return read.response;
     if (read.text.length > WEB_SCRAPE_MAX_BODY_CHARS) {
       return error("bad_request", 400, "invalid body");
@@ -597,45 +711,22 @@ async function handleWebScrape(
       return error("bad_request", 400, "invalid JSON body");
     }
     if (!isWebScrapeRequest(body)) return error("bad_request", 400, "invalid web scrape request");
-    if (req.signal?.aborted) return error("school_unreachable", 502, "scrape impossible");
+    if (controller.signal.aborted) return abortedResponse(req, controller);
     let docs: WebDoc[];
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let onClientAbort: (() => void) | undefined;
     try {
       const scrapeP = runScrape({
         startUrl: body.url,
         resolveHost,
         signal: controller.signal,
+        timeoutMs: deadline.remainingMs(),
+        logger: log,
       });
       scrapeP.catch(() => {});
       // Le slot suit la fin RÉELLE du scrape, pas le retour de la course.
       scrapeStarted = true;
       void scrapeP.then(releaseSlot, releaseSlot);
-      const timeoutP = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          reject(timeoutError(timeoutMs));
-          controller.abort();
-        }, timeoutMs);
-      });
-      const abortP = new Promise<never>((_, reject) => {
-        if (!req.signal) return;
-        onClientAbort = () => {
-          reject(new ScrapeManualsError("client aborte"));
-          controller.abort();
-        };
-        if (req.signal.aborted) {
-          onClientAbort();
-          return;
-        }
-        req.signal.addEventListener("abort", onClientAbort, { once: true });
-      });
-      try {
-        docs = await Promise.race([scrapeP, timeoutP, abortP]);
-        done = true;
-      } finally {
-        if (timer) clearTimeout(timer);
-        if (onClientAbort) req.signal?.removeEventListener("abort", onClientAbort);
-      }
+      docs = await Promise.race([scrapeP, abortRejection(controller, timeoutMs)]);
+      done = true;
     } catch (err) {
       // Le sandbox est une exigence, pas une option : un hôte qui refuse les
       // user namespaces fait échouer le lancement. On le dit franchement,
@@ -667,6 +758,7 @@ async function handleWebScrape(
     if (!Array.isArray(docs) || !docs.every(isWebScrapeDoc)) return error("internal", 500, "invalid payload");
     return Response.json(payload);
   } finally {
+    deadline.dispose();
     if (!done) controller.abort();
     if (!scrapeStarted) releaseSlot();
   }
@@ -792,14 +884,23 @@ function bindingFromEnv(env: Record<string, string | undefined>): Binding {
 }
 
 /**
- * TLS : `TLS_CERT_FILE` + `TLS_KEY_FILE` = HTTPS, rien = HTTP (tests et
- * Docker). Chemins vers du matériel local, pas des credentials : rien à
- * commiter, clé générée hors dépôt. Une seule des deux = REFUS explicite,
- * jamais un repli silencieux en clair (l'app interdit le clairtext).
+ * TLS : `TLS_CERT_FILE` + `TLS_KEY_FILE` = HTTPS, rien = HTTP sur la boucle
+ * locale (tests et usage local). Chemins vers du matériel local, pas des
+ * credentials : rien à commiter, clé générée hors dépôt. Une seule des deux,
+ * ou deux valeurs blanches, = REFUS explicite, jamais un repli silencieux en
+ * clair (l'app interdit le clairtext).
  */
 function tlsFromEnv(env: Record<string, string | undefined>): { cert: string; key: string } | null {
   const cert = envValue(env, "TLS_CERT_FILE");
   const key = envValue(env, "TLS_KEY_FILE");
+  // Blanc explicite (espaces seuls) = intention TLS incomplète : refus, pas
+  // un retour silencieux au clair (le shell `-z` de l'image le laisserait passer).
+  if ((env["TLS_CERT_FILE"] ?? "") !== "" && !cert) {
+    throw new Error("TLS_CERT_FILE blanc : chemin PEM vide");
+  }
+  if ((env["TLS_KEY_FILE"] ?? "") !== "" && !key) {
+    throw new Error("TLS_KEY_FILE blanc : chemin PEM vide");
+  }
   if (!cert && !key) return null;
   if (!cert || !key) {
     throw new Error(
@@ -808,6 +909,15 @@ function tlsFromEnv(env: Record<string, string | undefined>): { cert: string; ke
     );
   }
   return { cert: readPem(cert, "TLS_CERT_FILE"), key: readPem(key, "TLS_KEY_FILE") };
+}
+
+/**
+ * Clair hors boucle locale = session du serveur exposée. Seul un override
+ * NOMMÉ, réservé aux tests, peut l'ouvrir ; un opérateur qui oublie TLS
+ * échoue au démarrage, pas en silence.
+ */
+function testCleartextAllowed(env: Record<string, string | undefined>): boolean {
+  return env["VSN_TEST_ALLOW_CLEARTEXT"] === "1";
 }
 
 function readPem(path: string, variable: string): string {
@@ -860,6 +970,13 @@ export function start(
   const port = parsePort(envValue(env, "PORT"));
   const binding = bindingFromEnv(env);
   const tls = tlsFromEnv(env);
+  if (!tls && !isLoopbackHost(binding.hostname) && !testCleartextAllowed(env)) {
+    throw new Error(
+      `TLS obligatoire hors boucle locale (HOST=${JSON.stringify(binding.hostname)}) : ` +
+        "un bind non-loopback en clair expose la session du serveur (I8). " +
+        "Fournir TLS_CERT_FILE/TLS_KEY_FILE, ou rester sur 127.0.0.1 devant un proxy TLS.",
+    );
+  }
   prepareJarStore(DEFAULT_AUTH_FILE, (message) => console.log(`[server] ${message}`));
   const app = createApp(binding.token ? { token: binding.token } : {});
   if (!tls) {

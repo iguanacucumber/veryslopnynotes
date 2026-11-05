@@ -77,6 +77,19 @@ describe("FileProvider : autorité dérivée et ouvreur manquant (#878)", () => 
     expect(REVISION).toContain('put("ok", false).put("message", viewerError)');
   });
 
+  test("l'export PDF capture l'époque AVANT la lecture et la garde à la livraison", () => {
+    const exportFn = REVISION.slice(
+      REVISION.indexOf("internal fun VsnBridge.revisionExportPdf"),
+      REVISION.indexOf("internal fun VsnBridge.revisionJson"),
+    );
+    const epoch = exportFn.indexOf("val epoch = SessionEpoch.current()");
+    const load = exportFn.indexOf("loadRevisionSheet(store, id)");
+    expect(epoch).toBeGreaterThan(-1);
+    expect(epoch).toBeLessThan(load);
+    // Le pont vérifie l'époque avant l'envoi et refuse une livraison tardive.
+    expect(BRIDGE).toMatch(/EPOCH_GUARDED_READS = setOf\([\s\S]*?"revision\.exportPdf"/);
+  });
+
   test("le manifeste dérive l'autorité et déclare la visibilité du viewer", () => {
     expect(MANIFEST).toContain('android:authorities="${applicationId}.fileprovider"');
     expect(MANIFEST).not.toContain("fr.veryslopnynotes.app.fileprovider");

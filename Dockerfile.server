@@ -40,10 +40,14 @@ USER vsn
 # Drain : SIGTERM = /v1/ready 503 puis fin des scrapes en cours (35 s max).
 STOPSIGNAL SIGTERM
 # Sonde de DISPONIBILITÉ, pas de simple vivacité : le conteneur n'est healthy
-# que si le jar est inscriptible et Chromium installé. Le couple TLS local est
-# volontairement non vérifié (auto-signé possible, loopback uniquement) ; le
-# jeton éventuel vient de l'environnement, jamais de l'image.
+# que si le jar est inscriptible et Chromium DÉMARRE réellement (seccomp
+# compris). HOST=0.0.0.0 ou vide se sonde sur 127.0.0.1 ; un HOST concret est
+# joint tel quel. Le couple TLS local est volontairement non vérifié
+# (auto-signé possible, loopback uniquement) ; le jeton éventuel vient de
+# l'environnement, jamais de l'image.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD bun -e 'const r = await fetch(`https://127.0.0.1:${process.env.PORT || 3000}/v1/ready`, { headers: process.env.SCRAPER_TOKEN ? { authorization: `Bearer ${process.env.SCRAPER_TOKEN}` } : {}, tls: { rejectUnauthorized: false } }); process.exit(r.ok ? 0 : 1)'
-# TLS obligatoire (session du serveur, I8) : jamais de repli en clair.
-CMD ["sh", "-c", "if [ -z \"$TLS_CERT_FILE\" ] || [ -z \"$TLS_KEY_FILE\" ]; then echo 'scraper : TLS_CERT_FILE et TLS_KEY_FILE obligatoires (I8) — pas de repli en clair.' >&2; exit 1; fi; exec bun run server/infrastructure/http.ts"]
+  CMD bun -e 'const raw=(process.env.HOST||"").trim().replace(/^\[|\]$/g,"");const host=raw===""||raw==="0.0.0.0"||raw==="::"?"127.0.0.1":raw.includes(":")?"["+raw+"]":raw;const r = await fetch(`https://${host}:${process.env.PORT || 3000}/v1/ready`, { headers: process.env.SCRAPER_TOKEN ? { authorization: `Bearer ${process.env.SCRAPER_TOKEN}` } : {}, tls: { rejectUnauthorized: false } }); process.exit(r.ok ? 0 : 1)'
+# TLS obligatoire (session du serveur, I8) : jamais de repli en clair. Un
+# couple blanc (espaces seuls) passe `-z` en shell mais se trime en vide côté
+# serveur : on exige donc AU MOINS un caractère non blanc dans chaque valeur.
+CMD ["sh", "-c", "case \"${TLS_CERT_FILE:-}\" in *[![:space:]]*) ;; *) echo 'scraper : TLS_CERT_FILE et TLS_KEY_FILE obligatoires (I8) — pas de repli en clair.' >&2; exit 1;; esac; case \"${TLS_KEY_FILE:-}\" in *[![:space:]]*) ;; *) echo 'scraper : TLS_CERT_FILE et TLS_KEY_FILE obligatoires (I8) — pas de repli en clair.' >&2; exit 1;; esac; exec bun run server/infrastructure/http.ts"]

@@ -93,7 +93,7 @@ export default function SettingsScreen() {
       Icon: IconShield,
     },
     {
-      target: "reglages-donnees",
+      target: "reglages-suppression",
       label: "Données",
       detail: "Tout supprimer",
       tone: "device",
@@ -187,7 +187,7 @@ export default function SettingsScreen() {
         <DiagnosticExportCard />
       </Section>
 
-      <Section id="reglages-donnees" title="Données">
+      <Section id="reglages-suppression" title="Données">
         <DeleteAllCard />
       </Section>
 

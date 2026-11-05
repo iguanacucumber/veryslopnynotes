@@ -9,6 +9,7 @@ import type {
   LessonSaveResult,
   SettingsSnapshot,
 } from "../../web/src/bridge/types";
+import { createSeq } from "../../web/src/lib/seq";
 import { readBridgeSource } from "../unit/fixtures/bridge-source";
 
 const ROOT = join(import.meta.dir, "..", "..");
@@ -85,6 +86,25 @@ describe("course notes — bridge and screen (#586)", () => {
     expect(screen).toContain("Prendre une photo");
     expect(screen).toContain("Choisir une image");
     expect(screen).toContain("sa copie locale est effacée");
+  });
+
+  test("une ouverture tardive n'écrase pas le brouillon courant", () => {
+    const seq = createSeq();
+    const first = seq.next();
+    const second = seq.next();
+    expect(seq.isCurrent(first)).toBe(false);
+    expect(seq.isCurrent(second)).toBe(true);
+    seq.invalidate();
+    expect(seq.isCurrent(second)).toBe(false);
+
+    const screen = source("features/course-notes/CourseNotesScreen.tsx");
+    expect(screen).toContain("const openSeq = useRef(createSeq())");
+    expect(screen).toContain("const seq = openSeq.current.next()");
+    expect(screen).toContain("if (!openSeq.current.isCurrent(seq)) return;");
+    // « Ajouter » invalide l'ouverture en vol : elle ne remplacera pas le brouillon.
+    expect(screen.indexOf("openSeq.current.invalidate()")).toBeGreaterThan(
+      screen.indexOf("function newNote"),
+    );
   });
 
   test("subjects without notes are compact rows, not cards", () => {

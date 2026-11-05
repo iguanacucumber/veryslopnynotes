@@ -42,6 +42,7 @@ describe("clé LLM — « Oublier » survit à un Keystore mort (#749)", () => {
     const res = await ask<{
       saved: string | null;
       configured: boolean;
+      cleared: boolean;
       afterForget: string | null;
       discards: number;
       nextLaunch: string | null;
@@ -53,6 +54,7 @@ describe("clé LLM — « Oublier » survit à un Keystore mort (#749)", () => {
     // « Oublier » la vide…
     expect(res.afterForget).toBeNull();
     // …ET efface le fichier chiffré, illisible mais bien présent sur disque.
+    expect(res.cleared).toBe(true);
     expect(res.discards).toBe(1);
     // Lancement suivant, Keystore réparé : la clé de l'ancien compte ne
     // ressuscite pas. C'était le défaut : elle revenait.
@@ -132,6 +134,17 @@ describe("clé LLM — « Oublier » survit à un Keystore mort (#749)", () => {
     expect(res.health).toBe("UNAVAILABLE");
   });
 
+  test.skipIf(skip)("une suppression invérifiable rend `false`, jamais un faux « effacé »", async () => {
+    const res = await ask<{ cleared: boolean; apiKey: string | null; disk: string | null; health: string }>({
+      op: "clear-discard-fails",
+    });
+    expect(res.cleared).toBe(false);
+    expect(res.apiKey).toBeNull();
+    // Le fichier n'a pas pu être supprimé : la purge ne doit pas le déclarer parti.
+    expect(res.disk).toBe("cle-a");
+    expect(res.health).toBe("UNAVAILABLE");
+  });
+
   test.skipIf(skip)("Keystore sain : l'effacement chiffré suffit, pas d'effacement dur", async () => {
     const res = await ask<{ apiKey: string | null; discards: number; nextLaunch: string | null }>({
       op: "healthy-clear",
@@ -190,9 +203,11 @@ describe("clé LLM — câblage Android (#749)", () => {
     // synchrones.
     expect(store).not.toMatch(/\.apply\(\)/);
     expect(store.match(/\.commit\(\)/g)).toHaveLength(2);
-    // `commit()` rend un Boolean : les deux appels en font un échec dur, que le
-    // repli traduit en dégradation + effacement du fichier.
-    expect(store.match(/check\(\s*prefs\.edit\(\)[\s\S]*?\.commit\(\)\s*\)/g)).toHaveLength(2);
+    // `commit()` rend un Boolean : `save` en fait un échec dur, `clear` le
+    // REND pour que la purge sache si le chiffré a réellement disparu.
+    expect(store.match(/check\(\s*prefs\.edit\(\)[\s\S]*?\.commit\(\)\s*\)/g)).toHaveLength(1);
+    expect(store).toContain("override fun clear(): Boolean");
+    expect(store).toMatch(/remove\(KEY_API_KEY\)\.commit\(\)/);
   });
 
   test("le repli est PUR (exécuté par la parité) et ne journalise rien", () => {

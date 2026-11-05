@@ -106,11 +106,11 @@ scolaire : les fixtures sont des identifiants de test locaux.
 
 ## Artefact release (#883, #928)
 
-`release-artifact` construit l'APK release à chaque PR, push `main` et tag
-`v*` avec une clé ÉPHÉMÈRE générée dans le job, hors workspace. Il vérifie
+`release-artifact` construit l'APK release à chaque PR et push `main` ; sur un
+tag `v*`, `release.yml` l'appelle via `workflow_call`. Une clé ÉPHÉMÈRE est
+générée dans le job, hors workspace. Il vérifie
 `apksigner`, refuse un certificat debug, exige `mapping.txt` + `seeds.txt` R8,
-et publie APK + mapping 7 jours. `workflow_call` le rend réutilisable par un
-futur job de tag.
+et publie APK + mapping 7 jours.
 Sans clé (#919), `assembleRelease` échoue, `assembleDebug` reste vert.
 
 `agents/runtime/check-release-artifact.ts` vérifie ensuite l'APK lui-même :

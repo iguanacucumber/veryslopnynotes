@@ -19,6 +19,13 @@ internal object AttachmentUrl {
         return url
     }
 
+    /** Même origine (schéma, hôte, port effectif) : la seule redirection suivie. */
+    internal fun sameOrigin(from: String, to: String): Boolean {
+        val left = originOf(from) ?: return false
+        val right = originOf(to) ?: return false
+        return left == right
+    }
+
     private data class Origin(val scheme: String, val host: String, val port: Int)
 
     private fun originOf(raw: String): Origin? {

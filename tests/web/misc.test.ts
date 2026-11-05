@@ -30,11 +30,13 @@ import {
   ALERTS_CLEAR_NOTE,
   ALERTS_FLAGGED_NOTE,
   ALERTS_HEURISTIC_NOTE,
+  ALERTS_UNREADABLE,
   alertKindLabel,
   alertSeverity,
   alertSourceLabel,
   alertsLayout,
   excerptPreview,
+  isAlertsPayloadReadable,
   parseAlertsPayload,
   sanitizeExcerpt,
 } from "../../web/src/features/alerts/alerts";
@@ -168,6 +170,21 @@ describe("web actualités — corps à la demande (#475)", () => {
     expect(newsBodyCollapsible(state)).toBe(true);
     expect(newsBodyText(state, false).length).toBeLessThan(long.length);
     expect(newsBodyText(state, true)).toBe(long);
+  });
+
+  test("le corps reçu est nettoyé et borné comme celui de la liste", () => {
+    const loaded = newsBodyLoaded(newsBodyState(""), `\u0000${"b".repeat(2500)}`);
+    expect(loaded.status).toBe("loaded");
+    expect(loaded.body).not.toContain("\u0000");
+    expect(loaded.body).toHaveLength(2000);
+  });
+
+  test("un corps vide reste une absence : la lecture reste proposée", () => {
+    for (const blank of ["", "   ", "\n\t", null, 42]) {
+      const state = newsBodyLoaded(newsBodyLoading(newsBodyState("")), blank);
+      expect(state.status).toBe("error");
+      expect(needsNewsBody(state)).toBe(true);
+    }
   });
 });
 
@@ -349,6 +366,22 @@ describe("web alertes de sécurité", () => {
     expect(alertsLayout({ count: 0, loading: false, stale: true, error: null, hasPayload: true })).toBe("offline-empty");
     expect(alertsLayout({ count: 0, loading: false, stale: true, error: "réseau", hasPayload: true })).toBe("offline-empty");
     expect(alertsLayout({ count: 0, loading: false, stale: false, error: null, hasPayload: true })).toBe("all-clear");
+  });
+
+  test("un payload illisible n’est jamais un « tout va bien »", () => {
+    expect(isAlertsPayloadReadable(JSON.stringify({ alerts: [] }))).toBe(true);
+    expect(isAlertsPayloadReadable(JSON.stringify({ items: [] }))).toBe(true);
+    expect(isAlertsPayloadReadable("pas du json")).toBe(false);
+    expect(isAlertsPayloadReadable("[]")).toBe(false);
+    expect(isAlertsPayloadReadable(JSON.stringify({ autres: [] }))).toBe(false);
+    expect(isAlertsPayloadReadable(null)).toBe(false);
+
+    // La route convertit l'illisible en erreur et ne le donne pas pour lu.
+    const route = readFileSync(join(ROOT, "web/src/routes/alerts.tsx"), "utf8");
+    expect(route).toContain("isAlertsPayloadReadable(resource.payload)");
+    expect(route).toContain("hasPayload: readable");
+    expect(route).toContain("ALERTS_UNREADABLE");
+    expect(ALERTS_UNREADABLE).toContain("illisibles");
   });
 
   // #415 : le filtre de l'appareil est une HEURISTIQUE. L'interface ne doit

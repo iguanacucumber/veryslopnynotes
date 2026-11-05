@@ -20,6 +20,7 @@ internal fun cachedRead(
     query: String,
     previous: String? = null,
     clock: Clock = schoolClock(),
+    epoch: Long = SessionEpoch.current(),
 ): String {
     val q = parseQuery(query)
     return when (resource) {
@@ -31,7 +32,7 @@ internal fun cachedRead(
         CachePolicy.ATTENDANCE -> attendancePayload(client)
         CachePolicy.PUNISHMENTS -> punishmentsPayload(client)
         CachePolicy.CAPABILITIES -> capabilitiesPayload(client, parisNowIso(clock))
-        CachePolicy.DISCUSSIONS -> discussionsPayload(client, previous = previous)
+        CachePolicy.DISCUSSIONS -> discussionsPayload(client, previous = previous, epoch = epoch)
         else -> throw IllegalArgumentException("ressource non cachable: $resource")
     }
 }

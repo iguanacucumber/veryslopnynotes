@@ -8,6 +8,7 @@ import { join } from "node:path";
 const WEB = join(import.meta.dir, "..", "..", "web");
 const BOOTSTRAP = readFileSync(join(WEB, "public", "theme-bootstrap.js"), "utf8");
 const INDEX = readFileSync(join(WEB, "index.html"), "utf8");
+const APP_CONTEXT = readFileSync(join(WEB, "src", "ui", "AppContext.tsx"), "utf8");
 
 function run(stored: string | null, systemDark: boolean, storageThrows = false) {
   const root = { dataset: {} as Record<string, string> };
@@ -60,5 +61,25 @@ describe("bootstrap du thème", () => {
     expect(script).toBeGreaterThan(-1);
     expect(script).toBeLessThan(module);
     expect(INDEX).toContain('<meta name="theme-color"');
+  });
+});
+
+describe("thème à chaud après le bootstrap", () => {
+  test("le stockage absent, plein ou refusé ne casse pas le rendu", () => {
+    // Lectures et écritures passent par un seul point gardé, comme le bootstrap.
+    expect(APP_CONTEXT.match(/localStorage\.getItem/g)).toHaveLength(1);
+    expect(APP_CONTEXT.match(/localStorage\.setItem/g)).toHaveLength(1);
+    expect(APP_CONTEXT).toContain('parseTheme(readStored("vsn:theme"))');
+    expect(APP_CONTEXT).toContain('parseScheme(readStored("vsn:scheme"))');
+    expect(APP_CONTEXT).toContain('writeStored("vsn:theme"');
+    expect(APP_CONTEXT).toContain('writeStored("vsn:scheme"');
+  });
+
+  test("la barre système suit la palette, pas seulement le mode sombre", () => {
+    const paletteEffect = APP_CONTEXT.slice(APP_CONTEXT.indexOf("const vars = cssVarsOf"));
+    expect(paletteEffect).toContain('querySelector(\'meta[name="theme-color"]\')');
+    expect(paletteEffect).toContain('setAttribute("content", palette.page)');
+    // La valeur lue avant que les variables de la palette soient posées est partie.
+    expect(APP_CONTEXT).not.toContain("getComputedStyle(document.documentElement)");
   });
 });

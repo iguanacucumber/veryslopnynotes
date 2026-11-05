@@ -22,6 +22,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+  /v1/ready:
+    get:
+      operationId: ready
+      description: >-
+        Disponibilite REELLE : jar inscriptible, Chromium qui DEMARRE et
+        instance hors drain. 503 = ne pas envoyer de trafic, meme si
+        /v1/health repond encore.
+      responses:
+        '200':
+          description: pret a servir
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyResponse'
+        '503':
+          description: >-
+            pas pret (jar, navigateur/sandbox, drain) ; le corps ne contient
+            que des booleens de controle, jamais un detail interne
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyResponse'
   /v1/manuals/scrape:
     post:
       operationId: scrapeManuals
@@ -118,6 +140,17 @@ components:
       properties:
         status: { type: string, enum: [ok] }
         version: { type: string }
+    ReadyResponse:
+      type: object
+      required: [status, checks]
+      properties:
+        status: { type: string, enum: [ready, not_ready] }
+        checks:
+          type: object
+          description: >-
+            Booleens seulement (jar, browser, accepting ou probe) : aucun
+            message interne ni chemin de fichier.
+          additionalProperties: { type: boolean }
     ManualDoc:
       type: object
       required: [id, platform, title, subject, page, excerpt]
@@ -144,11 +177,13 @@ components:
         le scraper ne s'authentifie pas (la session est celle du serveur,
         #526). Ils restent declares en optionnel pour que les appelants
         existants compilent, mais un corps qui les porte est REFUSE (400).
+        `startUrl` avec identifiants (`user:pass@`) est REFUSEE : le scraper
+        ne s'authentifie jamais.
       properties:
         platform: { type: string, maxLength: 100 }
         username: { type: string, maxLength: 512, writeOnly: true, description: Obsolete, refuse par le serveur (#526) : le scraper ne s'authentifie pas. }
         password: { type: string, maxLength: 512, writeOnly: true, description: Obsolete, refuse par le serveur (#526) : le scraper ne s'authentifie pas. }
-        startUrl: { type: string, maxLength: 2000 }
+        startUrl: { type: string, maxLength: 2000, description: http(s) publique, sans identifiants. }
         page: { type: integer, minimum: 1, maximum: 2000 }
     ManualsScrapeResponse:
       type: object

@@ -21,7 +21,8 @@ interface LlmKeyStore {
     /** Sans clé, l'app n'appelle pas le serveur : 400 refusé, inutile de payer l'aller-retour. */
     fun isConfigured(): Boolean = apiKey() != null
 
-    fun clear()
+    /** Efface la clé ; `false` = sa disparition n'est PAS vérifiée. */
+    fun clear(): Boolean
 }
 
 /** La clé tient-elle les bornes du contrat ? (clé relue du disque : non fiable) */
@@ -50,8 +51,9 @@ class InMemoryLlmKeyStore : LlmKeyStore {
 
     override fun apiKey(): String? = key
 
-    override fun clear() {
+    override fun clear(): Boolean {
         key = null
+        return true
     }
 }
 
@@ -68,11 +70,12 @@ class InMemoryLlmKeyStore : LlmKeyStore {
  *
  * [discard] efface le fichier chiffré sans passer par le Keystore (illisible
  * mais présent quand celui-ci est mort). Il ne journalise rien : le store tient
- * la clé.
+ * la clé. Son résultat est PROPAGÉ : `clear()` ne dit « effacé » que si le
+ * chiffré a réellement disparu.
  */
 class ResilientLlmKeyStore(
     secure: LlmKeyStore?,
-    private val discard: () -> Unit,
+    private val discard: () -> Boolean,
 ) : LlmKeyStore {
     private val memory = InMemoryLlmKeyStore()
 
@@ -113,13 +116,13 @@ class ResilientLlmKeyStore(
         }
     }
 
-    override fun clear() {
+    override fun clear(): Boolean {
         memory.clear()
         val target = secure
         if (target != null) {
             try {
-                target.clear()
-                return
+                if (target.clear()) return true
+                degrade()
             } catch (_: Exception) {
                 degrade()
             }
@@ -127,16 +130,15 @@ class ResilientLlmKeyStore(
         // Le chiffré n'a pas pu s'effacer (ou n'a jamais répondu) : la clé dort
         // encore sur le DISQUE. Sans cet effacement, « Oublier » ne viderait
         // que la mémoire et la clé reviendrait au lancement suivant.
-        discardSecure()
+        return discardSecure()
     }
 
     /** Efface le chiffré sans passer par le Keystore ; jamais journalisé. */
-    private fun discardSecure() {
-        try {
-            discard()
-        } catch (_: Exception) {
-            // Best-effort : le stockage est déjà en échec, rien de plus à faire.
-        }
+    private fun discardSecure(): Boolean = try {
+        discard()
+    } catch (_: Exception) {
+        // Best-effort : le stockage est déjà en échec, rien de plus à faire.
+        false
     }
 
     private fun degrade() {

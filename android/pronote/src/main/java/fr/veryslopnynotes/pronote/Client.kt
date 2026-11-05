@@ -349,18 +349,50 @@ open class ClientBase(
     open fun refresh() {
         // Session neuve : les lectures mémoïsées sont de l'ancien monde.
         readMemo?.clear()
-        val cookieJar = ent?.invoke(username, password, mapOf("pronote_url" to pronoteUrl))
-        communication = Communication(pronoteUrl, cookieJar, loginMode != "normal")
-        val (attrs, funcs) = communication.initialise(clientIdentifier)
-        attributes = attrs
-        funcOptions = funcs
-        encryption = Encryption()
-        encryption.aesIv = communication.encryption.aesIv
-        login()
-        periods_ = null
-        periods_ = periods
-        week = getWeek(LocalDateTime.now(clock))
-        _expired = true
+        // Un refresh raté ne doit jamais laisser une session à moitié ouverte :
+        // le `post` en vol garde l'ANCIENNE communication jusqu'au commit.
+        val oldCommunication = if (::communication.isInitialized) communication else null
+        val oldAttributes = attributes
+        val oldFuncOptions = funcOptions
+        val oldEncryption = encryption
+        val oldUserSettings = userSettings
+        val oldInfo = if (::info.isInitialized) info else null
+        val oldStartDay = if (::startDay.isInitialized) startDay else null
+        val oldWeek = week
+        val oldLoggedIn = logged_in
+        val oldLastConnection = lastConnection
+        val oldPeriods = periods_
+        val oldExpired = _expired
+        val oldPassword = password
+        try {
+            val cookieJar = ent?.invoke(username, password, mapOf("pronote_url" to pronoteUrl))
+            communication = Communication(pronoteUrl, cookieJar, loginMode != "normal")
+            val (attrs, funcs) = communication.initialise(clientIdentifier)
+            attributes = attrs
+            funcOptions = funcs
+            encryption = Encryption()
+            encryption.aesIv = communication.encryption.aesIv
+            if (!login()) throw PronoteAPIError(PRONOTE_ERROR_MESSAGES.getValue(10), pronoteErrorCode = 10)
+            periods_ = null
+            periods_ = periods
+            week = getWeek(LocalDateTime.now(clock))
+            _expired = true
+        } catch (e: Throwable) {
+            if (oldCommunication != null) communication = oldCommunication
+            attributes = oldAttributes
+            funcOptions = oldFuncOptions
+            encryption = oldEncryption
+            userSettings = oldUserSettings
+            if (oldInfo != null) info = oldInfo
+            if (oldStartDay != null) startDay = oldStartDay
+            week = oldWeek
+            logged_in = oldLoggedIn
+            lastConnection = oldLastConnection
+            periods_ = oldPeriods
+            _expired = oldExpired
+            password = oldPassword
+            throw e
+        }
     }
 
 

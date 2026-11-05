@@ -18,6 +18,7 @@ const skip = parityToolchain.skipReason !== null;
 
 const SMALL = "bonjour";
 const GZ_BODY = "EDT de la semaine 42 — accents, devoirs. ".repeat(40);
+const GZ_BYTES = Bun.gzipSync(Buffer.from(GZ_BODY, "utf8"));
 const BIG_BYTES = 32 * 1024 * 1024;
 
 let httpLink: ParityLink | null = null;
@@ -104,6 +105,22 @@ describe("une réponse ne dépasse pas son budget d'octets (#901)", () => {
     ) as DownloadAnswer;
     expect(res.ok).toBe(true);
     expect(readFileSync(path, "utf8")).toBe(GZ_BODY);
+  });
+
+  test.skipIf(skip)("un gzip décompressé AU-DELÀ de la borne échoue, sans renommer le brut", async () => {
+    // Le corps compressé tient sous la borne, le corps décompressé non : avant
+    // le correctif, l'échec de décompression renommait les octets compressés
+    // en téléchargement « réussi ».
+    const limit = GZ_BYTES.byteLength + 16;
+    expect(GZ_BYTES.byteLength).toBeLessThan(limit);
+    expect(Buffer.byteLength(GZ_BODY, "utf8")).toBeGreaterThan(limit);
+    const sid = await newSession(httpLink!);
+    const before = new Set(readdirSync(dir));
+    const res = await download(httpLink!, sid, "/gzip", { maxBytes: limit });
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe("IOException");
+    expect(res.exists).toBe(false);
+    expect([...readdirSync(dir)].filter((name) => !before.has(name))).toEqual([]);
   });
 
   test.skipIf(skip)("un gzip menteur garde les octets bruts", async () => {

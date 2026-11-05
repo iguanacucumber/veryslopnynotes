@@ -18,12 +18,13 @@
 // HTML sérialisé de façon BORNÉE dans le navigateur, borné en caractères avant
 // extraction et refusé sur un `content-length` trop grand, avec délai : jamais
 // `outerHTML` ni `page.content()` en entier.
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { decode } from "he";
 import { saveJar } from "./jar-store";
 import { truncateManualText } from "./manuals";
 import type { ManualDoc } from "./manuals";
-import { checkPublicHost, resolvePublicHost, systemResolver } from "./ssrf";
+import { checkPublicHost, fetchPinned, resolvePublicHost, systemResolver } from "./ssrf";
 import type { HostResolver } from "./ssrf";
 
 /**
@@ -162,33 +163,24 @@ function isHttpUrl(raw: string): boolean {
 }
 
 /**
- * Hôte public APRÈS résolution DNS. Un nom qui résout vers une IP
- * privée/interne est refusé (motif explicite : `private_host`), un nom
- * introuvable aussi. Le message ne contient ni l'URL ni l'adresse obtenue :
- * les logs du serveur ne doivent rien laisser filtrer (cf. I8).
+ * URL http(s) PUBLIQUE + adresses DÉJÀ résolues : la requête suivante se
+ * connecte à l'une d'elles sans re-résoudre le nom (rebinding fermé). Un nom
+ * qui résout vers une IP privée/interne est refusé (`private_host`), un nom
+ * introuvable aussi (`unresolved_host`). Le message ne contient ni l'URL ni
+ * l'adresse obtenue : les logs ne doivent rien laisser filtrer (cf. I8).
  */
-async function assertPublicHost(hostname: string, label: string, resolve: HostResolver): Promise<void> {
-  const verdict = await checkPublicHost(hostname, resolve);
-  if (verdict === "private") {
-    throw new ScrapeManualsError(`${label} : hote prive refuse`, "private_host");
-  }
-  if (verdict === "unresolved") {
-    throw new ScrapeManualsError(`${label} : hote introuvable (resolution DNS)`, "unresolved_host");
-  }
+interface PublicUrlTarget {
+  readonly url: URL;
+  readonly addresses: readonly string[];
 }
 
-/**
- * URL http(s) PUBLIQUE exigée : protocole, hôte littéral non privé, et nom
- * RÉSOLU — un nom public qui pointe vers une IP interne est refusé.
- * Le message ne contient jamais l'URL : les logs du serveur ne doivent rien
- * laisser filtrer (cf. I8).
- */
-async function assertPublicUrl(
+async function publicUrlTarget(
   raw: string,
   label: string,
   resolve: HostResolver,
-  rejectCredentials = false,
-): Promise<void> {
+  rejectCredentials: boolean,
+  signal?: AbortSignal,
+): Promise<PublicUrlTarget> {
   let u: URL;
   try {
     u = new URL(raw);
@@ -204,7 +196,24 @@ async function assertPublicUrl(
   if (rejectCredentials && (u.username !== "" || u.password !== "")) {
     throw new ScrapeManualsError(`${label} avec identifiants refusee (jamais journalisee)`);
   }
-  await assertPublicHost(u.hostname, label, resolve);
+  const resolution = await resolvePublicHost(u.hostname, resolve, signal);
+  if (resolution.verdict === "private") {
+    throw new ScrapeManualsError(`${label} : hote prive refuse`, "private_host");
+  }
+  if (resolution.verdict === "unresolved") {
+    throw new ScrapeManualsError(`${label} : hote introuvable (resolution DNS)`, "unresolved_host");
+  }
+  return { url: u, addresses: resolution.addresses };
+}
+
+async function assertPublicUrl(
+  raw: string,
+  label: string,
+  resolve: HostResolver,
+  rejectCredentials = false,
+  signal?: AbortSignal,
+): Promise<void> {
+  await publicUrlTarget(raw, label, resolve, rejectCredentials, signal);
 }
 
 /** Budget de la vérification de redirection, et nombre de sauts suivis. */
@@ -257,10 +266,11 @@ export function chromiumEgressArgs(proxy: string | undefined): readonly string[]
 export async function chromiumResolverRules(
   hosts: readonly string[],
   resolve: HostResolver = systemResolver,
+  signal?: AbortSignal,
 ): Promise<readonly string[]> {
   const rules: string[] = [];
   for (const host of new Set(hosts)) {
-    const resolution = await resolvePublicHost(host, resolve);
+    const resolution = await resolvePublicHost(host, resolve, signal);
     if (resolution.verdict === "private") {
       throw new ScrapeManualsError("epinglage : hote prive refuse", "private_host");
     }
@@ -311,10 +321,20 @@ export async function assertPublicRedirectChain(
   let current = startUrl;
   for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop += 1) {
     remember(current);
-    await assertPublicUrl(current, "redirection", resolve, rejectCredentials);
+    let validated: PublicUrlTarget;
+    try {
+      validated = await publicUrlTarget(current, "redirection", resolve, rejectCredentials, signal);
+    } catch (err) {
+      if (signal.aborted) {
+        throw new ScrapeManualsError("verification des redirections interrompue", "timeout");
+      }
+      throw err;
+    }
     let res: Response;
     try {
-      res = await fetch(current, { redirect: "manual", signal });
+      // Connexion à l'adresse DÉJÀ validée : pas de seconde résolution DNS
+      // entre la garde et la requête (rebinding).
+      res = await fetchPinned(validated.url, validated.addresses, { signal });
     } catch {
       // Délai de la garde : la chaîne est INCONNUE, donc on ne navigue pas à
       // l'aveugle (fail-closed).
@@ -325,8 +345,13 @@ export async function assertPublicRedirectChain(
       // navigateur partir serait atteindre une cible non contrôlée (fail-closed).
       throw new ScrapeManualsError("redirections non verifiables (reseau indisponible)", "generic");
     }
-    if (res.status < 300 || res.status >= 400) return [...hosts]; // pas de redirection
+    if (res.status < 300 || res.status >= 400) {
+      // Aucun corps n'est lu pour la garde : la connexion est libérée.
+      if (res.body) await res.body.cancel().catch(() => {});
+      return [...hosts]; // pas de redirection
+    }
     const location = res.headers.get("location");
+    if (res.body) await res.body.cancel().catch(() => {});
     if (!location) return [...hosts];
     let target: string;
     try {
@@ -334,14 +359,13 @@ export async function assertPublicRedirectChain(
     } catch {
       return [...hosts];
     }
-    await assertPublicUrl(target, "redirection", resolve, rejectCredentials);
-    current = target;
     if (hop === MAX_REDIRECT_HOPS) {
       // Le navigateur dépasserait son propre plafond : la cible suivante n'est
       // pas vérifiée. On REFUSE (fail-closed) au lieu de laisser partir une
       // cible non contrôlée.
       throw new ScrapeManualsError("trop de redirections (chaine non verifiee)", "private_host");
     }
+    current = target;
   }
   return [...hosts];
 }
@@ -700,6 +724,13 @@ export interface ScrapePageConfig {
   readonly credentials?: "none";
 }
 
+/** Un jar ABSENT (premier run) n'est pas un jar illisible (session à garder). */
+function isMissingFileError(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code;
+  if (code === "ENOENT") return true;
+  return err instanceof Error && /ENOENT/.test(err.message);
+}
+
 /**
  * Moteur commun page -> titre + texte borné.
  *
@@ -720,7 +751,7 @@ export async function scrapePage(
   const rejectCredentials = config.rejectCredentials ?? config.credentials === "none";
   // Le nom de l'hôte est RÉSOLU : un nom public qui pointe vers une IP
   // interne est refusé ici, AVANT la navigation.
-  await assertPublicUrl(opts.startUrl, "startUrl", resolve, rejectCredentials);
+  await assertPublicUrl(opts.startUrl, "startUrl", resolve, rejectCredentials, opts.signal);
   // La chaîne de redirections est vérifiée AVANT le navigateur : Chromium
   // suit un 302 sans repasser par le route handler, la cible interne serait
   // donc atteinte (requête à l'aveugle) si on attendait la navigation.
@@ -732,7 +763,7 @@ export async function scrapePage(
   );
   // Chaque hôte validé est ÉPINGLÉ à son adresse dans Chromium : le navigateur
   // ne peut plus rebinder le document ni un saut de redirection.
-  const resolverRules = await chromiumResolverRules(chainHosts, resolve);
+  const resolverRules = await chromiumResolverRules(chainHosts, resolve, opts.signal);
   const chromiumArgs = [
     ...(resolverRules.length > 0
       ? [`--host-resolver-rules=${resolverRules.join(",")}`]
@@ -782,13 +813,25 @@ export async function scrapePage(
     // `acceptDownloads: false` : une page ne dépose jamais de fichier sur le
     // disque du serveur (le téléchargement est annulé par le navigateur).
     const contextOptions = { serviceWorkers: "block" as const, acceptDownloads: false };
-    context =
-      (jar
-        ? await browser.newContext({ ...contextOptions, storageState: jar }).catch(
-            // Premier run : pas de fichier local, contexte frais pour login interactif.
-            async () => browser.newContext(contextOptions),
-          )
-        : await browser.newContext(contextOptions)) ?? null;
+    if (jar) {
+      try {
+        context = await browser.newContext({ ...contextOptions, storageState: jar });
+      } catch (err) {
+        // Premier run SEULEMENT quand le jar n'existe pas. Un jar présent mais
+        // illisible/corrompu ne doit pas être remplacé par une session vide :
+        // le prochain scrape public écraserait la session du serveur.
+        if (!existsSync(jar) || isMissingFileError(err)) {
+          log("jar de session absent -> premier run (contexte sans session)");
+          context = await browser.newContext(contextOptions);
+        } else {
+          log("jar de session illisible -> scrape refuse (session preservee)");
+          throw new ScrapeManualsError("jar de session illisible (session preservee)");
+        }
+      }
+    } else {
+      context = await browser.newContext(contextOptions);
+    }
+    context = context ?? null;
     // Playwright route les WebSocket via `routeWebSocket`, jamais via
     // `page.route` : sans cette garde, une page ouvrait `ws://192.168.x.x` et
     // recopiait la réponse dans son DOM. Aucune socket n'est ouverte avant le
@@ -803,7 +846,7 @@ export async function scrapePage(
       } catch {
         host = null;
       }
-      const verdict = host === null ? "private" : await checkPublicHost(host, resolve);
+      const verdict = host === null ? "private" : await checkPublicHost(host, resolve, signal);
       if (verdict === "public") {
         // `connectToServer()` n'est appelé qu'APRÈS la garde : le DNS est
         // résolu avant que la socket réelle parte.
@@ -831,7 +874,7 @@ export async function scrapePage(
       const host = hostOf(target);
       // Nom illisible ou privé (littéral OU nom qui résout vers une IP
       // privée) : la requête est coupée.
-      const verdict = host === null ? "private" : await checkPublicHost(host, resolve);
+      const verdict = host === null ? "private" : await checkPublicHost(host, resolve, signal);
       if (verdict !== "public") {
         // Navigation (document) bloquée = scrape refusé ; sous-ressource
         // bloquée = simple accusé de réception (une image d'un réseau privé
@@ -878,6 +921,7 @@ export async function scrapePage(
       "cible finale",
       resolve,
       rejectCredentials,
+      opts.signal,
     );
     // Une page web NON TEXTUELLE (PDF, image, binaire) est refusée avant
     // extraction. Le `content-type` absent reste inconnu : la lecture bornée
@@ -1080,10 +1124,16 @@ async function resolveManualPageUrl(
   const signal = caller ? AbortSignal.any([caller, timeout]) : timeout;
   let current = startUrl;
   for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop += 1) {
-    await assertPublicUrl(current, "sommaire", resolve, false);
+    let validated: PublicUrlTarget;
+    try {
+      validated = await publicUrlTarget(current, "sommaire", resolve, true, signal);
+    } catch (err) {
+      if (signal.aborted) throw summaryAbortError(signal, caller);
+      throw err;
+    }
     let res: Response;
     try {
-      res = await fetch(current, { redirect: "manual", signal });
+      res = await fetchPinned(validated.url, validated.addresses, { signal });
     } catch {
       throw summaryAbortError(signal, caller);
     }
@@ -1109,8 +1159,8 @@ async function resolveManualPageUrl(
       if (res.body) await res.body.cancel().catch(() => {});
       throw new ScrapeManualsError(`réponse HTTP ${res.status} sur le sommaire`);
     }
-    const finalUrl = res.url || current;
-    await assertPublicUrl(finalUrl, "sommaire final", resolve, false);
+    // `redirect: "manual"` : la réponse est celle de `current`, déjà validée.
+    const finalUrl = current;
     const html = (await readCappedBody(res, MAX_HTML_BYTES, signal, caller)).slice(0, MAX_HTML_CHARS);
     const url = await manualPageFromHtml(html, requested, finalUrl);
     return url === null ? null : { url, subject: await manualBookSubject(html) };
@@ -1131,7 +1181,7 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
       label: config.platform,
       useSession: opts.useSession ?? true,
       textOnly: opts.textOnly ?? false,
-      rejectCredentials: false,
+      rejectCredentials: true,
     },
     { ...opts, startUrl },
   );

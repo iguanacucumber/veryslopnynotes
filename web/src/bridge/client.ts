@@ -359,7 +359,7 @@ export const bridge = {
   setAiConsent: (decision: "granted" | "refused" | "withdrawn", ageAttested = false) =>
     call<AiConsentResult>("llm.setConsent", { decision, ageAttested }),
   saveLlmKey: (key: string) => call<{ ok: boolean; message?: string }>("llm.saveKey", { key }),
-  forgetLlmKey: () => call<{ ok: true }>("llm.forgetKey"),
+  forgetLlmKey: () => call<{ ok: boolean; message?: string }>("llm.forgetKey"),
   askHomework: (
     assignmentId: string,
     weekStart: string,

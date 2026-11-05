@@ -127,4 +127,13 @@ describe("câblage de la coquille", () => {
     expect(shell).not.toContain("window.scrollTo(0, 0);");
     expect(shell).toContain("window.scrollTo(0, decision.restore)");
   });
+
+  test("la position quittée suit le défilement réel", () => {
+    // Un écouteur passif met à jour la position courante : l'effet de route
+    // ne lit plus le `scrollY` du rendu d'arrivée (souvent 0).
+    expect(shell).toContain('addEventListener("scroll"');
+    expect(shell).toContain("{ passive: true }");
+    expect(shell).toContain("lastScroll.current = { ...current, y: window.scrollY }");
+    expect(shell).toContain("y: decision.restore ?? window.scrollY");
+  });
 });

@@ -5,9 +5,9 @@ L'app parle directement à Pronote et à OpenRouter ; ce serveur ne participe pa
 
 - `GET /v1/health` pour la vivacité : le process répond, même en drain.
 - `GET /v1/ready` pour la disponibilité RÉELLE : 200 seulement si le jar est
-  inscriptible, Chromium installé et l'instance pas en drain ; sinon 503 avec
-  le détail `checks` (`jar`, `browser`, `accepting`). Sonde le trafic avec
-  `/v1/ready`, pas `/v1/health`.
+  inscriptible, Chromium DÉMARRE (lancement court, mis en cache) et l'instance
+  n'est pas en drain ; sinon 503 avec les booleans `jar`, `browser`,
+  `accepting`. Sonde le trafic avec `/v1/ready`, pas `/v1/health`.
 - `POST /v1/manuals/scrape` pour extraire une page de manuel.
 - `POST /v1/web/scrape` pour extraire une page web publique choisie par
   l'élève (#634). Même moteur et même garde SSRF, mais AUCUN cookie jar :
@@ -32,10 +32,11 @@ client.
 
 L'IMAGE Docker suit la même règle (#533, #921) : la commande documentée publie
 sur la boucle locale par défaut, sans `TLS_CERT_FILE`/`TLS_KEY_FILE` (volume)
-elle ne démarre pas, elle ne force pas `HOST` et tourne non privilégiée. Sa base
-est épinglée par digest. Le sandbox de Chromium est ACTIF : Playwright le
-désactive par défaut, donc `CHROMIUM_LAUNCH_OPTIONS` l'impose et la commande
-fournit le profil seccomp étroit `server/chromium-seccomp.json`. La commande
+elle ne démarre pas, un couple blanc est REFUSÉ, elle ne force pas `HOST` et
+tourne non privilégiée. Sa base est épinglée par digest.
+Le sandbox de Chromium est ACTIF : Playwright le désactive par défaut, donc
+`CHROMIUM_LAUNCH_OPTIONS` l'impose et la commande fournit le profil seccomp
+étroit `server/chromium-seccomp.json`. La commande
 ci-dessous durcit le conteneur (racine en lecture seule, capabilities retirées,
 escalade interdite, sandbox Chromium) : `/tmp` et le HOME sont des tmpfs, le jar
 un volume nommé. Le couple TLS vient de la préparation locale
@@ -54,10 +55,11 @@ docker run --rm -p 127.0.0.1:3000:3000 \
   veryslopnynotes-server:local
 ```
 
-L'image déclare `HEALTHCHECK` sur `/v1/ready` (toutes les 30 s, 20 s de
-démarrage, 3 échecs) ; elle est `unhealthy` si le jar ou Chromium manque, pas
-seulement si le process est mort. Docker n'arrête pas un conteneur `unhealthy`
-tout seul : un orchestrateur ou `--restart` doit le faire.
+L'image déclare `HEALTHCHECK` sur `/v1/ready` (30 s, 20 s de démarrage,
+3 échecs) et sonde `127.0.0.1` si `HOST` vaut `0.0.0.0`/vide, sinon `HOST`.
+Elle est `unhealthy` si le jar manque ou si Chromium ne DÉMARRE pas (sandbox
+comprise), pas seulement si le process est mort. Docker n'arrête pas un
+conteneur `unhealthy` tout seul : un orchestrateur ou `--restart` doit le faire.
 
 **Cgroup.** Les quatre plafonds ci-dessus sont des limites DURES, pas des
 conseils : 1 Gio de RAM (swap compris), 1 CPU, 256 PID. Chromium coûte ~300 Mo
@@ -97,7 +99,9 @@ usage détourné) ; uniquement derrière un proxy qui injecte
 
 Sans couple TLS, le conteneur ne démarre pas : un point d'entrée qui monte la
 session du serveur ne se sert pas en clair. Hors image, un lancement local sans
-couple TLS sert en clair et le dit (`[server] ATTENTION : service en CLAIR`).
+couple TLS sert en clair UNIQUEMENT sur la boucle locale et le dit
+(`[server] ATTENTION : service en CLAIR`) ; un bind non-loopback sans TLS est
+REFUSÉ (override de test seulement).
 
 **CA réelle et HSTS.** Un certificat auto-signé ne convient qu'à la boucle
 locale. Pour un accès public, deux montages valides :
@@ -149,9 +153,10 @@ requête, ne sont pas épinglées : l'égression réseau ferme leur fenêtre TOC
 en refusant l'adresse connectée, pas le nom.
 
 Le service est borné (#422) : 2 scrapes simultanés (503 `busy`, avec
-`Retry-After`), 30 s (504 `timeout`), HTML sérialisé borné DANS le navigateur
-(1 Mo, jamais `outerHTML` entier) et lu avec un délai (10 s) ; un
-`content-length` au-delà de 4 Mo est refusé avant lecture (mesure compressée).
+`Retry-After`), 30 s AU TOTAL pour corps + DNS + scrape (504 `timeout`), HTML
+sérialisé borné DANS le navigateur (1 Mo, jamais `outerHTML` entier) et lu avec
+un délai (10 s) ; un `content-length` au-delà de 4 Mo est refusé avant lecture
+(mesure compressée).
 
 Une page de CONNEXION (le portail la renvoie en HTTP 200 quand la session du
 jar n'est plus valable) n'est jamais ingérée comme un manuel : elle est

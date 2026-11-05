@@ -38,6 +38,12 @@ const server = Bun.serve({
       cookiesSeen.push({ host: url.hostname, cookie: req.headers.get("cookie") ?? "" });
       return new Response("ok");
     }
+    if (url.pathname === "/redirect-evil") {
+      return new Response(null, {
+        status: 302,
+        headers: { location: `http://127.0.0.2:${url.port}/evil` },
+      });
+    }
     if (url.pathname === "/evil") return new Response("contenu tiers");
 
     const name = url.pathname.split("/").pop() ?? "";
@@ -178,6 +184,44 @@ describe("la pièce jointe reste sur l'origine de l'établissement (#885)", () =
       { host: "127.0.0.2", cookie: "" },
       { host: "127.0.0.1", cookie: "pronote_session=secret" },
     ]);
+  });
+
+  test.skipIf(skip)("une redirection de pièce jointe hors origine est refusée AVANT le réseau", async () => {
+    const sid = (JSON.parse(await link!.ask({ op: "httpNew", headers: {} })) as { sid: number }).sid;
+    await link!.ask({
+      op: "httpCookieSet",
+      sid,
+      header: "pronote_session=secret; Path=/",
+      url: `http://127.0.0.1:${PORT}/`,
+    });
+    cookiesSeen.length = 0;
+    const before = evilHits;
+    const path = dest();
+    const res = JSON.parse(
+      await link!.ask({
+        op: "httpDownload",
+        sid,
+        url: `http://127.0.0.1:${PORT}/redirect-evil`,
+        path,
+      }),
+    ) as FetchAnswer;
+    expect(res).toMatchObject({ ok: false, error: "AttachmentHttpError", httpStatus: 302, exists: false });
+    // Même garde pour une lecture en mémoire portant l'origine attendue.
+    const inMemory = JSON.parse(
+      await link!.ask({
+        op: "httpReq",
+        sid,
+        method: "GET",
+        url: `http://127.0.0.1:${PORT}/redirect-evil`,
+        opts: { expectedOrigin: `http://127.0.0.1:${PORT}` },
+      }, { allowError: true }),
+    ) as { error?: string };
+    expect(inMemory.error).toBe("AttachmentHttpError");
+    // La cible n'a jamais été contactée et n'a reçu aucun cookie.
+    expect(evilHits).toBe(before);
+    expect(cookiesSeen).toEqual([]);
+    expect(existsSync(path)).toBe(false);
+    expect(readdirSync(dir).some((f) => f.includes("part"))).toBe(false);
   });
 });
 

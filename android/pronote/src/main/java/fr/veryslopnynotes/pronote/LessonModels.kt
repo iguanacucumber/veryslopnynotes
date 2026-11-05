@@ -23,14 +23,22 @@ class Attachment(private val client: PronoteClientLike, json: JVal?) : PronoteOb
                 "?Session=${client.attributes["h"] ?: "undefined"}"
         }
 
-    fun data(): ByteArray = client.communication.session.get(fetchUrl()).content
+    fun data(): ByteArray = client.communication.session.get(
+        fetchUrl(),
+        RequestOpts(expectedOrigin = client.communication.rootSite),
+    ).content
 
     /**
      * Écrit la pièce jointe dans [dest] en FLUX (aucun tampon de plusieurs
      * Mio). Au-delà de [maxBytes], le fichier est supprimé et l'appel échoue.
      */
     fun download(dest: java.io.File, maxBytes: Int = MAX_RESPONSE_BYTES): Long =
-        client.communication.session.download(fetchUrl(), dest, maxBytes = maxBytes)
+        client.communication.session.download(
+            fetchUrl(),
+            dest,
+            RequestOpts(expectedOrigin = client.communication.rootSite),
+            maxBytes = maxBytes,
+        )
 
     /** Vérifie l'origine et le type À CHAQUE accès : aucun réseau avant le refus. */
     private fun fetchUrl(): String =
@@ -67,20 +75,37 @@ class Lesson(private val client: PronoteClientLike, json: JVal?) : PronoteObject
     val detention: Boolean = r(::boolOf, listOf("estRetenue"), ResolveOpts.withDefault(false))
     val test: Boolean =
         r(::boolOf, listOf("cahierDeTextes", "V", "estDevoir"), ResolveOpts.withDefault(false))
-    val end: LocalDateTime =
-        r<LocalDateTime?>(::datetimeParse, listOf("DateDuCoursFin", "V"), ResolveOpts.lenient())
-            ?: run {
-                val raw = (json as? JVal.Obj)?.fields
-                val endTimes = hoursValue(client, "ListeHeuresFin")
-                val size = (endTimes as? JVal.Arr)?.items?.size ?: 0
-                // Absent = `NaN` (`undefined` en arithmétique) ; `null` présent = `0`
-                // (`Number(null)`), comme côté TS.
-                val place = raw?.get("place")?.let { numOf(it) } ?: Double.NaN
-                val duree = raw?.get("duree")?.let { numOf(it) } ?: Double.NaN
-                val endPlace = (place % (size - 1)) + duree - 1
-                val (h, m) = place2time(endTimes, endPlace)
-                start.withHour(h).withMinute(m).withSecond(0).withNano(0)
+    val end: LocalDateTime = run {
+        val explicit = r<LocalDateTime?>(::datetimeParse, listOf("DateDuCoursFin", "V"), ResolveOpts.lenient())
+        val resolved = explicit ?: run {
+            val raw = (json as? JVal.Obj)?.fields
+            val endTimes = hoursValue(client, "ListeHeuresFin")
+            val items = (endTimes as? JVal.Arr)?.items
+            // Absent = `NaN` (`undefined` en arithmétique) ; `null` présent = `0`
+            // (`Number(null)`), comme côté TS.
+            val place = raw?.get("place")?.let { numOf(it) } ?: Double.NaN
+            val duree = raw?.get("duree")?.let { numOf(it) } ?: Double.NaN
+            if (items == null || items.size <= 1 || !place.isFinite() || !duree.isFinite()) {
+                throw ParsingError("Fin de cours illisible", listOf("ListeHeuresFin", "place", "duree"))
             }
+            // Le repli TS enroule modulo (`place % (size - 1)`) et peut rendre
+            // une fin AVANT le début ; le web jette alors le cours. La place
+            // reste monotone, bornée au dernier créneau.
+            val lastSlot = items.mapNotNull { ((it as? JVal.Obj)?.fields?.get("G") as? JVal.Num)?.value }
+                .maxOrNull()
+                ?: throw ParsingError("Fin de cours illisible", listOf("ListeHeuresFin", "G"))
+            val (h, m) = try {
+                place2time(endTimes, minOf(place + duree - 1, lastSlot))
+            } catch (_: Exception) {
+                throw ParsingError("Fin de cours illisible", listOf("ListeHeuresFin", "place"))
+            }
+            start.withHour(h).withMinute(m).withSecond(0).withNano(0)
+        }
+        if (resolved.isBefore(start)) {
+            throw ParsingError("Fin de cours antérieure au début", listOf("DateDuCoursFin"))
+        }
+        resolved
+    }
 
     private val parts: LessonParts = run {
         val root = json as? JVal.Obj

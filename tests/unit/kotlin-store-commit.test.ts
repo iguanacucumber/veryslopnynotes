@@ -164,6 +164,21 @@ describe("bascule de compte : session + comptes dans la même transaction (#890)
     });
   });
 
+  test.skipIf(skip)("une restauration RATÉE efface la session neuve et garde l'échec", async () => {
+    const sid = await seeded();
+    // Premier commit (session neuve) réussi, second (restauration) en échec.
+    await ask({ op: "setFail", sid, target: "session", commitAfter: 1 });
+    await ask({ op: "setFail", sid, target: "accounts", commit: true });
+    expect(await ask({ op: "switch", sid, ...SESSION_A, username: "eleve.b", uuid: "uuid-b", accountId: "compte.b" })).toEqual({
+      result: "failed",
+      reason: "bascule incomplète : session non restaurée",
+      current: "compte.a",
+      // La session neuve a été EFFACÉE, pas laissée sous un échec annoncé.
+      username: "",
+    });
+    expect((await ask({ op: "sessionLoad", sid })).found).toBe(false);
+  });
+
   test.skipIf(skip)("une époque périmée REFUSE la bascule sans rien écrire", async () => {
     const sid = await seeded();
     await ask({ op: "invalidateEpoch" });

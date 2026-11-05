@@ -121,13 +121,18 @@ internal fun attendancePayload(client: Client): String {
 
 internal fun punishmentsPayload(client: Client): String {
     val arr = JSONArray()
+    // Une sanction = UNE ligne publiée : la même revient dans CHAQUE période
+    // qui la recouvre. L'identité est (kind, id) ; sans id stable, le repli
+    // date+type+motif est complété par son rang DANS la période, donc deux
+    // sanctions réellement distinctes ne fusionnent jamais (I31).
+    val rows = mutableListOf<Pair<JSONObject, String>>()
     var seq = 0
     var partial = false
     var readPeriods = 0
     var firstFailure: Exception? = null
     for (p in client.periods) {
         val pid = p.id.ifBlank { null }
-        val rows = try {
+        val punishments = try {
             val read = p.punishmentsPartial()
             readPeriods += 1
             partial = partial || read.partial
@@ -138,23 +143,37 @@ internal fun punishmentsPayload(client: Client): String {
             if (firstFailure == null) firstFailure = e
             continue
         }
-        for (s in rows) {
+        val fallbackRanks = HashMap<String, Int>()
+        for (s in punishments) {
+            val date = s.given.parisIso()
+            val type = boundedCp(s.nature, 100).ifEmpty { "Sanction" }
             val motif = joinReasons(s.reasons, 500) ?: "Sanction"
-            arr.put(JSONObject().apply {
-                put("id", s.id.ifBlank { "pun-${seq++}" })
-                put("date", s.given.parisIso())
+            // Clé d'identité COMPLÈTE (date+type+motif+rang) ; l'id publié est
+            // borné pour le contrat web, sans perdre cette identité.
+            val stableId = s.id.ifBlank {
+                val fallback = "$date|$type|$motif"
+                val rank = fallbackRanks[fallback] ?: 0
+                fallbackRanks[fallback] = rank + 1
+                "$fallback|$rank"
+            }
+            val publishedId = s.id.ifBlank { "pun-${seq++}" }
+            val obj = JSONObject().apply {
+                put("id", publishedId)
+                put("date", date)
                 put("motif", motif)
-                put("type", boundedCp(s.nature, 100).ifEmpty { "Sanction" })
+                put("type", type)
                 // Durée en MINUTES (`duree` Pronote, même unité que
                 // `Delay.minutes`) : une retenue n'est pas un « niveau ».
                 s.duration?.takeIf { it.isFinite() && it > 0 }?.let { put("durationMinutes", it) }
                 putIf("periodId", pid?.take(64))
-            })
+            }
+            rows.add(obj to eventKey("punishment", stableId))
         }
     }
     if (client.periods.isNotEmpty() && readPeriods == 0) {
         throw firstFailure ?: ParsingError("Aucune période lisible")
     }
+    for ((obj, _) in dedupe(rows) { it.second }) arr.put(obj)
     return JSONObject().put("punishments", arr).apply { putFlag("partial", partial) }.toString()
 }
 

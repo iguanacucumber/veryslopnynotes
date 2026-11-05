@@ -37,6 +37,11 @@ object MessagePaging {
  * Cache mémoire borné (fils, TTL) des fils déjà téléchargés. Les messages
  * restent des données du compte : [clear] est appelé à la déconnexion.
  * `@Synchronized` : le pont peut demander deux pages en parallèle.
+ *
+ * Chaque entrée porte l'ÉPOQUE de la session qui l'a remplie : une entrée
+ * d'une autre époque n'est jamais servie, et une lecture finie après une
+ * purge n'est pas insérée (elle ne peut pas écraser l'entrée du compte
+ * suivant).
  */
 class ThreadMessagePager<T>(
     private val pageSize: Int = MessagePaging.PAGE_SIZE,
@@ -48,14 +53,27 @@ class ThreadMessagePager<T>(
         val hasMore: Boolean get() = start > 0
     }
 
-    private data class Entry<T>(val items: List<T>, val at: Long)
+    private data class Entry<T>(val items: List<T>, val at: Long, val epoch: Long)
 
     private val entries = LinkedHashMap<String, Entry<T>>()
 
     /** Dernière page avant [before] (exclusif) ; `null` = fin du fil. */
     @Synchronized
-    fun page(key: String, before: Int?, fetch: () -> List<T>): Page<T> {
-        val entry = live(key) ?: Entry(fetch(), clock()).also { put(key, it) }
+    fun page(
+        key: String,
+        before: Int?,
+        epoch: Long = 0L,
+        current: () -> Long = { epoch },
+        fetch: () -> List<T>,
+    ): Page<T> {
+        val entry = live(key, epoch) ?: run {
+            val items = fetch()
+            val fresh = Entry(items, clock(), epoch)
+            // Lecture finie APRÈS un changement d'époque : on la rend à
+            // l'appelant (qui vérifie), mais on ne l'installe pas dans le cache.
+            if (current() == epoch) put(key, fresh)
+            fresh
+        }
         val total = entry.items.size
         val end = if (before == null) total else before.coerceIn(0, total)
         val start = (end - pageSize.coerceAtLeast(1)).coerceAtLeast(0)
@@ -72,9 +90,9 @@ class ThreadMessagePager<T>(
         entries.clear()
     }
 
-    private fun live(key: String): Entry<T>? {
+    private fun live(key: String, epoch: Long): Entry<T>? {
         val entry = entries[key] ?: return null
-        if (clock() - entry.at > ttlMs) {
+        if (entry.epoch != epoch || clock() - entry.at > ttlMs) {
             entries.remove(key)
             return null
         }
@@ -91,15 +109,20 @@ class ThreadMessagePager<T>(
     }
 }
 
-/** Instance partagée par le dépôt : la purge de session l'efface. */
+/**
+ * Instance partagée par le dépôt : la purge de session l'efface. L'époque est
+ * fournie par l'appelant (le pager reste PUR, sans dépendance à `data`).
+ */
 object ThreadMessageCache {
     private val pager = ThreadMessagePager<DiscussionMessage>()
 
     fun page(
+        epoch: Long,
         key: String,
         before: Int?,
+        current: () -> Long,
         fetch: () -> List<DiscussionMessage>,
-    ): ThreadMessagePager.Page<DiscussionMessage> = pager.page(key, before, fetch)
+    ): ThreadMessagePager.Page<DiscussionMessage> = pager.page(key, before, epoch, current, fetch)
 
     fun invalidate(key: String): Unit = pager.invalidate(key)
 

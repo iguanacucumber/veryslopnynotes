@@ -45,11 +45,16 @@ private class BenchStore : KeyValueStore {
     val values = LinkedHashMap<String, String>()
     var failCommit = false
     var failClear = false
+    var failCommitAfter: Int? = null
+    var commitCalls = 0
 
     override fun getString(key: String): String? = values[key]
 
     override fun commit(values: Map<String, String>): Boolean {
         if (failCommit) return false
+        val after = failCommitAfter
+        if (after != null && commitCalls >= after) return false
+        commitCalls++
         this.values.putAll(values)
         return true
     }
@@ -112,6 +117,13 @@ private class Driver {
             }
             if (op.fields.containsKey("commit")) store.failCommit = op.bool("commit")
             if (op.fields.containsKey("clear")) store.failClear = op.bool("clear")
+            if (op.fields.containsKey("commitAfter")) {
+                // Compteur REMIS À ZÉRO : « le prochain commit réussit, celui
+                // d'après échoue » décrit la panne de la restauration.
+                store.failCommit = false
+                store.commitCalls = 0
+                store.failCommitAfter = (op.num("commitAfter") ?: 0.0).toInt()
+            }
             ok("ok" to JVal.Bool(true))
         }
         "accountAdd" -> result(slot(op).accounts.add(op.str("id")))

@@ -152,20 +152,46 @@ export function Shell() {
     window.history.scrollRestoration = "manual";
   }, []);
 
+  // La position quittée n'est pas celle du rendu d'arrivée (souvent déjà 0) :
+  // un écouteur passif garde `lastScroll` à jour pendant le défilement.
+  useEffect(() => {
+    const onScroll = () => {
+      const current = lastScroll.current;
+      if (!current) return;
+      // La mémoire est mise à jour PENDANT le défilement : même si le nouveau
+      // rendu borne `scrollY` avant l'effet de navigation, la position quittée
+      // reste la dernière réellement vue.
+      scrollMemory.current.set(current.key, window.scrollY);
+      lastScroll.current = { ...current, y: window.scrollY };
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   // POP restaure la position de l'entrée ; une query seule (semaine, période)
   // ne remonte pas l'écran ; un nouveau pathname repart en haut.
   useEffect(() => {
     const key = scrollKey(location.pathname, location.search);
+    const tracked = lastScroll.current;
+    // La position de l'entrée précédente vient de la mémoire de défilement,
+    // pas du `scrollY` du rendu d'arrivée.
+    const previous = tracked
+      ? { ...tracked, y: scrollMemory.current.get(tracked.key) ?? tracked.y }
+      : null;
     const decision = scrollDecision({
       navigationType,
-      previous: lastScroll.current,
+      previous,
       key,
       pathname: location.pathname,
       saved: scrollMemory.current.get(key),
     });
     for (const entry of decision.save) scrollMemory.current.set(entry.key, entry.y);
     if (decision.restore !== null) window.scrollTo(0, decision.restore);
-    lastScroll.current = { key, pathname: location.pathname, y: window.scrollY };
+    lastScroll.current = {
+      key,
+      pathname: location.pathname,
+      y: decision.restore ?? window.scrollY,
+    };
   }, [location.key, location.pathname, location.search, navigationType]);
 
   useEffect(() => {
