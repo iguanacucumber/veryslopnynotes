@@ -22,9 +22,9 @@ jour par le certificat qui signe l'APK, pas par le numéro de version :
   conversations, pièces jointes et préférences** ;
 - clé debug (`CN=Android Debug`, générée par le SDK dans
   `~/.android/debug.keystore`) ≠ clé release : un APK debug ne peut jamais
-  devenir un APK release sans désinstallation. Inversement, un build release
-  sans `STORE_FILE` retombe sur la signature debug (repli #297) : il s'installe
-  en sideload mais ne peut pas recevoir les mises à jour de la vraie release.
+  devenir un APK release sans désinstallation. Un build release sans
+  `STORE_FILE` échoue avant l'emballage (fail-closed #919) : aucun APK release
+  signé debug n'est produit.
 
 La release publiée est signée par la clé de l'environnement GitHub `release`.
 `release-artifact.yml` utilise une clé éphémère pour prouver que le build
@@ -196,7 +196,7 @@ apksigner verify --print-certs veryslopnynotes-<version>.apk
 Lire `Signer #1 certificate SHA-256 digest` et le comparer à l'empreinte
 publiée après normalisation. Refuser l'APK si :
 
-- le certificat porte `CN=Android Debug` (build debug ou repli sans clé) ;
+- le certificat porte `CN=Android Debug` (build debug) ;
 - l'empreinte diffère de la valeur publiée, même d'un caractère ;
 - `sha256sum -c SHA256SUMS` échoue sur un fichier téléchargé.
 

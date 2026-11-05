@@ -20,7 +20,7 @@ const SECTIONS = [
 const REQUIRED_FIELDS = ["Risque", "Atténuation", "Propriétaire", "Expiration", "Preuve"];
 
 const BETA = ["831", "838", "928", "972", "976", "978"];
-const TIER_L = ["919", "965", "969"];
+const TIER_L = ["965", "969"];
 
 /** Lignes du tableau sous un titre `###`, jusqu'au titre de niveau égal ou supérieur. */
 function rowsUnder(heading: string): string[][] {

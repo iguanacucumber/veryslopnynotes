@@ -233,12 +233,13 @@ remplit ni ne signe ces champs, pas plus que les blocs vides de
 [`docs/RELEASE-WAIVERS.md`](RELEASE-WAIVERS.md) et de
 [`docs/legal/SIGNOFF.md`](legal/SIGNOFF.md).
 
+La garde de signature [#919](https://github.com/iguanacucumber/veryslopnynotes/issues/919)
+est close : le repli debug est retiré et un build release sans vraie clé échoue
+(PR [#1155](https://github.com/iguanacucumber/veryslopnynotes/pull/1155)). La
+preuve d'un certificat release réel reste due dans la checklist §7 et §9.
+
 Les gates humains restants, à satisfaire avant publication, sont exactement :
 
-- [ ] [#919](https://github.com/iguanacucumber/veryslopnynotes/issues/919) —
-      signature : le build release échoue sans vraie clé, sans repli debug ;
-      `apksigner` prouve un certificat autre que `CN=Android Debug`, et la
-      checklist §7 et §9 porte la preuve de signature.
 - [ ] [#976](https://github.com/iguanacucumber/veryslopnynotes/issues/976) —
       sign-off : les sept sections de
       [`docs/legal/SIGNOFF.md`](legal/SIGNOFF.md) passent de `pending` à
@@ -310,9 +311,9 @@ Le reste de la checklist porte les preuves de publication :
   n'a ni propriétaire, ni date, ni preuve. Une signature vide de responsable de
   release, de mainteneur de garde ou, si requis, de mainteneur sécurité suffit
   à bloquer.
-- [#919](https://github.com/iguanacucumber/veryslopnynotes/issues/919) reste
-  ouvert : le build retombe sur la signature debug sans vraie clé, ou aucune
-  empreinte release n'est publiée.
+- L'APK publié porte `CN=Android Debug`, aucune empreinte release n'est
+  publiée, ou le build a contourné le fail-closed de
+  [#919](https://github.com/iguanacucumber/veryslopnynotes/issues/919).
 - La bêta privée [#969](https://github.com/iguanacucumber/veryslopnynotes/issues/969)
   n'a pas eu lieu ; l'absence de retour n'est pas une preuve de succès.
 - Le dogfood interne [#965](https://github.com/iguanacucumber/veryslopnynotes/issues/965)
