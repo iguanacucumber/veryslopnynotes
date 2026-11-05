@@ -1,8 +1,8 @@
 # Dossier de validation juridique et vie privée
 
 Statut du dossier : **ouvert — aucune signature de conseil enregistrée**.
-Révision : **2** — date du constat : **2026-11-04**.
-Dernière vérification : **2026-11-04**. Issue de suivi :
+Révision : **3** — date du constat : **2026-11-05**.
+Dernière vérification : **2026-11-05**. Issue de suivi :
 [#976](https://github.com/iguanacucumber/veryslopnynotes/issues/976).
 
 > Ce dossier prépare une revue de conseil. Il ne vaut pas avis juridique et ne
@@ -28,7 +28,7 @@ validation juridique.
 
 | # | Sujet | Statut | Faits ouverts |
 |---|---|---|---|
-| 1 | GPL et relicence | `pending` | #827 close ; #838 ouverte |
+| 1 | GPL et relicence | `pending` | #827 close ; #838 close (PR #1154) ; incertitudes U1–U6 ouvertes |
 | 2 | Notice de confidentialité | `pending` | #831 ouverte ; #829 et #906 closes |
 | 3 | Assistant IA et mineurs | `pending` | #829 close ; copie et mention magasin à valider |
 | 4 | Autorisation Pronote et établissement | `pending` | #831 ouverte ; aucune autorisation archivée |
@@ -44,11 +44,12 @@ validation juridique.
 - Dépend de : [#827](https://github.com/iguanacucumber/veryslopnynotes/issues/827)
   (**close** — voie de relicence documentée dans
   [`RELICENSING.md`](RELICENSING.md)), [#838](https://github.com/iguanacucumber/veryslopnynotes/issues/838)
-  (**ouverte** — inventaire des fichiers dérivés de Papillon). La validation
-  écrite du conseil reste requise.
+  (**close** — inventaire livré dans [`PROVENANCE.md`](PROVENANCE.md), PR
+  [#1154](https://github.com/iguanacucumber/veryslopnynotes/pull/1154)). La
+  validation écrite du conseil reste requise.
 - Décision humaine restante : faire valider par écrit la relicence MIT →
-  `GPL-3.0-only`, l'attribution Papillon et l'offre de source ; achever #838
-  avant toute distribution binaire.
+  `GPL-3.0-only`, l'attribution Papillon et l'offre de source ; statuer sur les
+  incertitudes U1–U6 de l'inventaire avant toute distribution binaire.
 
 **Ce que le dépôt permet de vérifier**
 
@@ -64,7 +65,11 @@ validation juridique.
 - [`docs/RELEASE.md`](../RELEASE.md) décrit la publication de la source
   correspondante, les textes de licence embarqués et la signature de l'APK.
 - #827 est close : la voie d'ingénierie est consignée, pas l'avis juridique.
-  #838 reste ouverte et son inventaire n'est pas remplacé par ce dossier.
+- [`docs/legal/PROVENANCE.md`](PROVENANCE.md) inventorie les fichiers portés ou
+  adaptés, la source et la licence ; ses points U1–U6 restent explicitement
+  « unresolved — do not claim clean-room ». #838 est close (PR
+  [#1154](https://github.com/iguanacucumber/veryslopnynotes/pull/1154)) ; cet
+  inventaire ne remplace pas l'avis du conseil.
 
 **Questions au conseil**
 
@@ -73,8 +78,8 @@ validation juridique.
    de CLA et des identités Git relevées dans l'historique puis suivies dans
    #827 ? Une autorisation de contributeur est-elle requise pour l'un d'eux ?
 2. Les fichiers dérivés de Papillon sont-ils correctement identifiés et crédités
-   par `THIRD_PARTY_NOTICES.md` et l'ADR-008 ? L'inventaire incomplet de #838
-   interdit-il une distribution avant sa clôture ?
+   par `THIRD_PARTY_NOTICES.md` et l'ADR-008 ? Les incertitudes U1–U6 de
+   `PROVENANCE.md` interdisent-elles une distribution avant d'être levées ?
 3. La distribution prévue (APK GitHub, puis éventuellement Google Play avec Play
    App Signing et AAB) respecte-t-elle la GPL-3.0, notamment les §4, §5 et §6 ?
    Faut-il une offre écrite supplémentaire ou une clause de source ?
@@ -88,7 +93,8 @@ validation juridique.
 **Preuves** : [`LICENSE`](../../LICENSE),
 [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md),
 [`ADR-008`](../adr/008-relicense-gpl.md), [`docs/RELEASE.md`](../RELEASE.md),
-[`RELICENSING.md`](RELICENSING.md), #827 (close), #838 (ouverte).
+[`RELICENSING.md`](RELICENSING.md), [`PROVENANCE.md`](PROVENANCE.md), #827
+(close), #838 (close).
 
 **Bloc de signature — à remplir uniquement après décision écrite**
 

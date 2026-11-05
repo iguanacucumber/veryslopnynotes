@@ -179,9 +179,9 @@ Aucun fichier courant ne revendique un développement clean-room. La recherche
 mention de PR #1112 (« aucune dépendance ni asset tiers ajouté ») ne prouve pas
 l'origine indépendante de l'icône : elle est classée U2.
 
-Conformément à ADR-008 §4, tant que l'inventaire est incomplet, un fichier qui
-ressemble à un portage est traité comme dérivé et crédité. Les points U1 à U6 ne
-doivent pas être utilisés pour affirmer que le dépôt est clean-room.
+Conformément à ADR-008 §4, tant que des points U1–U6 restent non résolus, un
+fichier qui ressemble à un portage est traité comme dérivé et crédité. Ces points
+ne doivent pas être utilisés pour affirmer que le dépôt est clean-room.
 
 ## Attribution
 

@@ -127,13 +127,14 @@ Papillon ne sont pas relicenciés par la voie MIT : ils restent sous GPL-3.0 ave
 le copyright et l'attribution d'origine (ADR-008 §4). Ils ne sont ni blanchis ni
 présentés comme clean-room.
 
-`docs/legal/PROVENANCE.md` (#838) doit inventorier les fichiers, la version ou
-le commit source et la logique portée ; l'inventaire est en cours dans #838. Au
-2026-11-04, ce fichier n'existe pas sur `origin/main` ; ce document ne duplique
-donc pas l'inventaire. Tant qu'il est incomplet, un fichier qui ressemble à un
-portage est traité comme dérivé et crédité. Les crédits tiers sont dans
-[`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md) ; aucun logo ni capture
-de Papillon n'est livré.
+`docs/legal/PROVENANCE.md` (#838) inventorie les fichiers, la version ou le
+commit source et la logique portée. L'inventaire est livré (PR
+[#1154](https://github.com/iguanacucumber/veryslopnynotes/pull/1154)) ; ses
+points U1–U6 restent explicitement « unresolved — do not claim clean-room » et
+#838 est close. Tant que ces points restent non résolus, un fichier qui
+ressemble à un portage est traité comme dérivé et crédité. Les crédits tiers
+sont dans [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md) ; aucun logo
+ni capture de Papillon n'est livré.
 
 ## Fait d'ingénierie, pas avis juridique
 
