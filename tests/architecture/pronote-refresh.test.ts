@@ -56,6 +56,37 @@ describe("rafraîchissement de session atomique (#405)", () => {
     expect(retry).toContain("send(functionName, postData)");
   });
 
+  test("un refresh raté restaure la session précédente (jamais à moitié ouverte)", () => {
+    const client = codeOnly(readFileSync(CLIENT, "utf8"));
+    const refresh = slice(client, "@Synchronized\n    open fun refresh(", "\n    }\n");
+    // Tous les champs permutés par `refresh`/`login` ont un instantané.
+    for (const [field, snapshot] of [
+      ["attributes", "oldAttributes"],
+      ["funcOptions", "oldFuncOptions"],
+      ["encryption", "oldEncryption"],
+      ["userSettings", "oldUserSettings"],
+      ["week", "oldWeek"],
+      ["logged_in", "oldLoggedIn"],
+      ["lastConnection", "oldLastConnection"],
+      ["periods_", "oldPeriods"],
+      ["password", "oldPassword"],
+    ] as const) {
+      expect(refresh).toContain(`${snapshot} = ${field}`);
+    }
+    expect(refresh).toContain("val oldCommunication = if (::communication.isInitialized) communication else null");
+    expect(refresh).toContain("val oldInfo = if (::info.isInitialized) info else null");
+    expect(refresh).toContain("val oldStartDay = if (::startDay.isInitialized) startDay else null");
+    // Le `catch` remet chaque champ AVANT de propager l'échec.
+    expect(refresh).toContain("if (oldCommunication != null) communication = oldCommunication");
+    expect(refresh).toContain("attributes = oldAttributes");
+    expect(refresh).toContain("periods_ = oldPeriods");
+    expect(refresh).toContain("password = oldPassword");
+    // Un login qui refuse la clé ne laisse pas `refresh` réussir.
+    expect(refresh).toContain(
+      "if (!login()) throw PronoteAPIError(PRONOTE_ERROR_MESSAGES.getValue(10), pronoteErrorCode = 10)",
+    );
+  });
+
   test("seuls 401/G=10 rouvrent la session ; aucune écriture rejouée", () => {
     const client = codeOnly(readFileSync(CLIENT, "utf8"));
     // 5xx, 403, G inconnu : la session n'est pas en cause, aucun login.

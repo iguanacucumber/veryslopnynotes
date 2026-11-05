@@ -57,10 +57,12 @@ enum class AccountDataStore(val id: String, val policy: AccountStorePolicy) {
     }
 }
 
-/** Une étape nommée : `true` = le store est réellement vide. */
+/** Une étape nommée : `true` = le store est réellement vide. L'argument indique
+ * que TOUTES les étapes précédentes ont réussi ; une étape qui publie (bascule
+ * de compte) le consulte avant de rendre le nouveau client visible. */
 class AccountPurgeStep(
     val store: AccountDataStore,
-    val action: () -> Boolean,
+    val action: (Boolean) -> Boolean,
 )
 
 /** Une bascule de compte : la publication attend la purge (I16). */
@@ -107,11 +109,11 @@ fun interface AccountPurgeRunner {
  * LA purge de compte. Toutes les étapes d'un mode s'exécutent, puis le
  * résultat liste les échecs et les stores non enregistrés : une étape ratée
  * n'empêche pas les autres de partir, mais interdit de publier le compte
- * suivant.
+ * suivant (l'étape CACHE reçoit `false` et n'appelle pas `publish`).
  */
 class AccountPurgePlan private constructor(
     val mode: AccountPurgeMode,
-    private val steps: Map<AccountDataStore, () -> Boolean>,
+    private val steps: Map<AccountDataStore, (Boolean) -> Boolean>,
     private val missing: List<AccountDataStore>,
 ) {
     fun purge(): AccountPurgeResult {
@@ -120,13 +122,19 @@ class AccountPurgePlan private constructor(
         }
         val purged = ArrayList<AccountDataStore>(steps.size)
         val failed = ArrayList<AccountDataStore>()
+        var priorSucceeded = true
         for ((store, action) in steps) {
             val cleared = try {
-                action()
+                action(priorSucceeded)
             } catch (_: Exception) {
                 false
             }
-            if (cleared) purged.add(store) else failed.add(store)
+            if (cleared) {
+                purged.add(store)
+            } else {
+                failed.add(store)
+                priorSucceeded = false
+            }
         }
         return if (failed.isEmpty()) {
             AccountPurgeResult.Complete(purged)
@@ -138,7 +146,7 @@ class AccountPurgePlan private constructor(
     companion object {
         /** Aucune étape en double ; tout store requis absent est SIGNALÉ. */
         fun of(mode: AccountPurgeMode, steps: List<AccountPurgeStep>): AccountPurgePlan {
-            val byStore = LinkedHashMap<AccountDataStore, () -> Boolean>()
+            val byStore = LinkedHashMap<AccountDataStore, (Boolean) -> Boolean>()
             for (step in steps) {
                 if (step.store.required(mode)) byStore[step.store] = step.action
             }

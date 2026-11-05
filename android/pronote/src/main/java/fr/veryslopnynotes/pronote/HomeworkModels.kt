@@ -65,7 +65,8 @@ class Information(private val client: PronoteClientLike, json: JVal?) : PronoteO
     val title: String? = r(::optStr, listOf("L"), ResolveOpts.lenient())
     val author: String = r(::strOf, listOf("auteur"))
     var read: Boolean = r(::boolOf, listOf("lue"))
-    val creationDate: LocalDateTime = r(::datetimeParse, listOf("dateCreation", "V"))
+    val creationDate: LocalDateTime? =
+        r(::datetimeParse, listOf("dateCreation", "V"), ResolveOpts.lenient())
     val startDate: LocalDateTime? =
         r(::datetimeParse, listOf("dateDebut", "V"), ResolveOpts.lenient())
     val endDate: LocalDateTime? =

@@ -241,6 +241,10 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
             try {
                 parsed = parseHtml(res.text)
                 break
+            } catch (e: IpSuspendedError) {
+                throw e
+            } catch (e: UnexpectedPageError) {
+                throw e
             } catch (_: Exception) {
                 continue
             }

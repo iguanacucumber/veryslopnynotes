@@ -41,22 +41,35 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
 
-      # Un commit antérieur à l'ajout du budget n'a ni script ni baseline :
-      # les deux manquants = ancienneté, pas une suppression. Une suppression
-      # partielle (un seul présent) échoue plus bas.
+      # Le VÉRIFICATEUR vient toujours de la branche par défaut : le checkout
+      # suit le commit mesuré (pour sa baseline), mais exécuter son script
+      # laisserait une PR modifier le budget ou le code qui le contrôle.
+      # Un commit antérieur au budget n'a ni script ni baseline : baseline de
+      # main en repli. Une suppression partielle échoue plus bas.
       - name: Repli budget de main
         env:
           GH_TOKEN: ${{ github.token }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
+          script="$RUNNER_TEMP/apk-size.ts"
+          gh api "repos/$GITHUB_REPOSITORY/contents/agents/runtime/apk-size.ts?ref=$DEFAULT_BRANCH" \
+            -H "Accept: application/vnd.github.raw" > "$script"
+          if [ ! -s "$script" ]; then
+            echo "::error title=Script budget absent::agents/runtime/apk-size.ts introuvable sur $DEFAULT_BRANCH."
+            exit 1
+          fi
+          # Le script de main est autonome (imports node: seulement). Un import
+          # relatif viendrait du checkout de la PR : refus plutôt qu'exécution.
+          if grep -Eq "from ['\"]\\./|require\\(['\"]\\./" "$script"; then
+            echo "::error title=Script budget non autonome::import relatif dans apk-size.ts de $DEFAULT_BRANCH."
+            exit 1
+          fi
+          echo "APK_SIZE_SCRIPT=$script" >> "$GITHUB_ENV"
           if [ ! -f apk-size-baseline.json ] && [ ! -f agents/runtime/apk-size.ts ]; then
-            echo "::warning title=Budget APK absent du commit::commit antérieur au budget ; baseline et script pris sur $DEFAULT_BRANCH."
+            echo "::warning title=Budget APK absent du commit::commit antérieur au budget ; baseline prise sur $DEFAULT_BRANCH."
             gh api "repos/$GITHUB_REPOSITORY/contents/apk-size-baseline.json?ref=$DEFAULT_BRANCH" \
               -H "Accept: application/vnd.github.raw" > apk-size-baseline.json
-            mkdir -p agents/runtime
-            gh api "repos/$GITHUB_REPOSITORY/contents/agents/runtime/apk-size.ts?ref=$DEFAULT_BRANCH" \
-              -H "Accept: application/vnd.github.raw" > agents/runtime/apk-size.ts
           elif [ ! -f apk-size-baseline.json ] || [ ! -f agents/runtime/apk-size.ts ]; then
             echo "::error title=Budget APK incomplet::apk-size-baseline.json et agents/runtime/apk-size.ts doivent exister ensemble."
             exit 1
@@ -86,7 +99,7 @@ jobs:
       - name: Budget
         run: |
           set -euo pipefail
-          bun run agents/runtime/apk-size.ts \
+          bun run "$APK_SIZE_SCRIPT" \
             --apk "$APK_PATH" \
             --baseline apk-size-baseline.json \
             --record "$RUNNER_TEMP/apk-size.json"

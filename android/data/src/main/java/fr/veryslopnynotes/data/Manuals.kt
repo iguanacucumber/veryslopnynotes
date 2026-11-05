@@ -139,9 +139,10 @@ class ManualStore(context: Context) {
      * un réglage qui n'a pas été écrit.
      */
     fun setEnabled(subject: String, enabled: Boolean): Boolean {
+        val epoch = SessionEpoch.current()
         val key = normalizeSubject(subject)
         if (key.isEmpty() || key.length > MAX_SUBJECT_CHARS) return false
-        return update { obj ->
+        return update(epoch) { obj ->
             val next = disabledSubjects(obj).toMutableSet()
             if (enabled) next.remove(key) else next.add(key)
             obj.put(KEY_DISABLED_SUBJECTS, jsonArray(next.take(MAX_SUBJECTS)).toString())
@@ -220,11 +221,12 @@ class ManualStore(context: Context) {
      * invalide les extraits (ils ne correspondent plus au manuel choisi).
      */
     fun save(raw: String): ManualUrlResult {
+        val epoch = SessionEpoch.current()
         val validated = ManualUrl.validate(raw)
         if (validated !is ManualUrlResult.Ok) return validated
         // L'ancienne adresse se lit DANS la section critique : deux `save`
         // concurrents ne peuvent pas comparer une adresse déjà remplacée.
-        val written = update { obj ->
+        val written = update(epoch) { obj ->
             val previous = storedUrl(obj)
             obj.put(KEY_URL, validated.url)
             if (previous != validated.url) obj.remove(KEY_DOCS)
@@ -286,7 +288,8 @@ class ManualStore(context: Context) {
 
     /** Indices de choix : classe + matières, jamais un profil complet. */
     fun saveGuess(classLabel: String, subjects: List<String>) {
-        update { obj ->
+        val epoch = SessionEpoch.current()
+        update(epoch) { obj ->
             val label = classLabel.trim().take(64).ifEmpty { storedClassLabel(obj) }
             val clean = subjects.map { it.trim().take(100) }
                 .filter { it.isNotEmpty() }
@@ -326,7 +329,8 @@ class ManualStore(context: Context) {
     fun saveDoc(url: String, doc: ManualDoc) {
         val key = url.trim()
         if (key.isEmpty() || !doc.isValid()) return
-        update { obj ->
+        val epoch = SessionEpoch.current()
+        update(epoch) { obj ->
             val map = docs(obj)
             map.put(
                 key,
@@ -460,15 +464,18 @@ class ManualStore(context: Context) {
         null
     }
 
-    private fun update(block: (JSONObject) -> Unit): Boolean {
+    private fun update(epoch: Long, block: (JSONObject) -> Unit): Boolean {
         val target = file ?: return false
         return lock.run {
+            // Époque capturée à l'ENTRÉE de l'opération publique : une purge
+            // passée pendant l'attente du verrou ne ressuscite pas le manuel.
+            if (!SessionEpoch.isCurrent(epoch)) return@run false
             try {
                 val obj = data()
                 block(obj)
                 // Garde d'époque partagée avec notes/chat/préfs : une écriture
                 // en vol pendant la purge de compte est REFUSÉE.
-                OfflineArtifacts.writeText(target, obj.toString(), SessionEpoch.current())
+                OfflineArtifacts.writeText(target, obj.toString(), epoch)
             } catch (e: LocalDataUnreadable) {
                 // `data()` a levé : ne jamais remplacer la cible corrompue.
                 throw e

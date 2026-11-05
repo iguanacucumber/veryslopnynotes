@@ -39,9 +39,10 @@ private var disk: String? = null
 /** Nombre d'effacements DURS demandés par le repli (« Oublier » durable). */
 private var discards = 0
 
-private fun discardDisk() {
+private fun discardDisk(): Boolean {
     discards++
     disk = null
+    return true
 }
 
 /**
@@ -76,10 +77,11 @@ private class FakeSecureStore(
         return disk?.takeIf { isValidLlmKey(it) }
     }
 
-    override fun clear() {
+    override fun clear(): Boolean {
         if (throwOn == "clear") error("Keystore indisponible")
         commit()
         disk = null
+        return true
     }
 }
 
@@ -105,10 +107,11 @@ private class Driver {
             store.save("  cle-du-compte-b  ")
             val saved = store.apiKey()
             val configured = store.isConfigured()
-            store.clear()
+            val cleared = store.clear()
             ok(
                 "saved" to text(saved),
                 "configured" to JVal.Bool(configured),
+                "cleared" to JVal.Bool(cleared),
                 "afterForget" to text(store.apiKey()),
                 "discards" to count(discards),
                 // Lancement suivant, Keystore réparé : le fichier a disparu.
@@ -208,6 +211,20 @@ private class Driver {
                 "apiKey" to text(store.apiKey()),
                 "discards" to count(discards),
                 "nextLaunch" to text(FakeSecureStore().apiKey()),
+                "health" to health(),
+            )
+        }
+        // Le chiffré n'a pas pu s'effacer ET l'effacement dur échoue aussi :
+        // `clear()` doit le DIRE (false), pour que la purge ne déclare pas la
+        // clé partie alors que le fichier peut rester.
+        "clear-discard-fails" -> {
+            disk = "cle-a"
+            val store = ResilientLlmKeyStore(FakeSecureStore(throwOn = "clear")) { false }
+            val cleared = store.clear()
+            ok(
+                "cleared" to JVal.Bool(cleared),
+                "apiKey" to text(store.apiKey()),
+                "disk" to text(disk),
                 "health" to health(),
             )
         }

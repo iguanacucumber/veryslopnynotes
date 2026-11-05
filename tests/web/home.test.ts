@@ -279,6 +279,17 @@ describe("accueil : capacités visibles, donnée absente (#804)", () => {
     expect(html).toContain("Devoirs");
   });
 
+  test("des devoirs en retard ne disent pas « Rien à rendre »", () => {
+    // La liste du widget ne garde que les échéances à venir ; `total` compte
+    // aussi les retards. Une liste vide avec un total non nul n'est pas vide.
+    const html = renderToStaticMarkup(
+      createElement(TasksWidget, { ...props, tasks: [], total: 4 }),
+    );
+    expect(html).not.toContain("Rien à rendre");
+    expect(html).toContain("Aucun devoir à venir");
+    expect(html).toContain("4 devoirs à faire");
+  });
+
   test("le câblage garde les widgets quand la capacité a un payload vide", () => {
     const source = readFileSync(
       join(import.meta.dir, "..", "..", "web", "src", "features", "home", "HomeScreen.tsx"),

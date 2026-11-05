@@ -57,7 +57,7 @@ describe("fraîcheur des fils : jamais de date inventée (#427)", () => {
     );
     // La porte de lecture transmet le payload précédent à la messagerie.
     const reads = source(join(DATA, "CachedReads.kt"));
-    expect(reads).toContain("discussionsPayload(client, previous = previous)");
+    expect(reads).toContain("discussionsPayload(client, previous = previous, epoch = epoch)");
   });
 
   test("un rafraîchissement forcé ne réutilise aucune date", () => {

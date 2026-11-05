@@ -112,6 +112,16 @@ describe("file d'attente unique du client local (#310)", () => {
     expect(shared).toContain("object ClientQueue");
   });
 
+  test("l'attente du job crée TOUJOURS une annulation, combinée au jeton appelant", () => {
+    const shared = readFileSync(SHARED, "utf8");
+    // Même quand le pont fournit déjà un jeton, le délai du job doit pouvoir
+    // couper le travail : sinon le socket continue après le retour.
+    expect(shared).toContain("val timeoutCancellation = RequestCancellation()");
+    expect(shared).toContain("RequestScope.current()?.onCancel { timeoutCancellation.cancel() }");
+    expect(shared).toContain("RequestScope.with(timeoutCancellation)");
+    expect(shared).not.toContain("if (RequestScope.current() == null) RequestCancellation()");
+  });
+
   test.skipIf(skip)("fil unique : 3 lectures distinctes = 0 chevauchement, ordre d'arrivée", async () => {
     const qid = await newQueue();
     const keys = ["grades|x", "timetable|y", "news|"];

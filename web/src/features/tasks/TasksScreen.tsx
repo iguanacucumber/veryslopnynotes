@@ -72,8 +72,11 @@ type LlmState = { configured: boolean | null; error: string | null };
 /** La semaine est TOUJOURS bornée localement : sans elle, un payload sans
  *  `weekStart` piégerait l'utilisateur sur une semaine qu'il ne peut quitter. */
 export function TasksScreen() {
-  const [week, setWeek] = useState(() => weekStartOf(new Date()));
-  const currentWeek = weekStartOf(new Date());
+  // Même horloge pour le navigateur de semaine et les sections : après minuit,
+  // « Aujourd'hui » et la semaine courante ne peuvent pas diverger.
+  const now = useNow();
+  const [week, setWeek] = useState(() => weekStartOf(new Date(now)));
+  const currentWeek = weekStartOf(new Date(now));
   const end = weekEndOf(week);
   const range = weekRangeFr(week, end);
 
@@ -88,17 +91,14 @@ export function TasksScreen() {
         onToday={() => setWeek(currentWeek)}
       />
 
-      <TasksWeek key={week} week={week} />
+      <TasksWeek key={week} week={week} now={now} />
     </Page>
   );
 }
 
-function TasksWeek({ week }: { week: string }) {
+function TasksWeek({ week, now }: { week: string; now: number }) {
   const { notify, refreshTick } = useApp();
   const navigate = useViewNavigate();
-  // « Maintenant » avance sans interaction : les sections ne restent pas
-  // figées sur la veille après minuit.
-  const now = useNow();
   const currentWeek = weekStartOf(new Date(now));
   const query = `weekStart=${week}`;
   const resource = useResource("assignments", query);

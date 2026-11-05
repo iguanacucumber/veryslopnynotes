@@ -279,9 +279,9 @@ describe("échéance totale de la requête scolaire (#868)", () => {
       const awaited = JSON.parse(raw) as { pending: boolean; line?: string };
       expect(awaited.pending).toBe(false);
       const answer = JSON.parse(awaited.line!) as HttpAnswer;
-      // `disconnect()` peut rendre `SocketException` avant le contrôle de
-      // boucle ; le point prouvé est le DÉLAI et la fermeture, pas le nom exact.
-      expect(answer.error).toMatch(/RequestCancelled|SocketException|IOException/);
+      // Une lecture bloquée coupée par l'abandon rend un `IOException` brut :
+      // le transport le traduit en `RequestCancelled`, jamais réessayé.
+      expect(answer.error).toBe("RequestCancelled");
       expect(Date.now() - started).toBeLessThan(3500);
       expect(await closedOrTimeout(server, 5000)).toBe("closed");
     } finally {

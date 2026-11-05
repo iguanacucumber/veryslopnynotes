@@ -69,25 +69,35 @@ export function TeacherRoute() {
     let alive = true;
     setThreadLoaded(false);
     setLoadError("");
-    void Promise.all([bridge.teacherThread(), bridge.lessons()])
-      .then(([rawThread, lessons]) => {
+    void Promise.allSettled([bridge.teacherThread(), bridge.lessons()])
+      .then(([threadResult, lessonsResult]) => {
         if (!alive) return;
-        const thread = parseTeacherThread(rawThread);
-        const known = (lessons?.subjects ?? [])
-          .map((item) => item.subject)
-          .filter((item): item is string => typeof item === "string" && item.trim() !== "");
+        // Le fil local ne dépend pas de la liste des matières : un échec des
+        // matières ne doit pas le masquer.
+        const known =
+          lessonsResult.status === "fulfilled"
+            ? (lessonsResult.value?.subjects ?? [])
+                .map((item) => item.subject)
+                .filter((item): item is string => typeof item === "string" && item.trim() !== "")
+            : [];
         const unique = [...new Set(known)].sort((a, b) => a.localeCompare(b, "fr"));
         setSubjects(unique);
-        applyMessages(thread.messages);
-        setSubject((current) => {
-          if (current) return current;
-          if (thread.subject) return thread.subject;
-          return unique.length === 1 ? unique[0]! : "";
-        });
-      })
-      .catch((e: unknown) => {
-        if (!alive) return;
-        setLoadError(messageOf(e, "Discussion locale illisible : recharge."));
+        // Une lecture de fil échouée ne doit pas non plus EFFACER le fil déjà
+        // affiché : seule une lecture réussie remplace le contenu.
+        if (threadResult.status === "fulfilled") {
+          const thread = parseTeacherThread(threadResult.value);
+          applyMessages(thread.messages);
+          setSubject((current) => {
+            if (current) return current;
+            if (thread.subject) return thread.subject;
+            return unique.length === 1 ? unique[0]! : "";
+          });
+        }
+        if (threadResult.status === "rejected") {
+          setLoadError(messageOf(threadResult.reason, "Discussion locale illisible : recharge."));
+        } else if (lessonsResult.status === "rejected") {
+          setLoadError(messageOf(lessonsResult.reason, "Matières indisponibles : recharge."));
+        }
       })
       .finally(() => {
         if (alive) setThreadLoaded(true);

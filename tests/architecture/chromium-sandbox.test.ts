@@ -28,6 +28,7 @@ const CLONE_NEWNET = 0x40000000;
 interface Arg {
   readonly index: number;
   readonly value: number;
+  readonly valueTwo?: number;
   readonly op: string;
 }
 interface SyscallRule {
@@ -51,6 +52,21 @@ const chromiumRule = (name: string): SyscallRule => {
 };
 const dockerRun = /```sh\n(docker run[\s\S]*?)```/.exec(read(README))?.[1] ?? "";
 
+/**
+ * `SCMP_CMP_MASKED_EQ` matche `(arg & value) == valueTwo`. Omettre `valueTwo`
+ * vaut 0 ; une valeur non nulle changerait la règle en « au moins un bit
+ * interdit présent » (donc ouvrirait les namespaces refusés).
+ */
+function expectMaskAllowsOnly(rule: SyscallRule): void {
+  expect(rule.args?.length).toBeGreaterThan(0);
+  for (const arg of rule.args ?? []) {
+    expect({ index: arg.index, valueTwo: arg.valueTwo }).toEqual({
+      index: arg.index,
+      valueTwo: arg.valueTwo === undefined ? undefined : 0,
+    });
+  }
+}
+
 describe("sandbox Chromium — décision explicite", () => {
   test("le lancement impose chromiumSandbox, jamais un défaut implicite", () => {
     expect(CHROMIUM_LAUNCH_OPTIONS.chromiumSandbox).toBe(true);
@@ -72,6 +88,8 @@ describe("sandbox Chromium — profil seccomp étroit", () => {
   test("clone n'ouvre que user/PID/net ; mount, cgroup, UTS et IPC restent refusés", () => {
     const clone = chromiumRule("clone");
     expect(clone.action).toBe("SCMP_ACT_ALLOW");
+    // valueTwo à 0 : la règle n'ouvre que si AUCUN bit interdit n'est posé.
+    expectMaskAllowsOnly(clone);
     const mask = clone.args?.[0]?.value ?? 0;
     // Masque de refus : chaque bit présent interdit le drapeau correspondant.
     expect(mask & (CLONE_NEWNS | CLONE_NEWCGROUP | CLONE_NEWUTS | CLONE_NEWIPC)).not.toBe(0);
@@ -80,6 +98,7 @@ describe("sandbox Chromium — profil seccomp étroit", () => {
 
   test("unshare n'ouvre que CLONE_NEWUSER", () => {
     const unshare = chromiumRule("unshare");
+    expectMaskAllowsOnly(unshare);
     const mask = unshare.args?.[0]?.value ?? 0;
     expect(mask & CLONE_NEWUSER).toBe(0);
     for (const forbidden of [

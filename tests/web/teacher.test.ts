@@ -396,4 +396,15 @@ describe("écran Prof — câblage (#633)", () => {
     expect(route).toContain("Supprimer la discussion ?");
     expect(route).toContain("clearThread");
   });
+
+  test("un échec des matières ne masque pas le fil local", () => {
+    expect(route).not.toContain("Promise.all([bridge.teacherThread()");
+    expect(route).toContain("Promise.allSettled([bridge.teacherThread(), bridge.lessons()])");
+    // Chaque résultat est traité séparément : le fil s'affiche même si les
+    // matières échouent, et l'erreur des matières reste dite.
+    expect(route).toContain('threadResult.status === "fulfilled"');
+    expect(route).toContain("applyMessages(thread.messages)");
+    expect(route).toContain('lessonsResult.status === "rejected"');
+    expect(route).toContain("Matières indisponibles : recharge.");
+  });
 });

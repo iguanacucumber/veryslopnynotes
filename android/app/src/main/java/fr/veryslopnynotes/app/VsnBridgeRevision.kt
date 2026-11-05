@@ -51,6 +51,9 @@ internal fun VsnBridge.revisionLoad(p: JSONObject): JSONObject {
 internal fun VsnBridge.revisionExportPdf(p: JSONObject): JSONObject {
     val store = revisions
         ?: return JSONObject().put("ok", false).put("message", "Fiches indisponibles.")
+    // Époque capturée AVANT la lecture et la génération : une déconnexion
+    // pendant le PDF ne doit pas écrire la fiche de l'ancien compte (I16).
+    val epoch = SessionEpoch.current()
     val id = bounded(p.string("id"), 80)
     val sheet = try {
         loadRevisionSheet(store, id)
@@ -58,8 +61,7 @@ internal fun VsnBridge.revisionExportPdf(p: JSONObject): JSONObject {
         null
     } ?: return JSONObject().put("ok", false).put("message", "Fiche introuvable.")
     return try {
-        // Même nom, garde d'époque et cache borné que les pièces jointes (I4).
-        val epoch = SessionEpoch.current()
+        // Même nom, garde d'époque et cache borné que les pièces jointes (I16).
         val bytes = ByteArrayOutputStream().use { out ->
             RevisionPdf.writeSheet(sheet, out)
             out.toByteArray()

@@ -46,26 +46,26 @@ object AccountPurgeFactory {
     ): AccountPurgePlan = AccountPurgePlan.of(
         mode,
         listOf(
-            AccountPurgeStep(AccountDataStore.SESSION) {
+            AccountPurgeStep(AccountDataStore.SESSION) { _ ->
                 var cleared = false
                 SessionRepair.clearSession {
                     cleared = targets.sessions.clear().ok
                 }
                 cleared
             },
-            AccountPurgeStep(AccountDataStore.ACCOUNTS) { targets.accounts.clear().ok },
-            AccountPurgeStep(AccountDataStore.COURSE_NOTES) { targets.lessons.clear() },
-            AccountPurgeStep(AccountDataStore.TEACHER_CHAT) { targets.teacherChat.clear() },
-            AccountPurgeStep(AccountDataStore.SUBJECT_PREFS) { targets.prefs.clear() },
-            AccountPurgeStep(AccountDataStore.MANUAL) {
+            AccountPurgeStep(AccountDataStore.ACCOUNTS) { _ -> targets.accounts.clear().ok },
+            AccountPurgeStep(AccountDataStore.COURSE_NOTES) { _ -> targets.lessons.clear() },
+            AccountPurgeStep(AccountDataStore.TEACHER_CHAT) { _ -> targets.teacherChat.clear() },
+            AccountPurgeStep(AccountDataStore.SUBJECT_PREFS) { _ -> targets.prefs.clear() },
+            AccountPurgeStep(AccountDataStore.MANUAL) { _ ->
                 val cleared = targets.manuals.clearAccountData()
                 targets.onManualPurged()
                 cleared
             },
-            AccountPurgeStep(AccountDataStore.ATTACHMENTS) {
+            AccountPurgeStep(AccountDataStore.ATTACHMENTS) { _ ->
                 DownloadedFiles.purge(targets.cacheRoot, DownloadedFiles.ATTACHMENTS)
             },
-            AccountPurgeStep(AccountDataStore.EXPORTS) {
+            AccountPurgeStep(AccountDataStore.EXPORTS) { _ ->
                 // L'export demandé AVANT la déconnexion doit survivre au partage ;
                 // seule la suppression totale efface la copie exportée.
                 if (mode == AccountPurgeMode.DELETE_ALL) {
@@ -74,39 +74,40 @@ object AccountPurgeFactory {
                     true
                 }
             },
-            AccountPurgeStep(AccountDataStore.PHOTOS) { deleteDir(File(targets.cacheRoot, "photos")) },
-            AccountPurgeStep(AccountDataStore.READ_STATE) { targets.webView.clearReadState() },
-            AccountPurgeStep(AccountDataStore.WEBVIEW) { targets.webView.clearCache() },
-            AccountPurgeStep(AccountDataStore.LLM_KEY) {
+            AccountPurgeStep(AccountDataStore.PHOTOS) { _ -> deleteDir(File(targets.cacheRoot, "photos")) },
+            AccountPurgeStep(AccountDataStore.READ_STATE) { _ -> targets.webView.clearReadState() },
+            AccountPurgeStep(AccountDataStore.WEBVIEW) { _ -> targets.webView.clearCache() },
+            AccountPurgeStep(AccountDataStore.LLM_KEY) { _ ->
                 try {
-                    targets.llmKeys.clear()
-                    !targets.llmKeys.isConfigured()
+                    targets.llmKeys.clear() && !targets.llmKeys.isConfigured()
                 } catch (_: Exception) {
                     false
                 }
             },
-            AccountPurgeStep(AccountDataStore.AI_CONSENT) {
+            AccountPurgeStep(AccountDataStore.AI_CONSENT) { _ ->
                 try {
                     targets.clearAiConsent()
                 } catch (_: Exception) {
                     false
                 }
             },
-            AccountPurgeStep(AccountDataStore.SERVER_URL) { targets.serverStore.clear() },
-            AccountPurgeStep(AccountDataStore.CACHE) {
+            AccountPurgeStep(AccountDataStore.SERVER_URL) { _ -> targets.serverStore.clear() },
+            AccountPurgeStep(AccountDataStore.CACHE) { priorSucceeded ->
                 val target = switch
                 if (target == null) {
                     CacheScope.purge(targets.cacheStore)
                 } else {
                     // Une bascule remplace aussi les caches mémoire, avant de
-                    // publier le nouveau client.
+                    // publier le nouveau client. Un échec ANTÉRIEUR interdit
+                    // cette publication : le nouveau compte ne doit pas hériter
+                    // de la donnée de l'ancien (I16).
                     ThreadMessageCache.clear()
                     DiscussionListCache.clear()
                     CacheScope.switchAccount(
                         targets.cacheStore,
                         target.previous,
                         target.current,
-                        target.publish,
+                        if (priorSucceeded) target.publish else ({}),
                     ) != CacheSwitch.Failed
                 }
             },

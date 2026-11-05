@@ -490,6 +490,14 @@ describe("fiche vide : une simple bibliographie ne s'assemble pas (I15)", () => 
   });
 });
 
+describe("deux sauvegardes concurrentes ne perdent aucune fiche (#1168)", () => {
+  test.skipIf(skip)("l'index et le journal gardent les deux ids", async () => {
+    const res = JSON.parse(await ask({ op: "concurrentSave" })) as { ids: string[]; alive: boolean };
+    expect(res.alive).toBe(false);
+    expect(res.ids).toEqual(["fiche-a", "fiche-b"]);
+  });
+});
+
 describe("export PDF de fiche : le dessin tient dans la page (#598)", () => {
   // `RevisionPdf.kt` (android.graphics) n'est PAS rejoué hors Gradle : le
   // filet est la lecture de source, comme le câblage du pont.

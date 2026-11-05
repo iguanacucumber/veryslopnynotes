@@ -7,7 +7,9 @@
 #
 # L'APK est ensuite vérifié par `check-release-artifact.ts` : certificat debug,
 # notices GPL/tierces, secrets embarqués, allowlist de permissions et version
-# tag/package/APK. Le tag `v*` déclenche le même build pour croiser le tag.
+# tag/package/APK. Sur un tag `v*`, `release.yml` appelle CE workflow ; le
+# déclencher aussi directement créerait deux runs annulés par la même
+# concurrence.
 #
 # `workflow_call` : un futur job de tag réutilise CE fichier au lieu de recopier
 # le build. L'artefact `release-apk` (APK + mapping + seeds, 7 jours) reste
@@ -18,7 +20,6 @@ on:
   pull_request:
   push:
     branches: [main]
-    tags: ["v*"]
   workflow_dispatch:
   workflow_call:
 

@@ -100,6 +100,7 @@ private class Driver {
             data = opts?.obj("data")?.fields?.mapValues { (_, v) -> (v as? JVal.Str)?.value },
             deadlineMs = opts?.num("deadlineMs")?.toLong(),
             cancellation = cancellation,
+            expectedOrigin = opts?.str("expectedOrigin"),
         )
     }
 

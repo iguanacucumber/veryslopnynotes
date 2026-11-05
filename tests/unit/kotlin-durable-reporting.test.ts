@@ -122,7 +122,7 @@ describe("aucun écrasement silencieux d'une cible illisible (#910)", () => {
     // L'entrée `data()` ne convertit plus une corruption en objet vide.
     const manual = source("Manuals.kt");
     expect(manual).toContain("private fun data(): JSONObject =\n        file?.let { DurableFile.read(it, ::parseObject) } ?: legacyData()");
-    const manualUpdate = bodyOf(manual, "private fun update(block: (JSONObject) -> Unit)");
+    const manualUpdate = bodyOf(manual, "private fun update(epoch: Long, block: (JSONObject) -> Unit)");
     expect(manualUpdate.indexOf("data()")).toBeGreaterThan(-1);
     expect(manualUpdate.indexOf("data()")).toBeLessThan(manualUpdate.indexOf("OfflineArtifacts.writeText"));
     expect(manualUpdate).toContain("catch (e: LocalDataUnreadable)");

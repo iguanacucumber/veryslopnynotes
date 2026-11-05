@@ -67,7 +67,7 @@ class PeriodicSyncWorker(
                 // Clé namespacée `job|` : jamais celle d'un écran, donc jamais
                 // un résultat étranger.
                 val outcome = ClientQueue.submitAndAwait("job|$resource|", READ_TIMEOUT_MS) {
-                    safeRead { cachedRead(client, resource, "") }
+                    safeRead { cachedRead(client, resource, "", epoch = epoch) }
                 } ?: return Result.retry()
                 // Un travail qui JETTE est un échec livré : l'attente finit
                 // tout de suite, et la cause décide.

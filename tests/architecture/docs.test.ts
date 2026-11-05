@@ -385,8 +385,9 @@ describe("registre d'invariants", () => {
       ["android/README.md", 12_000],
       ["web/README.md", 4_000],
       // +1000 pour le sandbox Chromium et le profil seccomp, +3800 pour
-      // l'opérabilité (sondes, drain, cgroups, CA/HSTS).
-      ["server/README.md", 9_600],
+      // l'opérabilité (sondes, drain, cgroups, CA/HSTS), +300 pour la
+      // disponibilité qui lance Chromium, le TLS blanc refusé et la sonde HOST.
+      ["server/README.md", 9_900],
     ];
     for (const [file, max] of ceilings) {
       expect({ file, sousBudget: read(file).length <= max }).toEqual({ file, sousBudget: true });

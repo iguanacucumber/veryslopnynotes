@@ -621,7 +621,7 @@ describe("web tâches — navigation de semaine", () => {
       join(import.meta.dir, "..", "..", "web", "src", "ui", "components.tsx"),
       "utf8",
     );
-    expect(source).toContain("weekStartOf(new Date())");
+    expect(source).toContain("weekStartOf(new Date(now))");
     expect(source).toContain("<WeekNavigator");
     expect(components).toContain('aria-label="Semaine précédente"');
     expect(components).toContain('aria-label="Semaine suivante"');
@@ -638,6 +638,18 @@ describe("web tâches — navigation de semaine", () => {
     expect(source).toContain("assignmentSections(matching, week, new Date(now))");
     expect(source).toContain("const now = useNow()");
     expect(source).toContain("assignmentsMatching(items, search)");
+  });
+
+  test("le navigateur et les sections partagent la même horloge", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "..", "..", "web", "src", "features", "tasks", "TasksScreen.tsx"),
+      "utf8",
+    );
+    // La semaine courante du parent ne peut plus rester figée au montage quand
+    // les sections avancent après minuit.
+    expect(source).toContain("const currentWeek = weekStartOf(new Date(now))");
+    expect(source).toContain("<TasksWeek key={week} week={week} now={now} />");
+    expect(source).toContain("function TasksWeek({ week, now }: { week: string; now: number })");
   });
 
   test("le bouton de retour annonce le statut relatif, pas « Cette semaine » (#567, #580)", () => {

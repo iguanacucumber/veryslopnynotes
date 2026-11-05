@@ -164,8 +164,11 @@ export function newsBodyLoading(state: NewsBodyState): NewsBodyState {
   return { status: "loading", body: state.body, error: "" };
 }
 
-export function newsBodyLoaded(_state: NewsBodyState, body: string): NewsBodyState {
-  return { status: "loaded", body, error: "" };
+export function newsBodyLoaded(state: NewsBodyState, body: unknown): NewsBodyState {
+  // Même nettoyage et même borne que le corps de la liste : un texte vide
+  // reste une ABSENCE, sinon « Lire le texte » disparaîtrait sans contenu.
+  const clean = text(body, NEWS_MAX_BODY);
+  return clean ? { status: "loaded", body: clean, error: "" } : newsBodyFailed(state);
 }
 
 export function newsBodyFailed(state: NewsBodyState, message = NEWS_BODY_ERROR): NewsBodyState {

@@ -188,6 +188,7 @@ export function richScript(s: StubScript): void {
     },
     {
       N: "t2-l-2", estAnnule: true, DateDuCours: { V: "22/09/2026 10:00:00" }, P: 2,
+      DateDuCoursFin: { V: "22/09/2026 12:00:00" },
       place: 2, duree: 2, ListeContenus: { V: [{ G: 3, L: "M. Martin" }] },
     },
   ];

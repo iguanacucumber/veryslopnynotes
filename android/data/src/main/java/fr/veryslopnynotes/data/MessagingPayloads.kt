@@ -48,13 +48,16 @@ internal fun discussionsPayload(
     client: Client,
     nowIso: String = parisNowIso(),
     previous: String? = null,
+    epoch: Long = SessionEpoch.current(),
 ): String {
     val arr = JSONArray()
     val known = knownThreads(previous)
     val read = client.discussionsPartial()
     val raws = read.value
     var partial = read.partial
-    DiscussionListCache.put(raws)
+    // La liste ne se publie que pour la session qui l'a lue : un retour après
+    // déconnexion ne repeuple pas le cache du compte suivant (I16).
+    DiscussionListCache.put(raws, epoch)
     raws.forEachIndexed { i, d ->
         val id = boundedCp(d.id, 64)
         if (id.isEmpty()) return@forEachIndexed
@@ -106,12 +109,16 @@ private fun datesOf(messages: List<Message>): Pair<String?, String?> {
  * réutilisée quand elle est fraîche, donc une vue qui défile ne refait pas
  * `ListeMessagerie` pour chaque ligne.
  */
-internal fun enrichmentPayload(client: Client, ids: List<String>): String {
-    val cached = DiscussionListCache.get()
+internal fun enrichmentPayload(
+    client: Client,
+    ids: List<String>,
+    epoch: Long = SessionEpoch.current(),
+): String {
+    val cached = DiscussionListCache.get(epoch)
     val read = if (cached != null) {
         PartialRead(cached, false)
     } else {
-        client.discussionsPartial().also { DiscussionListCache.put(it.value) }
+        client.discussionsPartial().also { DiscussionListCache.put(it.value, epoch) }
     }
     val byId = read.value.associateBy { it.id }
     var partial = read.partial

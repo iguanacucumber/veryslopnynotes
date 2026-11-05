@@ -84,7 +84,7 @@ private class Driver {
             val steps = AccountDataStore.entries
                 .filter { it.required(AccountPurgeMode.LOGOUT) }
                 .map { store ->
-                    AccountPurgeStep(store) {
+                    AccountPurgeStep(store) { _ ->
                         if (store == AccountDataStore.MANUAL) {
                             clearManualAccountData(file) { !failPrefs }
                         } else {
@@ -118,14 +118,21 @@ private class Driver {
         "plan" -> {
             val selected = mode(op.str("mode")) ?: return err("mode", "inconnu")
             calls.clear()
+            var cachePrior = false
+            var published = 0
             val fail = op.arr("fail")?.mapNotNull { (it as? JVal.Str)?.value }?.toSet() ?: emptySet()
             val run = op.arr("run")?.mapNotNull { (it as? JVal.Str)?.value }?.toSet()
             val steps = AccountDataStore.entries
                 .filter { it.required(selected) && (run == null || it.id in run) }
                 .map { store ->
-                    AccountPurgeStep(store) {
+                    AccountPurgeStep(store) { priorSucceeded ->
                         calls.add(store.id)
-                        store.id !in fail
+                        val cleared = store.id !in fail
+                        if (store == AccountDataStore.CACHE) {
+                            cachePrior = priorSucceeded
+                            if (priorSucceeded && cleared) published++
+                        }
+                        cleared
                     }
                 }
             val result = AccountPurgePlan.of(selected, steps).purge()
@@ -135,6 +142,8 @@ private class Driver {
                 "failed" to names(result.failed),
                 "missing" to names(result.missing),
                 "calls" to JVal.Arr(calls.map { JVal.Str(it) }),
+                "cachePrior" to JVal.Bool(cachePrior),
+                "published" to JVal.Num(published.toDouble()),
             )
         }
         // Une étape oubliée : la purge est INCOMPLÈTE et RIEN n'est exécuté.
@@ -144,7 +153,7 @@ private class Driver {
             val omit = op.arr("omit")?.mapNotNull { (it as? JVal.Str)?.value }?.toSet() ?: emptySet()
             val steps = AccountDataStore.entries
                 .filter { it.required(selected) && it.id !in omit }
-                .map { store -> AccountPurgeStep(store) { calls.add(store.id); true } }
+                .map { store -> AccountPurgeStep(store) { _ -> calls.add(store.id); true } }
             val result = AccountPurgePlan.of(selected, steps).purge()
             ok(
                 "ok" to JVal.Bool(result.ok),
@@ -158,8 +167,8 @@ private class Driver {
             calls.clear()
             val steps = AccountDataStore.entries
                 .filter { it.required(selected) }
-                .map { store -> AccountPurgeStep(store) { calls.add(store.id); true } } +
-                AccountPurgeStep(AccountDataStore.SERVER_URL) { calls.add("server_url"); false }
+                .map { store -> AccountPurgeStep(store) { _ -> calls.add(store.id); true } } +
+                AccountPurgeStep(AccountDataStore.SERVER_URL) { _ -> calls.add("server_url"); false }
             val result = AccountPurgePlan.of(selected, steps).purge()
             ok(
                 "ok" to JVal.Bool(result.ok),

@@ -162,8 +162,8 @@ class SessionRecordStore(private val store: KeyValueStore) : SessionStore {
  * (`EpochRefused`, rien de partiel).
  *
  * Si le compte est refusé APRÈS l'écriture de la session, la session PRÉCÉDENTE
- * est restaurée. Un échec de restauration est RENVOYÉ, jamais transformé en
- * succès qui laisserait le nouveau compte sans son entrée (ou l'inverse).
+ * est restaurée. Un échec de restauration est RENVOYÉ et la session neuve est
+ * EFFACÉE : jamais un nouveau compte à moitié installé sous un échec annoncé.
  *
  * ORDRE DES VERROUS : session -> époque -> store. L'appelant tient déjà la
  * section critique de session.
@@ -192,7 +192,15 @@ class AccountSessionCommit(
         } catch (_: Exception) {
             WriteResult.Failed("session non restaurée")
         }
-        if (restored.ok) recorded
-        else WriteResult.Failed("bascule incomplète : session non restaurée")
+        if (restored.ok) return@writeIfCurrent recorded
+        // La restauration a échoué : la session NEUVE ne doit pas rester sur
+        // disque alors que l'appelant croit la bascule annulée (I16). On
+        // l'efface au mieux ; l'échec reste signalé, jamais transformé en succès.
+        try {
+            sessions.clear()
+        } catch (_: Exception) {
+            // Rien de plus : l'échec de restauration est déjà rendu.
+        }
+        WriteResult.Failed("bascule incomplète : session non restaurée")
     } ?: WriteResult.EpochRefused
 }

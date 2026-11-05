@@ -6,12 +6,14 @@ import {
   ALERTS_CLEAR_NOTE,
   ALERTS_FLAGGED_NOTE,
   ALERTS_HEURISTIC_NOTE,
+  ALERTS_UNREADABLE,
   EXCERPT_COLLAPSED,
   alertKindLabel,
   alertSeverity,
   alertSourceLabel,
   alertsLayout,
   excerptPreview,
+  isAlertsPayloadReadable,
   parseAlertsPayload,
   sanitizeExcerpt,
   type SecurityAlert,
@@ -69,12 +71,17 @@ function AlertCard({ alert }: { alert: SecurityAlert }) {
 export default function AlertsRoute() {
   const resource = useResource("alerts");
   const alerts = useMemo(() => parseAlertsPayload(resource.payload), [resource.payload]);
+  // Un payload présent mais sans liste lisible n'est pas un « tout va bien » :
+  // il reste une erreur, comme une absence de données.
+  const readable = isAlertsPayloadReadable(resource.payload);
+  const error =
+    resource.error ?? (resource.payload !== null && !readable ? ALERTS_UNREADABLE : null);
   const layout = alertsLayout({
     count: alerts.length,
     loading: resource.loading,
     stale: resource.stale,
-    error: resource.error,
-    hasPayload: resource.payload !== null,
+    error,
+    hasPayload: readable,
   });
 
   return (
@@ -87,9 +94,9 @@ export default function AlertsRoute() {
         {ALERTS_HEURISTIC_NOTE}
       </p>
 
-      {resource.error && layout !== "error" ? (
+      {error && layout !== "error" ? (
         <p className="tiny" role="status" style={{ margin: 0, color: "var(--danger-ink)" }}>
-          {resource.error}
+          {error}
         </p>
       ) : null}
 
@@ -104,7 +111,7 @@ export default function AlertsRoute() {
       {layout === "loading" ? <Loading label="Chargement des alertes…" /> : null}
 
       {layout === "error" ? (
-        <ErrorBox message={resource.error ?? "Lecture des alertes indisponible."}>
+        <ErrorBox message={error ?? "Lecture des alertes indisponible."}>
           <button type="button" className="btn btn--small" onClick={resource.refresh}>
             Réessayer
           </button>

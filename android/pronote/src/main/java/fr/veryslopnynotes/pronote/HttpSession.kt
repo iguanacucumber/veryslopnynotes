@@ -73,7 +73,7 @@ private data class StoredCookie(
     val name: String,
     var value: String,
     val domain: String,
-    val hostOnly: Boolean,
+    var hostOnly: Boolean,
     val path: String,
     var expiresAt: Long?,
     var secure: Boolean,
@@ -218,6 +218,7 @@ class CookieJar {
             c.value = value
             c.expiresAt = expiresAt
             c.secure = secure
+            c.hostOnly = hostOnly
         } else {
             cookies.add(StoredCookie(name, value, domain, hostOnly, path, expiresAt, secure, now()))
         }
@@ -259,6 +260,8 @@ data class RequestOpts(
     val deadlineMs: Long? = null,
     /** Jeton de l'appelant ; `null` = celui posé par [RequestScope]. */
     val cancellation: RequestCancellation? = null,
+    /** Origine que la requête ne quitte jamais (pièce jointe) ; `null` = aucune. */
+    val expectedOrigin: String? = null,
 )
 
 data class HttpResponse(
@@ -422,16 +425,23 @@ class HttpSession(
                 java.io.FileOutputStream(temp).use { copyBounded(raw, it, maxBytes, deadline, cancellation) }
             }
             if (gzipped) {
-                try {
-                    GZIPInputStream(java.io.FileInputStream(temp)).use { gz ->
-                        java.io.FileOutputStream(dest).use { copyBounded(gz, it, maxBytes) }
-                    }
-                    temp.delete()
-                } catch (_: Exception) {
-                    // Pas un gzip valide : les octets BRUTS (déjà bornés) restent.
+                val rawIn = java.io.FileInputStream(temp)
+                val gz = try {
+                    GZIPInputStream(rawIn)
+                } catch (e: Exception) {
+                    rawIn.close()
+                    // Seul un en-tête qui n'est PAS du gzip garde les octets bruts.
+                    // Un flux tronqué ou corrompu, ou un dépassement de borne,
+                    // échoue : jamais renommé en téléchargement réussi.
+                    if (e !is java.util.zip.ZipException) throw e
                     dest.delete()
                     if (!temp.renameTo(dest)) throw java.io.IOException("renommage du telechargement refuse")
+                    return
                 }
+                gz.use { gzIn ->
+                    java.io.FileOutputStream(dest).use { copyBounded(gzIn, it, maxBytes) }
+                }
+                temp.delete()
             } else if (!temp.renameTo(dest)) {
                 throw java.io.IOException("renommage du telechargement refuse")
             }
@@ -455,6 +465,8 @@ class HttpSession(
         val cancellation = opts.cancellation ?: RequestScope.current()
         var currentMethod = method
         var currentUrl = buildUrl(url, opts.params)
+        // Un téléchargement sans origine explicite garde celle de sa première URL.
+        val expectedOrigin = opts.expectedOrigin ?: if (downloadTo != null) currentUrl else null
         var body: ByteArray? = null
         val headers = HashMap(baseHeaders)
         opts.headers?.let { headers.putAll(it) }
@@ -518,6 +530,11 @@ class HttpSession(
                 if (isRedirect && redirect < maxRedirects) {
                     // `Location` illisible : erreur réseau mappée.
                     val nextUrl = resolveRedirect(currentUrl, location)
+                    // Une pièce jointe ne quitte jamais l'origine de l'établissement :
+                    // refus AVANT d'ouvrir la connexion suivante (aucun cookie envoyé).
+                    if (expectedOrigin != null && !AttachmentUrl.sameOrigin(expectedOrigin, nextUrl)) {
+                        throw downloadFailure(status, received)
+                    }
                     // ponytail: meme-hote garde corps (parite 307), hote change = drop corps + content-type.
                     try {
                         if (URL(nextUrl).host.lowercase(java.util.Locale.ROOT) != URL(currentUrl).host.lowercase(java.util.Locale.ROOT)) {
@@ -591,6 +608,12 @@ class HttpSession(
                 // TOUTE erreur referme le socket : la laisser ouverte remplit
                 // le pool de connexions.
                 try { conn.disconnect() } catch (_: Exception) {}
+                // Une lecture bloquée coupée par l'abandon rend un `IOException`
+                // brut : le traduire AVANT la classification de réessai (sinon
+                // une annulation passait pour une panne transitoire).
+                if (cancellation?.isCancelled == true && e !is RequestCancelled) {
+                    throw RequestCancelled().also { it.initCause(e) }
+                }
                 throw e
             } finally {
                 activeStream?.let { cancellation?.unregisterStream(it) }

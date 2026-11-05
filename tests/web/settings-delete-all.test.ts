@@ -67,7 +67,11 @@ describe("réglages — suppression totale (#853)", () => {
 
   test("l'écran déclenche la purge orchestrée et ferme la session seulement si ok", () => {
     const settings = source("features/settings/SettingsScreen.tsx");
-    expect(settings).toContain('id="reglages-donnees"');
+    // Export et suppression ont chacun leur ancre : un id dupliqué rendait la
+    // tuile « Tout supprimer » dépendante de l'ordre du DOM.
+    expect(settings.match(/id="reglages-donnees"/g)).toHaveLength(1);
+    expect(settings).toContain('id="reglages-suppression"');
+    expect(settings).toContain('target: "reglages-suppression"');
     expect(settings).toContain("<DeleteAllCard");
 
     const card = source("features/settings/DeleteAllCard.tsx");

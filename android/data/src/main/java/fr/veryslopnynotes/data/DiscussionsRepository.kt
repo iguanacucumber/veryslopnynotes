@@ -59,9 +59,11 @@ class DiscussionsRepository(
      * omettent (l'écran garde déjà les siens).
      */
     fun fetchMessages(discussionId: String, before: Int? = null, cb: (DiscussionThread?, String?) -> Unit) {
+        val epoch = SessionEpoch.current()
         ClientQueue.submitUnit(
             key = "discussion-thread|$discussionId|${before ?: 0}",
             work = {
+            if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
             val client = provider()
             if (client == null) {
                 // Sans session : liste vide, état vide propre, pas d'écran
@@ -73,16 +75,17 @@ class DiscussionsRepository(
             }
             try {
                 val target = boundedCp(discussionId, 64)
-                val discussion = findDiscussion(client, target)
+                val discussion = findDiscussion(client, target, epoch)
                 if (discussion == null) {
                     post { cb(null, "Fil introuvable.") }
                     return@submitUnit
                 }
-                val page = ThreadMessageCache.page(target, before) {
+                val page = ThreadMessageCache.page(epoch, target, before, SessionEpoch::current) {
                     discussion.messages().mapIndexedNotNull { i, m -> toDiscussionMessage(target, m, i) }
                 }
                 // Participants demandés à l'ouverture (première page) seulement.
                 val participants = if (before == null) participantsOf(discussion) else emptyList()
+                if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
                 post {
                     cb(
                         DiscussionThread(
@@ -111,16 +114,19 @@ class DiscussionsRepository(
 
     /** Fils visibles à enrichir : une requête `ListeMessages` par identifiant. */
     fun fetchEnrichment(ids: List<String>, cb: (String?, String?) -> Unit) {
+        val epoch = SessionEpoch.current()
         ClientQueue.submitUnit(
             key = "discussion-enrich|${ids.joinToString(",")}",
             work = {
+            if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
             val client = provider()
             if (client == null) {
                 post { cb(null, null) }
                 return@submitUnit
             }
             try {
-                val body = enrichmentPayload(client, ids)
+                val body = enrichmentPayload(client, ids, epoch)
+                if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
                 post { cb(body, null) }
             } catch (e: Exception) {
                 if (isSessionFailure(e)) {
@@ -213,16 +219,18 @@ class DiscussionsRepository(
             post { cb(DiscussionWriteOutcome(false, "Réponse impossible.")) }
             return
         }
+        val epoch = SessionEpoch.current()
         ClientQueue.submitUnit(
             key = "discussion-reply|${System.nanoTime()}",
             work = {
+            if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
             val client = provider()
             if (client == null) {
                 post { cb(DiscussionWriteOutcome(false, "Connexion indisponible, retour arrière.")) }
                 return@submitUnit
             }
             val outcome = writeLocal("Réponse impossible.") {
-                val discussion = findDiscussion(client, target)
+                val discussion = findDiscussion(client, target, epoch)
                     ?: throw DiscussionNotFound()
                 discussion.reply(text)
             }
@@ -244,16 +252,18 @@ class DiscussionsRepository(
             post { cb(DiscussionWriteOutcome(false, "État de lecture refusé.")) }
             return
         }
+        val epoch = SessionEpoch.current()
         ClientQueue.submitUnit(
             key = "discussion-read|${System.nanoTime()}",
             work = {
+            if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
             val client = provider()
             if (client == null) {
                 post { cb(DiscussionWriteOutcome(false, "Connexion indisponible, retour arrière.")) }
                 return@submitUnit
             }
             val outcome = writeLocal("État de lecture refusé.") {
-                val discussion = findDiscussion(client, target)
+                val discussion = findDiscussion(client, target, epoch)
                     ?: throw DiscussionNotFound()
                 discussion.markAs(read)
             }
@@ -274,16 +284,18 @@ class DiscussionsRepository(
             post { cb(DiscussionWriteOutcome(false, "Suppression impossible.")) }
             return
         }
+        val epoch = SessionEpoch.current()
         ClientQueue.submitUnit(
             key = "discussion-delete|${System.nanoTime()}",
             work = {
+            if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
             val client = provider()
             if (client == null) {
                 post { cb(DiscussionWriteOutcome(false, "Connexion indisponible, retour arrière.")) }
                 return@submitUnit
             }
             val outcome = writeLocal("Suppression impossible.") {
-                val discussion = findDiscussion(client, target)
+                val discussion = findDiscussion(client, target, epoch)
                     ?: throw DiscussionNotFound()
                 discussion.delete()
             }
@@ -295,8 +307,17 @@ class DiscussionsRepository(
     }
 
     /** Liste déjà téléchargée d'abord : une ouverture ne refait pas `ListeMessagerie`. */
-    private fun findDiscussion(client: Client, id: String): fr.veryslopnynotes.pronote.Discussion? {
-        val list = DiscussionListCache.get() ?: client.discussions().also { DiscussionListCache.put(it) }
+    private fun findDiscussion(
+        client: Client,
+        id: String,
+        epoch: Long,
+    ): fr.veryslopnynotes.pronote.Discussion? {
+        val list = DiscussionListCache.get(epoch) ?: client.discussions().also {
+            // La session a changé pendant la lecture : cette liste n'appartient
+            // plus au compte courant, elle ne doit pas être utilisée (I16).
+            if (!DiscussionListCache.put(it, epoch)) throw StaleSessionRead()
+        }
+        if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
         return list.firstOrNull { it.id == id }
     }
 

@@ -155,6 +155,12 @@ describe("câblage : l'horloge injectée va jusqu'aux payloads (#893)", () => {
     expect(reads).toContain("timetablePayload(client, q, clock)");
 
     const repo = readFileSync(join(DATA, "SyncedRepository.kt"), "utf8");
-    expect(repo).toContain("cachedRead(client, resource, query, previous, schoolTime)");
+    expect(repo).toContain("cachedRead(client, resource, query, previous, schoolTime, epoch)");
+
+    // La cantine ne déborde pas sur le lundi suivant : `to` est déjà le
+    // dimanche 23:59:59, la borne milliseconde inclusive est +999.
+    const canteen = readFileSync(join(DATA, "CanteenPayloads.kt"), "utf8");
+    expect(canteen).toContain("to.atZone(SCHOOL_ZONE).toInstant().toEpochMilli() + 999");
+    expect(canteen).not.toContain("to.plusDays(1)");
   });
 });

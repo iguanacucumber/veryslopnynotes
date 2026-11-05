@@ -1,4 +1,4 @@
-// Routes servies : GET /v1/health, POST /v1/manuals/scrape,
+// Routes servies : GET /v1/health, GET /v1/ready, POST /v1/manuals/scrape,
 // POST /v1/web/scrape. L'app est device-only (ADR-003) : les routes métier
 // du serveur applicatif n'existent plus.
 // Les garde-fous de réponse restent : les miroirs Android s'en servent.
@@ -14,8 +14,15 @@ export interface ApiRoute {
   readonly path: string;
 }
 
+/** Chemins servis par `server/infrastructure/http.ts` (source unique). */
+export const HEALTH_PATH = "/v1/health";
+export const READY_PATH = "/v1/ready";
+
 export const API_ROUTES: readonly ApiRoute[] = [
-  { method: "GET", path: "/v1/health" },
+  { method: "GET", path: HEALTH_PATH },
+  // Disponibilité RÉELLE : jar inscriptible + Chromium qui démarre + pas en
+  // drain. 503 = pas de trafic, jamais une simple vivacité du process.
+  { method: "GET", path: READY_PATH },
   // Scraper manuels : plain HTTPS sans auth (risque accepté et documenté
   // côté server/infrastructure/http.ts). Plateforme + startUrl viennent du
   // corps (writeOnly), jamais de l'env : les identifiants de portail sont
@@ -338,6 +345,14 @@ export function isManualsScrapeRequest(v: unknown): v is ManualsScrapeRequest {
   // navigation et refuse le nom dont une adresse est privée
   // (server/infrastructure/ssrf.ts).
   if (!isPublicHttpUrl(r["startUrl"] as string)) return false;
+  // Le scraper ne s'authentifie JAMAIS : `user:pass@` est un leurre qui
+  // ferait envoyer un credential au portail. Même refus que `ManualUrl.kt`.
+  try {
+    const u = new URL(r["startUrl"] as string);
+    if (u.username !== "" || u.password !== "") return false;
+  } catch {
+    return false;
+  }
   if (r["page"] !== undefined) {
     if (!Number.isInteger(r["page"])) return false;
     if ((r["page"] as number) < 1 || (r["page"] as number) > MANUALS_SCRAPE_PAGE_MAX) return false;
@@ -357,8 +372,9 @@ export function isManualsScrapeDoc(v: unknown): v is ManualsScrapeDoc {
     isBoundedNonEmptyString(r["subject"], 100) &&
     Number.isInteger(r["page"]) &&
     (r["page"] as number) >= 1 &&
-    typeof r["excerpt"] === "string" &&
-    (r["excerpt"] as string).length <= 8000
+    // Même exigence que le contrat Android : un extrait vide/blanc n'est pas
+    // une source citable.
+    isBoundedNonEmptyString(r["excerpt"], 8000)
   );
 }
 

@@ -222,21 +222,44 @@ private val HTML_NAMED = mapOf(
 )
 
 /**
- * Strip des balises (`<.*?>`), entités numériques (hexa + décimales) puis 7
- * nommées — inconnue laissée telle quelle.
+ * Strip des balises (premier `<` … premier `>`, une passe linéaire), entités
+ * numériques (hexa + décimales) puis 7 nommées — inconnue laissée telle quelle.
  */
 fun htmlParse(v: JVal?): String {
     val html = (v as? JVal.Str)?.value ?: throw IllegalArgumentException("HTML non textuel")
-    val stripped = Regex("<.*?>", RegexOption.DOT_MATCHES_ALL).replace(html, "")
+    val stripped = stripTags(html)
     val numeric = Regex("&#x([0-9a-fA-F]+);|&#([0-9]+);").replace(stripped) { m ->
         val code = m.groupValues[1].ifEmpty { null }?.toIntOrNull(16)
             ?: m.groupValues[2].toIntOrNull(10)
             ?: return@replace m.value
-        String(Character.toChars(code))
+        // Un point de code invalide reste TEL QUEL (`Character.toChars` jetait).
+        if (!Character.isValidCodePoint(code)) m.value else String(Character.toChars(code))
     }
     return Regex("&(\\w+);").replace(numeric) { m ->
         HTML_NAMED[m.groupValues[1]] ?: m.value
     }
+}
+
+/** Équivalent linéaire de `<.*?>` (DOTALL) : de chaque `<` au `>` suivant. */
+private fun stripTags(html: String): String {
+    val out = StringBuilder(html.length)
+    var i = 0
+    while (i < html.length) {
+        if (html[i] == '<') {
+            var close = i + 1
+            while (close < html.length && html[close] != '>') close++
+            if (close < html.length) {
+                i = close + 1
+                continue
+            }
+            // Aucun `>` après ce `<` : le reste ne contient plus de balise.
+            out.append(html, i, html.length)
+            break
+        }
+        out.append(html[i])
+        i++
+    }
+    return out.toString()
 }
 
 /**

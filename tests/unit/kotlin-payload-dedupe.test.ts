@@ -3,8 +3,11 @@
 // ici via `EventDedupeParityMain.kt`. Le câblage web garde ses tests exécutés.
 // Outillage absent = SKIP BRUYANT ; échec de compilation = défaut.
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+
+const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
 
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "EventDedupeParityMain.kt");
 
@@ -98,5 +101,22 @@ describe("I31 — un enregistrement publié = UNE ligne (#645)", () => {
       { kind: "assignment", id: "a4" },
     ]);
     expect(r.counts).toEqual({ assignment: 2 });
+  });
+
+  test("les sanctions sont dédupliquées par id stable, avec repli date+type+motif", () => {
+    const source = readFileSync(join(DATA, "SchoolLifePayloads.kt"), "utf8");
+    const body = source.slice(
+      source.indexOf("internal fun punishmentsPayload("),
+      source.indexOf("return JSONObject().put(\"punishments\"", source.indexOf("internal fun punishmentsPayload(")),
+    );
+    // La même sanction revient dans chaque période : une seule ligne publiée.
+    expect(body).toContain("dedupe(rows)");
+    expect(body).toContain('eventKey("punishment", stableId)');
+    // Sans id stable, le repli porte date+type+motif ET un rang par période :
+    // deux sanctions réellement distinctes ne fusionnent pas.
+    expect(body).toContain('val fallback = "$date|$type|$motif"');
+    expect(body).toContain("fallbackRanks[fallback]");
+    // L'id publié reste borné (le web le borne à 64).
+    expect(body).toContain('"pun-${seq++}"');
   });
 });

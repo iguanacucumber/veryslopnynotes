@@ -102,8 +102,7 @@ internal fun VsnBridge.setAiConsent(p: JSONObject): JSONObject {
     if (decision != AiConsentDecision.WITHDRAWN) return result
 
     val keyCleared = try {
-        llmKeys.clear()
-        !llmKeys.isConfigured()
+        llmKeys.clear() && !llmKeys.isConfigured()
     } catch (_: Exception) {
         false
     }

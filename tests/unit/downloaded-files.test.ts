@@ -121,6 +121,8 @@ describe("les pièces jointes téléchargées ne se chevauchent pas (#540)", () 
     // La source a été DÉPLACÉE : aucun doublon temporaire ne survit.
     expect(adopted.sourceExists).toBe(false);
     expect((await ask({ op: "content", sid, name: `attachments/devoir-1/${adopted.name}` })).content).toBe("flux");
+    // Aucun temporaire de copie ne survit à l'adoption.
+    expect(((await ask({ op: "files", sid })).files as string[]).filter((f) => f.endsWith(".tmp"))).toEqual([]);
   });
 
   test.skipIf(skip)("une époque périmée n'adopte rien", async () => {
@@ -260,9 +262,10 @@ describe("câblage de la purge des téléchargements (#540)", () => {
     expect(worker).toContain(
       "LocalDataStore(FileCacheStore(File(applicationContext.filesDir, \"offline\")), applicationContext.cacheDir)",
     );
-    // La purge des téléchargements est dans le MÊME `clearAll` que celle du cache.
+    // La purge des pièces jointes est dans le MÊME `clearAll` que celle du cache ;
+    // `exports/` reste à l'étape EXPORTS (retenu à la déconnexion).
     expect(store).toContain("override fun clearAll()");
-    expect(store).toContain("DownloadedFiles.purge(cacheRoot)");
+    expect(store).toContain("DownloadedFiles.purge(cacheRoot, DownloadedFiles.ATTACHMENTS)");
   });
 
   test("le nom du fichier est calculé par la source partagée, avec l'identifiant", () => {

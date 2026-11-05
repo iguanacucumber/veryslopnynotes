@@ -103,7 +103,10 @@ object ClientQueue {
      * jamais l'appelant en retour (le `deliver` ouvre le loquet).
      *
      * `null` = délai dépassé : l'appelant réessaiera plus tard. Le travail
-     * reste en file (pas d'annulation) : il lira le client, sans conséquence.
+     * reste en file, mais son jeton est ANNULÉ : dès qu'il démarre (ou pendant
+     * qu'il lit), le socket est coupé. Le jeton de l'appelant est combiné au
+     * jeton de délai : une annulation JS (`bridge.cancel`) coupe aussi le
+     * travail, même s'il n'a pas encore commencé.
      * Un travail qui JETTE est livré en échec, donc l'attente finit tout de suite.
      */
     inline fun <reified T : Any> submitAndAwait(
@@ -113,16 +116,17 @@ object ClientQueue {
     ): QueueOutcome<T>? {
         val latch = CountDownLatch(1)
         var outcome: QueueOutcome<T>? = null
-        // Délai du job = abandon de l'appelant : le travail ne doit pas rester
-        // à lire un socket après le retour.
-        val timeoutCancellation = if (RequestScope.current() == null) RequestCancellation() else null
+        // Toujours un jeton propre au travail : le délai du job doit pouvoir
+        // l'arrêter, même quand le pont a déjà fourni un jeton d'appel.
+        val timeoutCancellation = RequestCancellation()
+        RequestScope.current()?.onCancel { timeoutCancellation.cancel() }
         submit(
             key,
             work = { RequestScope.with(timeoutCancellation) { work() } },
             deliver = { o -> outcome = o; latch.countDown() },
         )
         if (!latch.await(timeoutMs, TimeUnit.MILLISECONDS)) {
-            timeoutCancellation?.cancel()
+            timeoutCancellation.cancel()
             return null
         }
         return outcome

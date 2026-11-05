@@ -552,7 +552,7 @@ describe("confidentialité — FLAG_SECURE en release (#943)", () => {
 });
 
 describe("confidentialité — la purge efface les artefacts (#943)", () => {
-  test.skipIf(skip)("la déconnexion supprime pièces jointes, exports et photos du cache", async () => {
+  test.skipIf(skip)("la déconnexion supprime pièces jointes et photos, et garde l'export demandé", async () => {
     const sid = (await ask(downloadsLink!, { op: "newStore" })).sid as number;
     const attachment = await ask(downloadsLink!, {
       op: "write",
@@ -572,9 +572,10 @@ describe("confidentialité — la purge efface les artefacts (#943)", () => {
       "photos/photo.jpg",
     ]);
 
-    // Le vrai chemin de purge du cache (déconnexion / session morte).
+    // Le vrai chemin de purge du cache (déconnexion / session morte) : l'export
+    // demandé AVANT la déconnexion survit pour le partage (#858), le reste part.
     await ask(downloadsLink!, { op: "logout", sid });
-    expect((await ask(downloadsLink!, { op: "files", sid })).files).toEqual([]);
+    expect((await ask(downloadsLink!, { op: "files", sid })).files).toEqual(["exports/fiche.pdf"]);
   });
 
   test("l'inventaire de purge nomme les artefacts et garde le cache EN DERNIER", () => {

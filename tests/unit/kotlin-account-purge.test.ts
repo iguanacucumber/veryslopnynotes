@@ -154,6 +154,8 @@ describe("purge de compte — inventaire (#861)", () => {
     for (const retained of ["MANUAL_PROMPT", "UI_PREFS"]) {
       expect({ retained, wired: wired.has(retained) }).toEqual({ retained, wired: false });
     }
+    // La publication d'une bascule est conditionnée aux étapes précédentes.
+    expect(factory).toContain("if (priorSucceeded) target.publish else ({})");
   });
 
   test("le pont et le job passent le MÊME orchestrateur au dépôt", () => {
@@ -204,6 +206,8 @@ describe("purge de compte — exécution (#861)", () => {
     }
     // La publication (bascule) attend l'effacement global.
     expect(out.calls.at(-1)).toBe("cache");
+    expect(out.cachePrior).toBe(true);
+    expect(out.published).toBe(1);
   });
 
   test.skipIf(skip)("une bascule garde la session neuve mais efface clé et fil", async () => {
@@ -242,6 +246,9 @@ describe("purge de compte — exécution (#861)", () => {
     // Les autres stores partent quand même : on ne s'arrête pas au premier refus.
     expect(out.purged).toContain("cache");
     expect(out.calls).toContain("webview");
+    // …mais le nouveau client n'est PAS publié sur une purge incomplète.
+    expect(out.cachePrior).toBe(false);
+    expect(out.published).toBe(0);
   });
 
   test.skipIf(skip)("un store oublié est SIGNALÉ et RIEN n'est exécuté", async () => {

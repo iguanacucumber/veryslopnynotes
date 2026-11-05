@@ -436,24 +436,33 @@ private fun allKnownIds(store: RevisionKv): List<String> {
  * enregistrée. L'état partiel ne laisse rien derrière : l'invalidation
  * d'époque et la purge sont dans la MÊME section critique (I16), donc le
  * basculement qui refuse l'index a déjà purgé la fiche écrite.
+ *
+ * La section `synchronized(store)` sérialise le lire-modifier-écrire de
+ * l'index et du journal entre deux sauvegardes concurrentes.
  */
 fun saveRevisionSheet(store: RevisionKv, sheet: RevisionSheet, epoch: Long): Boolean {
     if (!isRevisionSheetValid(sheet)) throw IllegalArgumentException("fiche invalide (contrat)")
-    if (!store.set(sheetKey(sheet.id), revisionSheetJson(sheet).toByteArray(Charsets.UTF_8), epoch)) {
-        return false
+    // Deux générations LLM peuvent se terminer ensemble (file bornée à deux) :
+    // l'index et le journal sont un lire-modifier-écrire. Sans ce verrou par
+    // store, la seconde écriture repart de l'ancien index et PERD la première
+    // fiche. Le verrou couvre les trois écritures de la tentative.
+    synchronized(store) {
+        if (!store.set(sheetKey(sheet.id), revisionSheetJson(sheet).toByteArray(Charsets.UTF_8), epoch)) {
+            return false
+        }
+        val ids = allKnownIds(store).toMutableList()
+        if (!ids.contains(sheet.id)) {
+            ids.add(sheet.id)
+            ids.sort()
+            val encoded = revisionIndexJson(ids).toByteArray(Charsets.UTF_8)
+            // Index REFUSÉ = l'époque a basculé : l'enregistrement échoue.
+            if (!store.set(INDEX_KEY, encoded, epoch)) return false
+            // Le journal est la source de vérité qui ne rétrécit jamais : même si
+            // l'index est corrompu au prochain tour, l'id reste listable.
+            if (!store.set(INDEX_JOURNAL_KEY, encoded, epoch)) return false
+        }
+        return true
     }
-    val ids = allKnownIds(store).toMutableList()
-    if (!ids.contains(sheet.id)) {
-        ids.add(sheet.id)
-        ids.sort()
-        val encoded = revisionIndexJson(ids).toByteArray(Charsets.UTF_8)
-        // Index REFUSÉ = l'époque a basculé : l'enregistrement échoue.
-        if (!store.set(INDEX_KEY, encoded, epoch)) return false
-        // Le journal est la source de vérité qui ne rétrécit jamais : même si
-        // l'index est corrompu au prochain tour, l'id reste listable.
-        if (!store.set(INDEX_JOURNAL_KEY, encoded, epoch)) return false
-    }
-    return true
 }
 
 fun loadRevisionSheet(store: RevisionKv, id: String): RevisionSheet? {

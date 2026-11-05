@@ -27,6 +27,7 @@ import {
 } from "../../ui/icons";
 import { AiOutputLabel, AiReportButton } from "../assistant/AiOutput";
 import { AI_VISION_RETENTION_NOTE } from "../assistant/consent";
+import { createSeq } from "../../lib/seq";
 import "./course-notes.css";
 
 function messageOf(error: unknown, fallback: string): string {
@@ -88,6 +89,7 @@ export function CourseNotesScreen() {
   const [photoTarget, setPhotoTarget] = useState<string | null>(null);
   const [photoIssue, setPhotoIssue] = useState<PhotoIssue | null>(null);
   const photoBusyRef = useRef(false);
+  const openSeq = useRef(createSeq());
   const listId = useId();
 
   useEffect(() => {
@@ -125,11 +127,13 @@ export function CourseNotesScreen() {
   }
 
   async function openNote(id: string) {
+    const seq = openSeq.current.next();
     setEditorError("");
     setEditorLoading(true);
     setConfirmDelete(false);
     try {
       const result = await bridge.lesson(id);
+      if (!openSeq.current.isCurrent(seq)) return;
       if (!result.ok || !result.note) {
         notify(result.message || "Cours introuvable.", "error");
         return;
@@ -141,13 +145,17 @@ export function CourseNotesScreen() {
         text: result.note.text,
       });
     } catch (e) {
+      if (!openSeq.current.isCurrent(seq)) return;
       notify(messageOf(e, "Cours indisponible."), "error");
     } finally {
-      setEditorLoading(false);
+      if (openSeq.current.isCurrent(seq)) setEditorLoading(false);
     }
   }
 
   function newNote(subject = "") {
+    // Une ouverture encore en vol ne doit pas écraser ce nouveau brouillon.
+    openSeq.current.invalidate();
+    setEditorLoading(false);
     setEditorError("");
     setConfirmDelete(false);
     setEditor({ id: "", subject, title: "", text: "" });

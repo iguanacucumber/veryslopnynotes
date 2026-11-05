@@ -17,6 +17,7 @@ export const ALERTS_HEURISTIC_NOTE =
 // il dit ce que le filtre a fait (rien signalé), le rappel heuristique suit.
 export const ALERTS_CLEAR_NOTE = "Le filtre n’a rien signalé sur les contenus lus jusqu’ici.";
 export const ALERTS_FLAGGED_NOTE = "Signalé par un filtre heuristique : un faux positif reste possible.";
+export const ALERTS_UNREADABLE = "Alertes illisibles : la donnée n’a pas pu être lue.";
 
 export interface SecurityAlert {
   id: string;
@@ -66,6 +67,17 @@ function alertArray(payload: string | null): unknown[] {
     return [];
   } catch {
     return [];
+  }
+}
+
+/** Un JSON illisible ou sans liste d'alertes n'est PAS « aucune alerte » (I14). */
+export function isAlertsPayloadReadable(payload: string | null): boolean {
+  if (!payload) return false;
+  try {
+    const root: unknown = JSON.parse(payload);
+    return isRecord(root) && (Array.isArray(root["alerts"]) || Array.isArray(root["items"]));
+  } catch {
+    return false;
   }
 }
 
