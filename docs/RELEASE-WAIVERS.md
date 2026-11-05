@@ -96,15 +96,13 @@ Statuts autorisés :
 - `to-waive` : proposition écrite ci-dessous, **non approuvée** ;
 - `closed` : issue close avec une preuve liée.
 
-Vérifié le **2026-11-05** : les blocages clos [#827](https://github.com/iguanacucumber/veryslopnynotes/issues/827), [#828](https://github.com/iguanacucumber/veryslopnynotes/issues/828), [#919](https://github.com/iguanacucumber/veryslopnynotes/issues/919) (PR [#1155](https://github.com/iguanacucumber/veryslopnynotes/pull/1155)), [#936](https://github.com/iguanacucumber/veryslopnynotes/issues/936) et [#956](https://github.com/iguanacucumber/veryslopnynotes/issues/956) sont retirés des tableaux ; leurs preuves restent dans l'historique Git et les issues. La checklist de publication est mergée ([PR #1138](https://github.com/iguanacucumber/veryslopnynotes/pull/1138), [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md)) mais reste **à remplir et signer par deux humains pour v1.0** : sa clôture ne vaut pas preuve de release. Les deux lignes `to-waive` restent des **propositions non approuvées**.
+Vérifié le **2026-11-05** : les blocages clos [#827](https://github.com/iguanacucumber/veryslopnynotes/issues/827), [#828](https://github.com/iguanacucumber/veryslopnynotes/issues/828), [#919](https://github.com/iguanacucumber/veryslopnynotes/issues/919) (PR [#1155](https://github.com/iguanacucumber/veryslopnynotes/pull/1155)), [#936](https://github.com/iguanacucumber/veryslopnynotes/issues/936), [#956](https://github.com/iguanacucumber/veryslopnynotes/issues/956), [#838](https://github.com/iguanacucumber/veryslopnynotes/issues/838) (PR [#1154](https://github.com/iguanacucumber/veryslopnynotes/pull/1154)) et [#928](https://github.com/iguanacucumber/veryslopnynotes/issues/928) (PR [#1156](https://github.com/iguanacucumber/veryslopnynotes/pull/1156)) sont retirés des tableaux ; leurs preuves restent dans l'historique Git et les issues. La checklist de publication est mergée ([PR #1138](https://github.com/iguanacucumber/veryslopnynotes/pull/1138), [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md)) mais reste **à remplir et signer par deux humains pour v1.0** : sa clôture ne vaut pas preuve de release. Les quatre blocages `tier:B` restants sont `open` ; aucune dérogation n'est proposée.
 
 ### Bloqueurs `tier:B`
 
 | ID | Sujet | Statut | Risque | Atténuation | Propriétaire | Expiration | Preuve |
 |---|---|---|---|---|---|---|---|
 | [#831](https://github.com/iguanacucumber/veryslopnynotes/issues/831) | Responsable du traitement et contact vie privée | `open` | Notice publiée sans responsable ni contact : revendication de confidentialité non vérifiable. **Non dérogeable.** | Aucune : choisir l'entité et le contact dans le dossier, puis mettre à jour `PRIVACY.md` et le sign-off. | `iguanacucumber` + conseil | — | [CONTROLLER.md](legal/CONTROLLER.md), PR [#1147](https://github.com/iguanacucumber/veryslopnynotes/pull/1147), [PRIVACY.md](../PRIVACY.md) §1 et §15, [SIGNOFF.md](legal/SIGNOFF.md) §2 |
-| [#838](https://github.com/iguanacucumber/veryslopnynotes/issues/838) | Audit des fichiers dérivés de Papillon et attribution | `to-waive` | Inventaire incomplet : attribution GPL incertaine et risque de contestation à la distribution. | Voie de relicence de [#827](https://github.com/iguanacucumber/veryslopnynotes/issues/827) close ; `ADR-008`, `RELICENSING.md` et `THIRD_PARTY_NOTICES.md` restent la base ; avis écrit du conseil sur le périmètre manquant avant le tag ; aucune release binaire sans cet avis. | `iguanacucumber` | `2026-12-31` ou tag `v1.0.0`, au premier des deux | [ADR-008](adr/008-relicense-gpl.md), [RELICENSING.md](legal/RELICENSING.md), [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md), [SIGNOFF.md](legal/SIGNOFF.md) §1 |
-| [#928](https://github.com/iguanacucumber/veryslopnynotes/issues/928) | Assertions CI sur l'artefact de release | `to-waive` | Une assertion manquante peut laisser passer un certificat debug, une notice absente, un secret embarqué, une permission inattendue ou une version incohérente. | Vérifications manuelles consignées dans la checklist de [`#956`](https://github.com/iguanacucumber/veryslopnynotes/issues/956), mergée : `apksigner`, notices GPL, scan secret, permissions, version. Aucun tag sans checklist remplie **et signée par deux humains**. | `iguanacucumber` | `2026-12-31` ou tag `v1.0.0`, au premier des deux | [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md), [release-artifact.yml](../.github/workflows/release-artifact.yml), PR [#1138](https://github.com/iguanacucumber/veryslopnynotes/pull/1138) |
 | [#972](https://github.com/iguanacucumber/veryslopnynotes/issues/972) | Ce document et la clôture des bloqueurs | `open` | Le processus de dérogation ne peut pas se déroger lui-même ; les `tier:L` [#965](https://github.com/iguanacucumber/veryslopnynotes/issues/965) et [#969](https://github.com/iguanacucumber/veryslopnynotes/issues/969) restent ouverts. | Ce fichier consigne l'état vérifié ; l'issue reste ouverte jusqu'à la clôture des `tier:L`. | `iguanacucumber` | — | Ce fichier, [#982](https://github.com/iguanacucumber/veryslopnynotes/issues/982) |
 | [#976](https://github.com/iguanacucumber/veryslopnynotes/issues/976) | Sign-off juridique et vie privée | `open` | Signature juridique absente : lancement interdit par la règle de #982. **Non dérogeable.** | Aucune : le dossier [SIGNOFF.md](legal/SIGNOFF.md) doit passer de `pending` à `signed` avec preuve archivée. | `iguanacucumber` + conseil | — | [SIGNOFF.md](legal/SIGNOFF.md), PR [#1141](https://github.com/iguanacucumber/veryslopnynotes/pull/1141) |
 | [#978](https://github.com/iguanacucumber/veryslopnynotes/issues/978) | Tag `v1.0.0` et annonce | `open` | L'acte de publication lui-même ne se déroge pas ; il reste bloqué par les lignes ci-dessus. | Aucune : exécuter le tag et l'annonce après G4. | `iguanacucumber` | — | [RELEASE-ANNOUNCEMENT.md](RELEASE-ANNOUNCEMENT.md), [#982](https://github.com/iguanacucumber/veryslopnynotes/issues/982) |
@@ -120,31 +118,14 @@ Aucune ligne de ce tableau ne peut passer `to-waive`. G4 exige leur clôture.
 
 ## Approbations
 
-Les blocs ci-dessous restent **vides**. Ils ne sont remplis qu'après décision
-écrite, avec les deux signatures requises et la preuve archivée. Un agent ne
-remplit aucun champ.
-
-### Dérogation proposée #838 — inventaire Papillon
-
-- Statut : **proposée, non approuvée**
-- Décision : [ ] approuvée  [ ] refusée
-- Responsable de release — nom : ______________________ date : __________
-- Mainteneur de garde — nom : ______________________ date : __________
-- Avis du conseil (licence) — nom : ______________________ date : __________
-- Portée approuvée : ______________________________________________________
-- Preuve archivée (PR, issue, run) : _____________________________________
-- Expiration confirmée : _________________________________________________
-
-### Dérogation proposée #928 — assertions de l'artefact
-
-- Statut : **proposée, non approuvée**
-- Décision : [ ] approuvée  [ ] refusée
-- Responsable de release — nom : ______________________ date : __________
-- Mainteneur de garde — nom : ______________________ date : __________
-- Mainteneur sécurité — nom : ______________________ date : __________
-- Portée approuvée : ______________________________________________________
-- Preuve archivée (checklist signée, PR, run) : ___________________________
-- Expiration confirmée : _________________________________________________
+Aucune proposition en attente au **2026-11-05**. Les dérogations proposées pour
+[#838](https://github.com/iguanacucumber/veryslopnynotes/issues/838) et
+[#928](https://github.com/iguanacucumber/veryslopnynotes/issues/928) sont sans
+objet : leurs issues sont closes par leurs PR respectives
+([#1154](https://github.com/iguanacucumber/veryslopnynotes/pull/1154),
+[#1156](https://github.com/iguanacucumber/veryslopnynotes/pull/1156)). Une
+nouvelle proposition reprend les champs obligatoires et les signatures
+ci-dessus ; un agent ne remplit aucun champ.
 
 ## Mise à jour
 

@@ -19,7 +19,7 @@ const SECTIONS = [
 
 const REQUIRED_FIELDS = ["Risque", "Atténuation", "Propriétaire", "Expiration", "Preuve"];
 
-const BETA = ["831", "838", "928", "972", "976", "978"];
+const BETA = ["831", "972", "976", "978"];
 const TIER_L = ["965", "969"];
 
 /** Lignes du tableau sous un titre `###`, jusqu'au titre de niveau égal ou supérieur. */
@@ -127,11 +127,11 @@ describe("dérogations de release (#972)", () => {
     }
   });
 
-  test("au moins une dérogation est proposée, aucune n'est approuvée", () => {
+  test("aucune dérogation n'est proposée ni approuvée", () => {
     const rows = rowsUnder("Bloqueurs `tier:B`");
-    expect(rows.some((row) => status(row) === "to-waive")).toBe(true);
+    expect(rows.some((row) => status(row) === "to-waive")).toBe(false);
     expect(TEXT).toContain("Aucune dérogation n'est approuvée dans ce document");
-    expect(TEXT).toContain("propositions, non approuvées");
+    expect(TEXT).toContain("Aucune proposition en attente");
     expect(TEXT).not.toContain("[x]");
     expect(TEXT).not.toMatch(/Décision\s*:\s*approuvée/i);
   });
@@ -147,19 +147,14 @@ describe("dérogations de release (#972)", () => {
     }
   });
 
-  test("les blocs d'approbation sont présents et vides", () => {
+  test("la section Approbations ne contient aucun bloc de signature", () => {
     const start = TEXT.indexOf("## Approbations");
     expect(start).toBeGreaterThanOrEqual(0);
     const approvals = TEXT.slice(start);
-    for (const n of ["838", "928"]) {
-      expect({ n, bloc: approvals.includes(`### Dérogation proposée #${n}`) }).toEqual({
-        n,
-        bloc: true,
-      });
-    }
-    expect(approvals).toContain("[ ] approuvée  [ ] refusée");
-    expect(approvals).toContain("proposée, non approuvée");
-    expect(approvals).toContain("nom : ______________________ date : __________");
+    expect(approvals).toContain("Aucune proposition en attente");
+    expect(approvals).not.toContain("### Dérogation proposée");
+    expect(approvals).not.toContain("proposée, non approuvée");
+    expect(approvals).not.toContain("nom : ______________________ date : __________");
   });
 
   test("chaque lien relatif résout depuis le document", () => {
