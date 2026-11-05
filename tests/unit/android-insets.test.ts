@@ -12,7 +12,6 @@ const read = (p: string) => readFileSync(p, "utf8");
 const activity = codeOnly(read(join(APP, "MainActivity.kt")));
 const shell = codeOnly(read(join(APP, "WebApp.kt")));
 const manifest = read(join(ROOT, "android/app/src/main/AndroidManifest.xml"));
-const design = read(join(ROOT, "DESIGN.md"));
 
 describe("unit android insets et encoches (#872)", () => {
   test("les quatre sources d'insets sont lues, pas seulement le clavier", () => {
@@ -54,8 +53,5 @@ describe("unit android insets et encoches (#872)", () => {
   test("fenêtres libres et grands écrans : redimensionnable, clavier en adjustResize", () => {
     expect(manifest).toContain('android:resizeableActivity="true"');
     expect(manifest).toContain('android:windowSoftInputMode="adjustResize"');
-    expect(design).toContain("fenêtres libres");
-    expect(design).toContain("--native-safe-*");
-    expect(design).toContain("700 px");
   });
 });

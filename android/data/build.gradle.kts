@@ -1,5 +1,6 @@
 plugins {
     id("com.android.library")
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -38,4 +39,5 @@ dependencies {
     api(libs.okhttp)
     implementation(libs.security.crypto)
     implementation(libs.work.runtime.ktx)
+    implementation(libs.kotlinx.serialization.json)
 }

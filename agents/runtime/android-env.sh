@@ -1,7 +1,7 @@
 # android-env.sh — source depuis le Makefile, jamais exécuté directement.
 #
-# UN seul endroit qui sait trouver un JDK (17-21, plage testée avec AGP 9.4.1 /
-# Gradle 9.8.1) et un SDK : sinon chaque cible réinvente la logique et l'une
+# UN seul endroit qui sait trouver un JDK (17-21, plage testée avec AGP 9.5.0 /
+# Gradle 9.8.2) et un SDK : sinon chaque cible réinvente la logique et l'une
 # oublie la borne.
 # Fonctions sans effet de bord : android_jdk / android_sdk -> chemin ou rien.
 # ponytail: pas de `sdkmanager --install` automatique (android/README.md).
@@ -55,7 +55,7 @@ android_sdk() {
 # Une seule formulation pour les deux commandes APK.
 android_toolchain_hint() {
     cat <<'HINT'
-  JDK 17-21 : Adoptium 17 suffit (AGP 9.4.1).
+  JDK 17-21 : Adoptium 17 suffit (AGP 9.5.0).
               Pointez ANDROID_JDK_HOME ou JAVA_HOME dessus.
   SDK Android : sdkmanager "platforms;android-37.0" "build-tools;36.0.0" platform-tools
               puis ANDROID_HOME=<sdk> ou sdk.dir dans android/local.properties.

@@ -217,5 +217,5 @@ make buildRelApk   # APK release signé, clé hors repo requise (échec sans cl�
 ```
 
 `make check` compile réellement Kotlin si JDK 17–21 et SDK Android 37 sont
-présents ; sinon il signale explicitement le skip. Prérequis, versions,
-signature et procédure de release : [`docs/RELEASE.md`](../docs/RELEASE.md).
+présents ; sinon il signale explicitement le skip. La clé release reste hors
+dépôt et aucun secret n'entre dans le build.

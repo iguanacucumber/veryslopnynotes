@@ -345,10 +345,6 @@ export function subjectNameError(name: string): string | null {
   return trimmed.length > MAX_SUBJECT_CHARS ? `${MAX_SUBJECT_CHARS} caractères maximum` : null;
 }
 
-export function subjectLabelError(label: string): string | null {
-  return label.trim().length > MAX_LABEL_CHARS ? `${MAX_LABEL_CHARS} caractères maximum` : null;
-}
-
 export interface SubjectDraft {
   color: string;
   emoji: string;

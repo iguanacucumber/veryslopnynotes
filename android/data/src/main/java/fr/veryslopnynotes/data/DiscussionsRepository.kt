@@ -6,7 +6,6 @@ import fr.veryslopnynotes.core.Discussion
 import fr.veryslopnynotes.core.DiscussionMessage
 import fr.veryslopnynotes.core.DiscussionRecipient
 import fr.veryslopnynotes.core.DiscussionRules
-import fr.veryslopnynotes.core.MessagePaging
 import fr.veryslopnynotes.core.ThreadMessageCache
 import fr.veryslopnynotes.pronote.Client
 import fr.veryslopnynotes.pronote.DiscussionClosed
@@ -416,11 +415,5 @@ class DiscussionsRepository(
         /** UNKNOWN_UNREAD : champ absent = l'établissement ne publie pas le compteur. */
         private fun unreadOf(o: JSONObject): Int =
             if (o.isNull("unreadCount")) DiscussionRules.UNKNOWN_UNREAD else o.optInt("unreadCount", DiscussionRules.UNKNOWN_UNREAD)
-
-        fun discussionsFromPayload(payload: String?): List<Discussion> = try {
-            if (payload == null) emptyList() else parse(payload)
-        } catch (_: Exception) {
-            emptyList()
-        }
     }
 }

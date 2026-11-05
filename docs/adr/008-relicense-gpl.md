@@ -92,10 +92,10 @@ distribution iOS exigerait une nouvelle décision juridique.
 
 Papillon est un projet GPL-3.0. Les fichiers portés ou adaptés depuis Papillon
 restent sous GPL-3.0, avec le copyright et l'attribution d'origine ; ils ne
-sont ni blanchis ni présentés comme clean-room. `docs/legal/PROVENANCE.md`
-(#838) inventorie les fichiers, la version ou le commit source et la logique
-portée. Tant qu'il est incomplet, un fichier ressemblant à un portage est
-traité comme dérivé et crédité.
+sont ni blanchis ni présentés comme clean-room. L'historique Git (#838)
+inventorie les fichiers, la version ou le commit source et la logique portée.
+Tant qu'il est incomplet, un fichier ressemblant à un portage est traité comme
+dérivé et crédité.
 
 La communication du projet ne se présente pas comme une réplique de Papillon
 (#843) : le crédit GPL reste, la revendication visuelle et la marque
@@ -143,21 +143,18 @@ incompatible est refusée, pas ajoutée avec une exception non écrite.
 
 - `LICENSE` est remplacé par le texte GPL-3.0 canonique (#835) ; `package.json`
   et le README déclarent `GPL-3.0-only` (#836).
-- `CONTRIBUTING.md` et `AGENTS.md` doivent dire la même règle : contribution
-  sous GPL-3.0-only, sign-off DCO, pas de CLA.
+- `AGENTS.md` porte la règle : contribution sous GPL-3.0-only, sign-off DCO,
+  pas de CLA.
 - `THIRD_PARTY_NOTICES.md` et `web/public/licenses/` restent la source des
   textes ; l'app les embarque et l'écran À propos les expose (#840).
 - Chaque release porte le lien vers la source exacte (#841) ; le gate et la CI
   vérifient les licences des dépendances (#842).
-- `docs/RELEASE.md` cesse de présenter la licence applicative comme MIT et
-  décrit la source correspondante.
+- Le README décrit la licence applicative et la source correspondante.
 - Les fichiers dérivés de Papillon sont inventoriés et crédités (#838) ; la
   communication ne revendique plus une copie (#843).
 - Cet ADR est une décision d'ingénierie fondée sur les textes publics des
   licences ; il ne vaut pas avis juridique et ne revendique aucune validation
-  d'un conseil. Preuves et ayants droit :
-  [RELICENSING.md](../legal/RELICENSING.md). La revue juridique avant release
-  publique reste requise, comme pour le scraper de manuels.
+  d'un conseil. Les preuves et ayants droit restent dans l'historique Git.
 
 ## Risques
 

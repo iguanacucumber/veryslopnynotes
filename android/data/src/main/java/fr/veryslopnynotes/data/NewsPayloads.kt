@@ -1,26 +1,38 @@
 package fr.veryslopnynotes.data
 
 import fr.veryslopnynotes.pronote.Client
-import org.json.JSONArray
-import org.json.JSONObject
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+
+@Serializable
+private data class NewsEntry(
+    val id: String,
+    val title: String,
+    val publishedAt: String,
+    val category: String? = null,
+    val author: String? = null,
+    val read: Boolean,
+)
+
+@Serializable
+private data class NewsPayload(
+    val news: List<NewsEntry>,
+    val partial: Boolean = false,
+)
 
 internal fun newsPayload(client: Client): String {
-    val arr = JSONArray()
     val read = client.informationAndSurveysPartial()
-    read.value.take(100).forEachIndexed { i, info ->
+    val news = read.value.take(100).mapIndexed { i, info ->
         // La LISTE ne télécharge pas le corps (1 POST, pas 21) : il est demandé
         // au dépliage (`news.item` -> `Client.informationContent(id)`).
-        val title = boundedCp(info.title, 200)
-        val finalTitle = title.ifEmpty { "Actualité" }
-        arr.put(JSONObject().apply {
-            put("id", info.id.ifBlank { "news-$i" })
-            put("title", finalTitle)
-            put("publishedAt", (info.creationDate ?: info.startDate)?.parisIso() ?: parisNowIso())
-            putIf("category", boundedCp(info.category, 100).ifEmpty { null })
-            putIf("author", boundedCp(info.author, 100).ifEmpty { null })
-            put("read", info.read)
-        })
+        NewsEntry(
+            id = info.id.ifBlank { "news-$i" },
+            title = boundedCp(info.title, 200).ifEmpty { "Actualité" },
+            publishedAt = (info.creationDate ?: info.startDate)?.parisIso() ?: parisNowIso(),
+            category = boundedCp(info.category, 100).ifEmpty { null },
+            author = boundedCp(info.author, 100).ifEmpty { null },
+            read = info.read,
+        )
     }
-    return JSONObject().put("news", arr).apply { putFlag("partial", read.partial) }.toString()
+    return payloadJson.encodeToString(NewsPayload(news, read.partial))
 }
-

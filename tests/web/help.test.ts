@@ -47,9 +47,7 @@ describe("aide et FAQ (#946)", () => {
     expect(html).toContain("hors ligne");
     expect(html).toContain("aucun rappel");
     expect(html).toContain("comptes parent sont hors périmètre");
-    expect(html).toContain("docs/ACCESSIBILITY.md");
     expect(html).toContain("WCAG 2.2 AA");
-    expect(html).toContain("docs/SUPPORT.md");
     expect(html).toContain("[known-issues] vX.Y.Z");
     expect(html).toContain("rien n’est envoyé automatiquement");
   });

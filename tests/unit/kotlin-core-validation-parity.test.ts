@@ -143,10 +143,11 @@ describe("capabilities (#413) — un contrat invalide vaut « inconnu », pas «
     const start = src.indexOf("internal fun capabilitiesPayload");
     expect(start).toBeGreaterThan(-1);
     const block = src.slice(start, src.indexOf("\n}", start));
-    // Le contrat invalide (`fromProbe` → `null`) devient `JSONObject.NULL`.
-    expect(block).toContain("?: JSONObject.NULL");
-    // Et aucune liste d'onglets vide n'est publiée (elle=blackouterait).
-    expect(block).not.toMatch(/put\(\s*"tabs"\s*,\s*JSONArray\(\s*emptyList\(\)/);
+    // Le contrat invalide (`fromProbe` → `null`) reste un null explicite.
+    expect(block).toContain("JsonNull");
+    expect(block).toContain("CapabilitiesPayload(encoded)");
+    // Et aucune liste d'onglets vide n'est publiée (elle blackouterait).
+    expect(block).not.toContain("tabs = emptyList()");
   });
 });
 

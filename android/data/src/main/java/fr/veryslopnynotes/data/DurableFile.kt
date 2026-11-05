@@ -197,6 +197,4 @@ object DurableFile {
     private fun backupOf(target: File): File = File(target.parentFile, "${target.name}.bak")
 
     private fun quarantineDir(target: File): File? = target.parentFile?.let { File(it, "quarantine") }
-
-    internal const val QUARANTINE_DIR = "quarantine"
 }

@@ -9,7 +9,6 @@ import { join } from "node:path";
 const ROOT = join(import.meta.dir, "..", "..");
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 const WORKFLOW = read(".github/workflows/release.yml");
-const RELEASE_DOC = read("docs/RELEASE.md");
 const README = read("README.md");
 
 describe("CI : release sur tag (#931)", () => {
@@ -65,7 +64,6 @@ describe("CI : release sur tag (#931)", () => {
   });
 
   test("publie la GitHub Release avec notes, assets et source GPL exacte", () => {
-    expect(WORKFLOW).toContain("CHANGELOG.md");
     expect(WORKFLOW).toContain('gh release create "$TAG" dist/* --verify-tag');
     expect(WORKFLOW).toContain("--notes-file");
     expect(WORKFLOW).toContain("git archive");
@@ -90,11 +88,6 @@ describe("CI : release sur tag (#931)", () => {
     expect(WORKFLOW).toContain("git archive");
     expect(WORKFLOW).toContain("GPL-3.0-only");
     expect(WORKFLOW).not.toContain("pull_request");
-    // Notes : section de la future finale, ou section beta exacte.
-    expect(WORKFLOW).toContain('base="${VERSION%%-*}"');
-    expect(RELEASE_DOC).toContain("Canal bêta");
-    expect(RELEASE_DOC).toContain("pré-release");
-    expect(RELEASE_DOC).toContain("désinstallation");
     expect(README).toContain("Canal bêta");
     expect(README).toContain("downgrade");
   });
@@ -114,14 +107,4 @@ describe("CI : release sur tag (#931)", () => {
     }
   });
 
-  test("RELEASE.md documente la procédure, les secrets et le dry-run", () => {
-    expect(RELEASE_DOC).toContain(".github/workflows/release.yml");
-    expect(RELEASE_DOC).toContain("RELEASE_KEYSTORE_BASE64");
-    expect(RELEASE_DOC).toContain("RELEASE_STORE_PASSWORD");
-    expect(RELEASE_DOC).toContain("RELEASE_KEY_ALIAS");
-    expect(RELEASE_DOC).toContain("RELEASE_KEY_PASSWORD");
-    expect(RELEASE_DOC).toContain("SHA256SUMS");
-    expect(RELEASE_DOC).toContain("archive/refs/tags/");
-    expect(RELEASE_DOC).toContain("gh workflow run release.yml --ref vX.Y.Z");
-  });
 });

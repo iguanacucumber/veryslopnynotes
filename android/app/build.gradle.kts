@@ -23,7 +23,7 @@ val tagVersionCode = tagVersion[1].toIntOrNull()
 val configuredHost = (project.findProperty("server.host") as String?)
     ?: System.getenv("SERVER_HOST")
 
-// Clé release hors repo (docs/RELEASE.md). Les quatre champs vont ensemble :
+// Clé release hors repo. Les quatre champs vont ensemble :
 // un chemin seul ne signe rien. Le refus ne cite que des NOMS de propriétés.
 val releaseStoreFile = ((project.findProperty("release.storeFile") as String?)
     ?: System.getenv("STORE_FILE"))?.trim()
@@ -66,7 +66,7 @@ android {
     }
 
     signingConfigs {
-        // Clé release hors repo (jamais commitée, docs/RELEASE.md). Config
+        // Clé release hors repo (jamais commitée). Config
         // incomplète = bloc inutilisé : la release refuse de se construire.
         create("release") {
             if (missingReleaseSigning.isEmpty()) {
@@ -138,7 +138,7 @@ gradle.taskGraph.whenReady {
                 "Manquant : ${missingReleaseSigning.joinToString(", ")}. " +
                 "Configurer release.storeFile, release.storePassword, release.keyAlias et " +
                 "release.keyPassword (ou STORE_FILE, STORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD), " +
-                "hors du dépôt (docs/RELEASE.md). Aucun repli debug.",
+                "hors du dépôt. Aucun repli debug.",
         )
     }
 }
@@ -174,9 +174,6 @@ dependencies {
     implementation(libs.activity.ktx)
     implementation(libs.exifinterface)
     implementation(libs.zxing.android.embedded)
-    // ponytail: un seul client HTTP (OkHttp allowlist serveur).
-    // Upgrade: cache offline Room.
-    implementation(libs.okhttp)
 
     // Instrumenté uniquement : aucune dépendance de test n'entre dans l'APK.
     androidTestImplementation(libs.androidx.test.ext.junit)

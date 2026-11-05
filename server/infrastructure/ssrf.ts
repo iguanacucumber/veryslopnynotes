@@ -16,8 +16,8 @@
 // `manuals-scrape.ts`), donc Chromium ne peut pas rebinder ces noms. Les
 // sous-ressources, dont l'hôte n'est connu qu'à la requête, restent résolues
 // par le navigateur : leur vérification garde la fenêtre courte, et la
-// politique d'égression (`docs/architecture/SERVER-EGRESS.md`) la ferme au
-// niveau réseau. Upgrade: proxy sortant à liste blanche qui résout et connecte
+// politique d'égression la ferme au niveau réseau. Upgrade: proxy sortant à
+// liste blanche qui résout et connecte
 // lui-même l'adresse validée pour TOUTES les requêtes.
 import { lookup } from "node:dns/promises";
 import { isBlockedHost, isIpLiteral } from "../../shared/contracts/net";

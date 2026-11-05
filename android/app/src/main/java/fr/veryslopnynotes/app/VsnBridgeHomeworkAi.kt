@@ -252,16 +252,12 @@ internal fun missingRefusalMessage(missing: List<String>): String =
  * (I6 : Untrusted au prompt). Une pièce jointe illisible reste une source
  * NOMMÉE, jamais une exception. Le cache passe par [DownloadedFiles] : il
  * est borné et purgé avec le compte (I26).
- *
- * Les pages web ne sont admises que si leur TEXTE est déjà disponible : une
- * URL ne devient jamais une source inventée (#634).
  */
 internal fun VsnBridge.aiContextFor(
     assignment: Assignment,
     entry: AiContextEntry,
     week: String = "",
     epoch: Long = SessionEpoch.current(),
-    webPages: List<AiContextItem> = emptyList(),
     history: List<AiContextItem> = emptyList(),
 ): AiContextResult {
     val items = mutableListOf<AiContextItem>()
@@ -277,7 +273,6 @@ internal fun VsnBridge.aiContextFor(
     for (doc in manualDocsFor(assignment.subject, assignment.manualPages())) {
         items.add(AiContext.manual(doc.title, doc.excerpt))
     }
-    items.addAll(webPages)
     items.addAll(history)
     return AiContext.assembleFor(entry, items)
 }

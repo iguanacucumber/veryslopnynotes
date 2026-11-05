@@ -2,7 +2,7 @@
 
 Détail du `Makefile` et de `check.ts`.
 
-Protection de `main` et checks : [`BRANCH-PROTECTION.md`](BRANCH-PROTECTION.md).
+Protection de `main` et checks : voir `AGENTS.md`.
 
 ## `make check` — le gate de merge (9 étapes)
 

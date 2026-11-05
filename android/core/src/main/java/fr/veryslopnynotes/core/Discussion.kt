@@ -21,13 +21,6 @@ object DiscussionRules {
 
     val KINDS = listOf("student", "teacher", "administration")
 
-    /** Badge non-lus ; compteur inconnu = aucun badge (jamais « 0 »). */
-    fun unreadLabel(count: Int): String =
-        if (count > 0) "$count non lu(s)" else ""
-
-    fun participantLabel(participants: List<String>): String =
-        if (participants.isEmpty()) "" else participants.joinToString(", ")
-
     /** Borne de libellé de pièce jointe (miroir ASSIGNMENT_ATTACHMENT_LABEL_MAX_CHARS). */
     const val MAX_ATTACHMENT_LABEL = 200
 

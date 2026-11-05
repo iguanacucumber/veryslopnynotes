@@ -365,20 +365,6 @@ export function SubjectMark({ subject, size = 10 }: { subject: string; size?: nu
   );
 }
 
-export function SubjectAvatar({
-  subject,
-  size = 40,
-  dark = false,
-  className = "",
-}: {
-  subject: string;
-  size?: number;
-  dark?: boolean;
-  className?: string;
-}) {
-  return <SubjectBadge subject={subject} size={size} dark={dark} className={className} />;
-}
-
 export function Avatar({ name, size = 40, src }: { name: string; size?: number; src?: string | null }) {
   const initials = name
     .split(/\s+/)

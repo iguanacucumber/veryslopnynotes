@@ -11,7 +11,7 @@ body:
         de pièce jointe ni de capture non caviardée.
 
         Une faille exploitable ne s'ouvre pas ici : utilise
-        [SECURITY.md](https://github.com/iguanacucumber/veryslopnynotes/blob/main/SECURITY.md).
+        [GitHub Security Advisories](https://github.com/iguanacucumber/veryslopnynotes/security/advisories/new).
 
   - type: textarea
     id: probleme
@@ -108,5 +108,5 @@ body:
       options:
         - label: J'ai retiré noms, URL d'établissement, notes, messages et identifiants de toute capture.
           required: true
-        - label: Je n'ai pas ouvert de faille exploitable ici ; elle passe par SECURITY.md.
+        - label: Je n'ai pas ouvert de faille exploitable ici ; elle passe par GitHub Security Advisories.
           required: true

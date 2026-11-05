@@ -145,6 +145,14 @@ const SHIPPED: Shipped[] = [
     source: "gradle",
     ref: "zxing-android-embedded",
   },
+  {
+    component: "org.jetbrains.kotlinx:kotlinx-serialization-json",
+    version: required(catalog.versions["kotlinx-serialization"], "kotlinx-serialization"),
+    license: "Apache-2.0",
+    text: "APACHE-2.0.txt",
+    source: "gradle",
+    ref: "kotlinx-serialization",
+  },
   { component: "SN Pro", version: "", license: "OFL-1.1", text: "SN-PRO-OFL.txt", source: "asset" },
   {
     component: "Papicons",

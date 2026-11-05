@@ -39,12 +39,6 @@
   line-height: 18px;
 }
 
-.legal-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
 .legal-link {
   display: inline-flex;
   align-items: center;

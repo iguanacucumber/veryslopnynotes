@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-31T10:55:00Z",
+  "title": "Design System: VerySlopyNyNotes",
+  "extensions": {
+    "colorMeta": {
+      "brand-solid": {
+        "role": "primary",
+        "displayName": "Vert registre",
+        "canonical": "#1c6653",
+        "tonalRamp": ["#edf8f5", "#48a98b", "#29947a", "#1c6653", "#123f34"]
+      },
+      "page": {
+        "role": "neutral",
+        "displayName": "Papier froid",
+        "canonical": "#f6fbfa",
+        "tonalRamp": ["#ffffff", "#f6fbfa", "#f3f6f7", "#d6dcdd", "#8a9497"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Encre",
+        "canonical": "#1f292e",
+        "tonalRamp": ["#1f292e", "#5f696d", "#6f797d", "#d6dcdd"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Salutation et chiffre principal du relevé." },
+      "headline": { "displayName": "Headline", "purpose": "Titres de section." },
+      "title": { "displayName": "Title", "purpose": "Titres de cartes et de listes." },
+      "body": { "displayName": "Body", "purpose": "Texte courant." },
+      "label": { "displayName": "Label", "purpose": "Surtitres, dates et unités en capitales." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "duration", "value": "180ms", "purpose": "Durée des transitions d'état." },
+      { "name": "ease-standard", "value": "cubic-bezier(0.2, 0.7, 0.2, 1)", "purpose": "Courbe par défaut." },
+      { "name": "ease-out", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Entrées et glissement d'onglet." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "560px" },
+      { "name": "md", "value": "700px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Action principale, 48 px de haut.",
+      "html": "<button class=\"ds-btn\">Enregistrer</button>",
+      "css": ".ds-btn { min-height: var(--tap); padding: 0 18px; border: 1px solid var(--brand-solid); border-radius: var(--radius-sm); background: var(--brand-solid); color: var(--on-brand); font: 700 15px/22px Figtree, system-ui, sans-serif; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: background 180ms cubic-bezier(0.2,0.7,0.2,1); } .ds-btn:hover { background: color-mix(in srgb, var(--brand-solid) 88%, var(--ink)); } .ds-btn:focus-visible { outline: 2px solid var(--brand-deep); outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Action secondaire sur filet, sans ombre.",
+      "html": "<button class=\"ds-btn-ghost\">Annuler</button>",
+      "css": ".ds-btn-ghost { min-height: var(--tap); padding: 0 18px; border: 1px solid var(--rule); border-radius: var(--radius-sm); background: var(--surface); color: var(--brand-deep); font: 700 15px/22px Figtree, system-ui, sans-serif; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: border-color 180ms cubic-bezier(0.2,0.7,0.2,1); } .ds-btn-ghost:hover { border-color: var(--rule-strong); } .ds-btn-ghost:focus-visible { outline: 2px solid var(--brand-deep); outline-offset: 2px; }"
+    },
+    {
+      "name": "Registry Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Surface de registre : filet de 1 px, rayon 4 px, aucune élévation.",
+      "html": "<article class=\"ds-card\"><p class=\"ds-card-title\">Moyenne générale</p><p class=\"ds-card-value\">14,43<span>/20</span></p></article>",
+      "css": ".ds-card { padding: 18px; border: 1px solid var(--rule); border-radius: var(--radius-sm); background: var(--panel); color: var(--ink); font-family: Figtree, system-ui, sans-serif; } .ds-card-title { margin: 0; font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); } .ds-card-value { margin: 6px 0 0; font-size: 40px; line-height: 42px; font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; } .ds-card-value span { font-size: 15px; font-weight: 400; color: var(--muted); }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "Champ de saisie, 48 px, focus en anneau d'encre.",
+      "html": "<label class=\"ds-field-label\">Rechercher<input class=\"ds-field\" placeholder=\"Une discussion\" /></label>",
+      "css": ".ds-field-label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font: 600 12px/16px Figtree, system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; } .ds-field { min-height: var(--tap); padding: 0 12px; border: 1px solid var(--rule); border-radius: var(--radius-sm); background: var(--panel); color: var(--ink); font: 400 15px/22px Figtree, system-ui, sans-serif; letter-spacing: 0; text-transform: none; } .ds-field:focus-visible { outline: 2px solid var(--brand-deep); outline-offset: 2px; }"
+    },
+    {
+      "name": "Status Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "État ou filtre, rayon 2 px.",
+      "html": "<button class=\"ds-chip\" aria-pressed=\"false\">Tout (2)</button>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 4px 11px; border: 1px solid var(--rule); border-radius: var(--radius-xs); background: var(--panel); color: var(--ink); font: 600 13px/18px Figtree, system-ui, sans-serif; transition: background 180ms cubic-bezier(0.2,0.7,0.2,1), border-color 180ms cubic-bezier(0.2,0.7,0.2,1); } .ds-chip[aria-pressed=\"true\"] { background: var(--brand-solid); border-color: var(--brand-solid); color: var(--on-brand); } .ds-chip:focus-visible { outline: 2px solid var(--brand-deep); outline-offset: 2px; }"
+    },
+    {
+      "name": "Topbar",
+      "kind": "nav",
+      "refersTo": "topbar",
+      "description": "Aplat de marque plein, titre 25 px, filet bas.",
+      "html": "<header class=\"ds-topbar\"><span class=\"ds-topbar-title\">Accueil</span></header>",
+      "css": ".ds-topbar { min-height: calc(58px + env(safe-area-inset-top, 0px)); display: flex; align-items: center; padding: calc(6px + env(safe-area-inset-top, 0px)) 18px 6px; border-bottom: 1px solid color-mix(in srgb, var(--on-brand) 24%, transparent); background: var(--brand-solid); color: var(--on-brand); font-family: Figtree, system-ui, sans-serif; } .ds-topbar-title { font-size: 25px; line-height: 30px; font-weight: 800; letter-spacing: -0.03em; }"
+    },
+    {
+      "name": "Flat Tabbar",
+      "kind": "nav",
+      "refersTo": "tabbar",
+      "description": "Barre fixe pleine largeur, indicateur de 3 px.",
+      "html": "<nav class=\"ds-tabbar\"><span class=\"ds-tab ds-tab-active\">Accueil</span><span class=\"ds-tab\">Cours</span><span class=\"ds-tab\">Notes</span></nav>",
+      "css": ".ds-tabbar { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--rule-strong); background: var(--surface); font-family: Figtree, system-ui, sans-serif; } .ds-tabbar::before { content: \"\"; position: absolute; top: -1px; left: 0; width: 33.333%; height: 3px; background: var(--brand-solid); } .ds-tab { min-height: 66px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 10px; line-height: 13px; font-weight: 600; } .ds-tab-active { color: var(--ink); font-weight: 750; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Le Bulletin",
+    "overview": "Un relevé scolaire calme : papier froid, encre, filets d'un pixel. L'en-tête plein porte la palette ; la couleur de matière reste une marque d'index. Aucune ombre de carte, aucun dégradé décoratif, aucun verre.",
+    "keyCharacteristics": [
+      "Registre dense et lisible, sans bruit visuel.",
+      "En-tête brand-solid, contenu sur papier, barre d'onglets plate.",
+      "Filets de 1 px, rayons de 2 à 6 px.",
+      "Chiffres tabulaires."
+    ],
+    "rules": [
+      { "name": "La règle de l'index", "body": "La couleur d'une matière ne remplit jamais une carte : marque de 10 à 12 px, filet ou barre.", "section": "colors" },
+      { "name": "La règle du signal", "body": "Le rouge est réservé au danger réel ; l'absence de données reste neutre.", "section": "colors" },
+      { "name": "La règle du chiffre tabulaire", "body": "Toute valeur comparable utilise font-variant-numeric: tabular-nums.", "section": "typography" }
+    ],
+    "dos": [
+      "Utiliser un filet de 1 px avant une ombre.",
+      "Réserver la couleur pleine à l'en-tête, aux actions et à l'onglet actif.",
+      "Garder les cibles tactiles à 48 px."
+    ],
+    "donts": [
+      "Ajouter un dégradé décoratif, un halo ou un verre dépoli.",
+      "Colorer une carte entière avec la couleur d'une matière.",
+      "Utiliser border-radius: 999px ou une pastille de statut.",
+      "Mettre un bord coloré épais sur une carte arrondie."
+    ]
+  }
+}

@@ -20,11 +20,9 @@ les contenus tiers gardent **leur** licence.
 | Skill | Source upstream | Licence |
 |---|---|---|
 | `code-review` | [mattpocock/skills](https://github.com/mattpocock/skills) | MIT |
-| `impeccable` | [pbakaus/impeccable](https://github.com/pbakaus/impeccable) | Apache-2.0 |
 
-`impeccable` embarque son détecteur et l'index de polices (≈2,25 Mo) :
-la limite de taille de `tests/architecture/skills-lock.test.ts` est donc
-**par skill**, pas globale, et le dépassement de `code-review` reste bloquant.
+La limite de taille de `tests/architecture/skills-lock.test.ts` est **par
+skill** : l'ajout d'une grosse skill amont doit rester visible en PR.
 
 ## Rapport au scan anti-secrets
 

@@ -10,10 +10,8 @@ body:
         aucune donnée scolaire** : pas de nom, d'URL d'établissement, de note,
         de message, de pièce jointe ni de capture non caviardée.
 
-        Lis d'abord le [kit bêta](https://github.com/iguanacucumber/veryslopnynotes/blob/main/docs/BETA.md)
-        et le [support](https://github.com/iguanacucumber/veryslopnynotes/blob/main/docs/SUPPORT.md).
         Une faille exploitable ne s'ouvre pas ici : utilise
-        [SECURITY.md](https://github.com/iguanacucumber/veryslopnynotes/blob/main/SECURITY.md).
+        [GitHub Security Advisories](https://github.com/iguanacucumber/veryslopnynotes/security/advisories/new).
 
   - type: dropdown
     id: type-retour
@@ -111,5 +109,5 @@ body:
           required: true
         - label: Je sais que cette issue est publique et je n'y publie aucune donnée scolaire.
           required: true
-        - label: Je n'ai pas ouvert de faille exploitable ici ; elle passe par SECURITY.md.
+        - label: Je n'ai pas ouvert de faille exploitable ici ; elle passe par GitHub Security Advisories.
           required: true

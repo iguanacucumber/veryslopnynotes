@@ -49,6 +49,6 @@ Code et contributions sous **GPL-3.0-only** ([ADR-008](docs/adr/008-relicense-gp
 - `.agents/` = skills tierces, jamais éditées à la main : `npx skills update` met à jour `skills-lock.json` et la table de `tests/architecture/skills-lock.test.ts` dans la MÊME PR.
 - Pas de secret commité ni de variable de secret côté serveur, pas d'IP, de domaine, d'URL Pronote ou de donnée personnelle. Secret commité ⇒ rotation immédiate. `tests/fixtures/pronote/` et `shots/` sont gitignorés.
 
-Décisions : [`docs/adr/`](docs/adr/), à commencer par [ADR-005](docs/adr/005-rules-and-architecture.md). Build/release : [`docs/RELEASE.md`](docs/RELEASE.md). Modules : [`android/README.md`](android/README.md), [`web/README.md`](web/README.md), [`server/README.md`](server/README.md).
+Décisions : [`docs/adr/`](docs/adr/), à commencer par [ADR-005](docs/adr/005-rules-and-architecture.md). Build : [`docs/architecture/BUILD.md`](docs/architecture/BUILD.md). Modules : [`android/README.md`](android/README.md), [`web/README.md`](web/README.md), [`server/README.md`](server/README.md).
 
 Commits : `<scope>: <objet>`, impératif, une ligne (corps si utile).

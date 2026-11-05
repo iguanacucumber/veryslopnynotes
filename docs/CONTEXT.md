@@ -23,18 +23,9 @@ Registre : [`INVARIANTS.md`](architecture/INVARIANTS.md).
 |---|---|---|
 | `README.md` | produit, démarrage, limites | présenter le projet |
 | `AGENTS.md` | 5 lois, workflow, gate | avant de toucher au dépôt |
-| `CONTRIBUTING.md` | fork, PR, gate, signature | première contribution |
 | `docs/CONTEXT.md` | cette carte | chercher l'invariant d'une tâche |
 | `docs/architecture/INVARIANTS.md` | index des 20 invariants actifs | choisir une entrée |
 | `docs/architecture/invariants/OPERATING.md` | format, ajout, retrait | créer ou réviser un invariant |
 | `docs/architecture/BUILD.md` | les 9 étapes du gate | modifier `Makefile` ou CI |
-| [`docs/GLOSSARY.md`](GLOSSARY.md) | acronymes du dépôt | décoder un sigle |
-| `docs/PRODUCT.md` | écrans et parcours | changer un comportement visible |
-| `DESIGN.md` | système visuel, jetons | changer l'apparence |
-| `docs/COMPATIBILITY.md` | QR, MFA, versions, options | vérifier une limite |
-| [`docs/QA-MATRIX.md`](QA-MATRIX.md) | preuves appareil | preuve |
-| [`docs/ACCESSIBILITY.md`](ACCESSIBILITY.md) | cible, limites, contact | avant une promesse d'accessibilité |
-| `docs/HUMAN_INPUTS.md` | QR, clé OpenRouter, manuel | config utilisateur |
-| `docs/RELEASE.md` | build, signature, release | livrer un APK |
 | `docs/adr/` | décisions et leurs raisons | contester une règle |
 | `android/`, `web/`, `server/` README | détail par module | travailler dans un module |

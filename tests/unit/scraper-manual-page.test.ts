@@ -19,19 +19,19 @@ const state = {
 const html = `<script id="id-initial-state">window.__PRELOADED_STATE__ = ${JSON.stringify(state)};</script>`;
 
 describe("page de manuel dans le sommaire", () => {
-  test("choisit la page qui contient le numéro demandé", () => {
-    expect(manualPageFromHtml(html, 192, BASE)).toBe("https://manuels.example.invalid/page/19201");
+  test("choisit la page qui contient le numéro demandé", async () => {
+    expect(await manualPageFromHtml(html, 192, BASE)).toBe("https://manuels.example.invalid/page/19201");
     // Une page de deux pages couvre aussi la suivante.
-    expect(manualPageFromHtml(html, 193, BASE)).toBe("https://manuels.example.invalid/page/19201");
+    expect(await manualPageFromHtml(html, 193, BASE)).toBe("https://manuels.example.invalid/page/19201");
   });
 
-  test("refuse un slug absolu (contenu externe non fiable)", () => {
-    expect(manualPageFromHtml(html, 225, BASE)).toBeNull();
+  test("refuse un slug absolu (contenu externe non fiable)", async () => {
+    expect(await manualPageFromHtml(html, 225, BASE)).toBeNull();
   });
 
-  test("page absente ou sommaire illisible = pas de cible", () => {
-    expect(manualPageFromHtml(html, 500, BASE)).toBeNull();
-    expect(manualPageFromHtml("<html></html>", 192, BASE)).toBeNull();
-    expect(manualPageFromHtml(html, 0, BASE)).toBeNull();
+  test("page absente ou sommaire illisible = pas de cible", async () => {
+    expect(await manualPageFromHtml(html, 500, BASE)).toBeNull();
+    expect(await manualPageFromHtml("<html></html>", 192, BASE)).toBeNull();
+    expect(await manualPageFromHtml(html, 0, BASE)).toBeNull();
   });
 });

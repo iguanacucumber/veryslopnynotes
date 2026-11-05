@@ -10,7 +10,6 @@
 //
 // La réponse ne contient NI l'URL complète NI aucun cookie : seulement le
 // titre et le texte. L'app marque le contenu Untrusted avant l'IA (I6).
-import type { ScrapeManualsError } from "./manuals-scrape";
 import { scrapePage } from "./manuals-scrape";
 import type { ScrapeOptions } from "./manuals-scrape";
 
@@ -42,6 +41,3 @@ export async function scrapeWebPage(opts: ScrapeOptions): Promise<WebDoc[]> {
   const title = page.title.includes("://") ? "Page web" : page.title;
   return [{ title, excerpt: page.text }];
 }
-
-/** Type du refus, ré-exporté pour les appelants qui n'importent pas le manuel. */
-export type WebScrapeError = ScrapeManualsError;

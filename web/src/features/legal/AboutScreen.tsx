@@ -110,20 +110,6 @@ export function AboutContent({ identity }: { identity: AppVersion | null }) {
         </Card>
       </Section>
 
-      <Section title="Informations légales">
-        <nav className="legal-links" aria-label="Informations légales">
-          <Link className="legal-link" to="/privacy">
-            Confidentialité
-          </Link>
-          <Link className="legal-link" to="/terms">
-            Conditions d’utilisation
-          </Link>
-          <Link className="legal-link" to="/licenses">
-            Licences et notices de tiers
-          </Link>
-        </nav>
-      </Section>
-
       <Section title="Source et contact">
         <Card className="card--flat legal-stack">
           <ContactLine label="Code source" url={REPO_URL} />

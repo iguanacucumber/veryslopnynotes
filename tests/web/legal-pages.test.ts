@@ -9,8 +9,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import AboutScreen, { AboutContent, parseAppVersion } from "../../web/src/features/legal/AboutScreen";
 import LicensesScreen from "../../web/src/features/legal/LicensesScreen";
-import PrivacyScreen from "../../web/src/features/legal/PrivacyScreen";
-import TermsScreen from "../../web/src/features/legal/TermsScreen";
 import {
   LICENSE_TEXTS,
   RELEASES_URL,
@@ -62,10 +60,7 @@ describe("écrans légaux (#847)", () => {
     expect(html).toContain("GPL-3.0-only");
     expect(html).toContain("ni édité, ni approuvé, ni parrainé");
     expect(html).toContain("GitHub est le seul canal officiel");
-    expect(html).toContain('href="/privacy"');
-    expect(html).toContain('href="/terms"');
     expect(html).toContain('href="/licenses"');
-    expect(html).toContain('aria-label="Informations légales"');
   });
 
   test("À propos affiche version, code, empreinte, tag et notes de version", () => {
@@ -164,32 +159,6 @@ describe("écrans légaux (#847)", () => {
     ).toContain('MessageDigest.getInstance("SHA-256")');
   });
 
-  test("Confidentialité et Conditions rendent le texte complet de référence", () => {
-    const privacy = render(
-      createElement(PrivacyScreen, { markdown: source("PRIVACY.md") }),
-      "/privacy",
-    );
-    expect(privacy).toContain("Notice de confidentialité");
-    expect(privacy).toContain("Responsable du traitement et contact");
-    expect(privacy).toContain("Points ouverts avant la release publique");
-    expect(privacy).toContain("le projet n’exploite pas de serveur");
-    // Les lignes repliées du fichier restent un seul bloc, pas une liste de
-    // paragraphes orphelins.
-    expect((privacy.match(/<blockquote/g) ?? []).length).toBe(1);
-    expect((privacy.match(/<ol/g) ?? []).length).toBe(1);
-    expectAccessibleHeadings(privacy);
-
-    const terms = render(createElement(TermsScreen, { markdown: source("TERMS.md") }), "/terms");
-    expect(terms).toContain("Conditions d’utilisation");
-    expect(terms).toContain("Licence du logiciel");
-    expect(terms).toContain("Aucune garantie");
-    expect(terms).toContain("GPL-3.0-only");
-    expectAccessibleHeadings(terms);
-
-    expect(source("web/src/routes/privacy.tsx")).toContain("PRIVACY.md?raw");
-    expect(source("web/src/routes/terms.tsx")).toContain("TERMS.md?raw");
-  });
-
   test("Licences liste les notices de tiers et chaque texte intégral existe", () => {
     const texts = Object.fromEntries(
       LICENSE_TEXTS.map(({ file }) => [file, source(`web/public/licenses/${file}`)]),
@@ -218,8 +187,6 @@ describe("écrans légaux (#847)", () => {
   test("aucun réseau, aucun HTML brut et aucun lien externe cliquable", () => {
     for (const file of [
       "AboutScreen.tsx",
-      "PrivacyScreen.tsx",
-      "TermsScreen.tsx",
       "LicensesScreen.tsx",
       "LegalDocument.tsx",
       "legal.ts",
@@ -233,8 +200,6 @@ describe("écrans légaux (#847)", () => {
     );
     for (const [element, route] of [
       [createElement(AboutScreen), "/about"],
-      [createElement(PrivacyScreen, { markdown: source("PRIVACY.md") }), "/privacy"],
-      [createElement(TermsScreen, { markdown: source("TERMS.md") }), "/terms"],
       [
         createElement(LicensesScreen, {
           notices: source("THIRD_PARTY_NOTICES.md"),
@@ -247,30 +212,30 @@ describe("écrans légaux (#847)", () => {
       for (const match of html.matchAll(/<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)) {
         expect({ route, href: match[1] }).toEqual({
           route,
-          href: expect.stringMatching(/^\/(?:privacy|terms|licenses)$/),
+          href: expect.stringMatching(/^\/licenses$/),
         });
         expect(match[2]!.trim().length).toBeGreaterThan(0);
       }
     }
   });
 
-  test("les quatre routes sont branchées, visitées par le smoke et dans Réglages", () => {
+  test("les routes À propos et Licences sont branchées, visitées par le smoke et dans Réglages", () => {
     const app = source("web/src/App.tsx");
-    for (const route of ["about", "privacy", "terms", "licenses"]) {
+    for (const route of ["about", "licenses"]) {
       expect(app).toContain(`import ${route[0]!.toUpperCase()}${route.slice(1)}Route from "./routes/${route}"`);
       expect(app).toContain(`<Route path="/${route}" element={<${route[0]!.toUpperCase()}${route.slice(1)}Route />} />`);
       expect(SMOKE_ROUTES.map(([, path]) => path)).toContain(`/${route}`);
       expect(source("web/src/ui/AppShell.tsx")).toContain(`"/${route}": {`);
     }
     const settings = source("web/src/features/settings/SettingsScreen.tsx");
-    expect(settings).toContain("À propos et informations légales");
+    expect(settings).toContain("À propos et licences");
     expect(settings).toContain('navigate("/about")');
   });
 
   test("le natif connaît les routes et les textes de licence restent embarqués", () => {
     const routes = source("android/app/src/main/java/fr/veryslopnynotes/app/WebRouteState.kt");
     const manifest = source("android/app/src/debug/AndroidManifest.xml");
-    for (const route of ["about", "privacy", "terms", "licenses"]) {
+    for (const route of ["about", "licenses"]) {
       expect(routes).toContain(`"/${route}"`);
       expect(manifest).toContain(`android:host="${route}"`);
     }

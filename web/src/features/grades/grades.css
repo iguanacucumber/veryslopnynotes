@@ -360,18 +360,6 @@
   overflow-wrap: anywhere;
 }
 
-.grades-grade__influence {
-  margin: 3px 0 0;
-  color: var(--brand-deep);
-  font-size: 12px;
-  line-height: 16px;
-  font-weight: 600;
-}
-
-.grades-grade__influence--down {
-  color: var(--danger-ink);
-}
-
 .grades-grade__score {
   display: flex;
   align-items: flex-end;

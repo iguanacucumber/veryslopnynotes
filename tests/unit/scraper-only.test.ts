@@ -11,7 +11,7 @@ import {
   isManualsScrapeRequest,
   isManualsScrapeResponse,
 } from "../../shared/contracts/api";
-import { ScrapeManualsError, isLoginPage, scrapeManuals } from "../../server/infrastructure/manuals-scrape";
+import { ScrapeManualsError, extractHtml, isLoginPage, scrapeManuals } from "../../server/infrastructure/manuals-scrape";
 import type { HostResolver } from "../../server/infrastructure/ssrf";
 import { syntheticManualAccount } from "./fixtures/manuals";
 
@@ -391,14 +391,24 @@ describe("#526 — identifiants refusés, page de connexion jamais ingérée", (
     expect(joined).not.toContain(syntheticManualAccount.password);
   });
 
-  test("la détection : un champ mot de passe = page de connexion, un manuel = non", () => {
-    expect(isLoginPage(LOGIN_HTML)).toBe(true);
-    expect(isLoginPage(MANUAL_HTML)).toBe(false);
+  test("extrait le titre, décode les entités et préfère le conteneur document", async () => {
+    const page = await extractHtml(
+      "<html><head><title>A &amp; B</title></head><body>" +
+        "<div class='lls-new-viewer-document-root'><p>Fractions&nbsp;: &eacute;l&egrave;ve</p></div>" +
+        "<p>hors document</p></body></html>",
+    );
+    expect(page.title).toBe("A & B");
+    expect(page.text).toBe("Fractions : élève");
+  });
+
+  test("la détection : un champ mot de passe = page de connexion, un manuel = non", async () => {
+    expect(await isLoginPage(LOGIN_HTML)).toBe(true);
+    expect(await isLoginPage(MANUAL_HTML)).toBe(false);
     // Le type peut être écrit en majuscules, le nom peut porter la casse.
-    expect(isLoginPage("<html><body><input type='Password'></body></html>")).toBe(true);
-    expect(isLoginPage("<html><body><input name='PASSWORD'></body></html>")).toBe(true);
+    expect(await isLoginPage("<html><body><input type='Password'></body></html>")).toBe(true);
+    expect(await isLoginPage("<html><body><input name='PASSWORD'></body></html>")).toBe(true);
     // Un champ qui n'est PAS un mot de passe n'est pas un formulaire de login.
-    expect(isLoginPage("<html><body><input type='text' name='username'></body></html>")).toBe(false);
+    expect(await isLoginPage("<html><body><input type='text' name='username'></body></html>")).toBe(false);
   });
 
   test("une page de connexion (HTTP 200) n'est JAMAIS ingérée comme un manuel", async () => {

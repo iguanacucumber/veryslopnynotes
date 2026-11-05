@@ -84,12 +84,6 @@ export function frDayShort(value: string | Date): string {
   return FR_DAYS_SHORT[d.getDay()] ?? "";
 }
 
-export function frMonthYear(value: string | Date): string {
-  const d = value instanceof Date ? value : parseDate(value);
-  if (!d) return "";
-  return `${FR_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
-}
-
 export function isoDay(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");

@@ -322,11 +322,6 @@ a {
   outline: none;
 }
 
-.main--flush {
-  padding-left: 0;
-  padding-right: 0;
-}
-
 /* Pages sans coquille (appairage, écran de secours) : pas de barre du haut ni
    de dock, mais l'encoche et le geste d'accueil restent des zones à éviter. */
 .main--bare {
@@ -1232,17 +1227,6 @@ button.chip {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
-}
-
-.skeleton {
-  border-radius: var(--radius-sm);
-  background: linear-gradient(90deg, var(--surface-variant), var(--surface), var(--surface-variant));
-  background-size: 200% 100%;
-  animation: shimmer 1.2s linear infinite;
-}
-
-@keyframes shimmer {
-  to { background-position: -200% 0; }
 }
 
 .list {

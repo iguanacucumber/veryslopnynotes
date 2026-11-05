@@ -489,27 +489,3 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
   // l'effet qui recharge, l'ancien payload est déjà invisible.
   return { ...visibleResource(status, request), refresh };
 }
-
-/** Appel ponctuel (action utilisateur, appairage, réglages). */
-export function useAsync<T>() {
-  const [state, setState] = useState<{ data: T | null; error: string | null; loading: boolean }>({
-    data: null,
-    error: null,
-    loading: false,
-  });
-  const run = useCallback(async (fn: () => Promise<T>): Promise<T | null> => {
-    setState((s) => ({ ...s, loading: true, error: null }));
-    try {
-      const data = await fn();
-      setState({ data, error: null, loading: false });
-      return data;
-    } catch (e) {
-      if (e instanceof BridgeCallError && e.code === "auth_required") {
-        window.dispatchEvent(new Event("vsn:auth"));
-      }
-      setState({ data: null, error: e instanceof Error ? e.message : "action impossible", loading: false });
-      return null;
-    }
-  }, []);
-  return { ...state, run };
-}

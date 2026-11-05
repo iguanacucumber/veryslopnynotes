@@ -364,7 +364,6 @@ class ClientInfo(private val client: PronoteClientLike, json: JVal?) {
     // `json.N` direct : `null`/`undefined` jette (comme `.N` en TS).
     private val raw: JVal.Obj = json as JVal.Obj
     val id: String? = rawStrOrNull(raw.fields["N"])
-    val rawResource: JVal = raw
 
     private var cacheValue: JVal? = null
 

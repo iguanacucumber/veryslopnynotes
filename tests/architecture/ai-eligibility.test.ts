@@ -11,9 +11,6 @@ const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 const flat = (text: string) => text.replace(/[>\s]+/g, " ");
 
 const ADR = read("docs/adr/009-ai-eligibility.md");
-const PRODUCT = read("docs/PRODUCT.md");
-const PRIVACY = read("PRIVACY.md");
-const TERMS = read("TERMS.md");
 
 describe("ADR-009 — éligibilité de l'assistant IA (#829)", () => {
   test("l'ADR est accepté et ne revendique aucune validation juridique", () => {
@@ -54,9 +51,4 @@ describe("ADR-009 — éligibilité de l'assistant IA (#829)", () => {
     expect(ADR).toMatch(/revue de conseil encore requise/i);
   });
 
-  test("PRODUCT, PRIVACY et TERMS renvoient à l'ADR", () => {
-    expect(PRODUCT).toContain("adr/009-ai-eligibility.md");
-    expect(PRIVACY).toContain("docs/adr/009-ai-eligibility.md");
-    expect(TERMS).toContain("docs/adr/009-ai-eligibility.md");
-  });
 });

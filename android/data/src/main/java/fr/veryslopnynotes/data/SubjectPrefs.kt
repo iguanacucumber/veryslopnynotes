@@ -53,8 +53,6 @@ data class SubjectPrefs(
             null
         }
 
-        fun listFromJson(raw: String): List<SubjectPrefs> = listFromJsonOrNull(raw) ?: emptyList()
-
         /** `null` = JSON illisible (à distinguer d'une liste vide valide). */
         fun listFromJsonOrNull(raw: String): List<SubjectPrefs>? = try {
             val arr = JSONArray(raw)

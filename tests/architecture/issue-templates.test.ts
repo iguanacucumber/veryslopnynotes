@@ -48,7 +48,7 @@ describe("modèle de demande de fonctionnalité", () => {
     expect(fields.find((field) => field.id === "ecran-module")?.attributes?.options?.length).toBeGreaterThan(1);
   });
 
-  test("avertissement données scolaires et renvoi SECURITY.md valide", () => {
+  test("avertissement données scolaires et renvoi vers les Advisories", () => {
     const markdown = FEATURE.body
       .filter((field) => field.type === "markdown")
       .map((field) => field.attributes?.value ?? "")
@@ -59,13 +59,14 @@ describe("modèle de demande de fonctionnalité", () => {
     const links = [...markdown.matchAll(/\]\((https?:\/\/[^)]+)\)/g)].map((match) => match[1]!);
     expect(links.length).toBeGreaterThan(0);
     for (const link of links) {
+      if (!link.startsWith("https://github.com/iguanacucumber/veryslopnynotes/blob/main/")) continue;
       const local = link.replace(
         /^https:\/\/github\.com\/iguanacucumber\/veryslopnynotes\/blob\/main\//,
         "",
       );
       expect(existsSync(join(ROOT, local))).toBe(true);
     }
-    expect(links.some((link) => link.endsWith("/SECURITY.md"))).toBe(true);
+    expect(links.some((link) => link.endsWith("/security/advisories/new"))).toBe(true);
   });
 
   test("aucun bon premier ticket dans le dossier des modèles", () => {

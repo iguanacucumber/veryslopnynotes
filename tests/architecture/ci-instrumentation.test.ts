@@ -12,7 +12,6 @@ const CI = read(".github/workflows/ci.yml");
 const APP_GRADLE = read("android/app/build.gradle.kts");
 const CATALOG = read("android/gradle/libs.versions.toml");
 const BUILD = read("docs/architecture/BUILD.md");
-const CHANGELOG = read("CHANGELOG.md");
 const TEST_DIR = join(ROOT, "android/app/src/androidTest/java/fr/veryslopnynotes");
 
 function jobBlock(yaml: string, name: string): string {
@@ -166,8 +165,4 @@ describe("tests instrumentés (#887) — documentation", () => {
     expect(section).toContain("FLAG_SECURE");
   });
 
-  test("le changelog annonce la couverture instrumentée", () => {
-    expect(CHANGELOG).toMatch(/Tests instrumentés/i);
-    expect(CHANGELOG).toMatch(/FLAG_SECURE|purge complète/i);
-  });
 });

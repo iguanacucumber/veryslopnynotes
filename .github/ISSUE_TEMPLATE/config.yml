@@ -1,14 +1,5 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Support et problèmes connus
-    url: https://github.com/iguanacucumber/veryslopnynotes/blob/main/docs/SUPPORT.md
-    about: Canal unique, délais, diagnostic et issue épinglée [known-issues].
   - name: Signaler une faille de sécurité
     url: https://github.com/iguanacucumber/veryslopnynotes/security/advisories/new
     about: Canal privé ; ne publie jamais une faille exploitable en issue.
-  - name: Compatibilité (QR, MFA, versions)
-    url: https://github.com/iguanacucumber/veryslopnynotes/blob/main/docs/COMPATIBILITY.md
-    about: Vérifie d'abord les limites connues de l'app.
-  - name: Contribuer
-    url: https://github.com/iguanacucumber/veryslopnynotes/blob/main/CONTRIBUTING.md
-    about: Prérequis, gate et parcours de PR.

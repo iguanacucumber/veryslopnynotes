@@ -17,7 +17,6 @@ const ROOT = join(import.meta.dir, "..", "..");
 const SCRIPT = join(ROOT, "agents", "runtime", "apk-size.ts");
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 const WORKFLOW = read(".github/workflows/apk-size.yml");
-const RELEASE_DOC = read("docs/RELEASE.md");
 
 function baselineJson(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
@@ -179,12 +178,4 @@ describe("workflow apk-size (#974)", () => {
     }
   });
 
-  test("RELEASE.md documente l'unité, la mesure et la mise à jour", () => {
-    const section = RELEASE_DOC.slice(RELEASE_DOC.indexOf("## Budget de taille APK"));
-    expect(section).toContain("apk-size-baseline.json");
-    expect(section).toMatch(/octets/);
-    expect(section).toContain("apk-size.ts");
-    expect(section).toContain("budgetBytes");
-    expect(section).toMatch(/PR/);
-  });
 });

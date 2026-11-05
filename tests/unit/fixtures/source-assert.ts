@@ -73,8 +73,3 @@ export function expectFileMatch(file: string, re: RegExp): void {
   const source = readFileSync(file, "utf8");
   expectSourceMatch(source, re, file);
 }
-
-export function expectCodeContains(file: string, needle: string): void {
-  const source = readFileSync(file, "utf8");
-  expectSourceContains(source, needle, `${file} (code)`);
-}

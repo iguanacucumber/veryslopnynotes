@@ -121,9 +121,6 @@ object ManualCatalog {
             .take(MAX_PAGES)
             .toList()
 
-    /** Première page citée, ou null. */
-    fun pageNumber(text: String): Int? = pageNumbers(text).firstOrNull()
-
     /**
      * Une adresse de CATALOGUE (pas un manuel précis) : l'app résout alors
      * l'ouvrage selon la classe et la matière. Le chemin seul décide, jamais le domaine.
