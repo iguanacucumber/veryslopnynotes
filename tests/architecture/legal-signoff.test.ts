@@ -57,8 +57,8 @@ describe("dossier de validation juridique (#976)", () => {
   test("le fichier annonce l'absence de signature et ne clôt pas la revue", () => {
     expect(TEXT.startsWith("# Dossier de validation juridique et vie privée\n")).toBe(true);
     expect(TEXT).toContain("aucune signature de conseil enregistrée");
-    expect(TEXT).toContain("Révision : **2**");
-    expect(TEXT).toContain("Dernière vérification : **2026-11-04**");
+    expect(TEXT).toContain("Révision : **3**");
+    expect(TEXT).toContain("Dernière vérification : **2026-11-05**");
     expect(TEXT).toContain("#976");
     expect(TEXT).not.toContain("Closes #976");
   });
