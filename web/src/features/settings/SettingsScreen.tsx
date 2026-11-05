@@ -178,8 +178,8 @@ export default function SettingsScreen() {
             onClick={() => navigate("/help")}
           />
           <ListRow
-            title="À propos et informations légales"
-            subtitle="Version, source, confidentialité, conditions, licences"
+            title="À propos et licences"
+            subtitle="Version, source, licences"
             leading={<IconShield size={22} />}
             onClick={() => navigate("/about")}
           />

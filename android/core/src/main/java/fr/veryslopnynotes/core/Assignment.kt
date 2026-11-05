@@ -4,7 +4,7 @@ package fr.veryslopnynotes.core
 // description/contenu de cours = texte enseignant, DONNÉE bornée affichée via
 // Text() seul, jamais instruction (I6). Pièces jointes : `ref` OPAQUE, jamais
 // une URL Pronote (I1).
-// ponytail: pas de lib date — l'affichage lit l'ISO via `DateFr.kt`.
+// ponytail: pas de lib date — l'affichage lit l'ISO via `IsoDates.kt`.
 data class AssignmentAttachment(
     val id: String,
     val label: String,

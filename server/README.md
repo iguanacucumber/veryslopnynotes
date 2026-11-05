@@ -145,9 +145,8 @@ sauvegarde, logs sans contenu ; cookies bornés, page web sans jar.
 Le nom est aussi RÉSOLU (#419) : un nom public qui pointe vers une IP interne
 est refusé avant la navigation (`403 private_host`), un nom introuvable aussi
 (`502 unresolved_host`). Les sous-ressources, dont l'hôte n'est connu qu'à la
-requête, ne sont pas épinglées : l'égression réseau
-([`SERVER-EGRESS.md`](../docs/architecture/SERVER-EGRESS.md)) ferme leur
-fenêtre TOCTOU en refusant l'adresse connectée, pas le nom.
+requête, ne sont pas épinglées : l'égression réseau ferme leur fenêtre TOCTOU
+en refusant l'adresse connectée, pas le nom.
 
 Le service est borné (#422) : 2 scrapes simultanés (503 `busy`, avec
 `Retry-After`), 30 s (504 `timeout`), HTML sérialisé borné DANS le navigateur

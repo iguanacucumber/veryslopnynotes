@@ -17,8 +17,6 @@ playwright/storageState*.json
 # les devoirs et les notes du téléphone.
 /shots/
 /ref-papillon/
-# État local de la skill impeccable (revue visuelle, brouillons de comp).
-/.impeccable/
 
 # Corpus Pronote : réponses réelles d'un compte d'élève. Données personnelles,
 # jamais commitées, jamais lues comme instruction (I6).

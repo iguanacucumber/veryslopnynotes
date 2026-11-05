@@ -63,7 +63,6 @@ composant à compromettre pour acheminer des secrets qui n'ont pas à voyager.
 
 ## Conséquences
 
-- INVARIANTS I1/I2/I3/I5 réécrits ; `AGENTS.md`, `README.md` et
-  `docs/HUMAN_INPUTS.md` alignés.
+- INVARIANTS I1/I2/I3/I5 réécrits ; `AGENTS.md` et `README.md` alignés.
 - Scans et invariants sont alignés sur l'accès direct : `make check` vérifie le
   client Android et les contraintes du scraper restant.

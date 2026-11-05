@@ -436,10 +436,6 @@ export function recipientMatches(r: DiscussionRecipient, query: string): boolean
   return foldForSearch(r.displayName).includes(needle);
 }
 
-export function searchRecipients(recipients: DiscussionRecipient[], query: string): RecipientGroup[] {
-  return groupRecipients(recipients.filter((r) => recipientMatches(r, query)));
-}
-
 const LONG_DATE = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 const DATE_TIME = new Intl.DateTimeFormat("fr-FR", {
   day: "numeric",
@@ -472,8 +468,4 @@ export function formatDateTime(value: string | number | null | undefined): strin
 export function conversationDateLabel(d: Discussion): string {
   const ms = discussionMillis(d);
   return ms === null ? "" : formatLongDate(ms);
-}
-
-export function messageTimeLabel(m: DiscussionMessage): string {
-  return m.sentAt ? formatDateTime(m.sentAt) : "";
 }

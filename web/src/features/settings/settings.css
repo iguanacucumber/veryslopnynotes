@@ -80,18 +80,6 @@
   opacity: 1;
 }
 
-.settings-assistant__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: auto;
-  height: auto;
-  border: 0;
-  background: transparent;
-  color: var(--brand);
-  flex: 0 0 auto;
-}
-
 /* La section Assistant se lit comme une fiche d'état : une marque, un statut,
    puis deux portes vers les sources. Pas de tuiles ni de gros boutons. */
 .assistant-overview__head {

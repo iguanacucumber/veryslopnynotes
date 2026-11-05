@@ -107,10 +107,6 @@ Mise à jour sans perte : garder le même certificat. Debug → debug avec
 - **Compte élève uniquement** : l'app sert un compte à la fois ; les comptes
   parent sont hors périmètre, sans accès aux enfants depuis un compte parent.
 
-Matrice complète, versions et marche à suivre :
-[`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md). Accessibilité :
-[`docs/ACCESSIBILITY.md`](docs/ACCESSIBILITY.md).
-
 ## Assistant IA et vie privée
 
 L'assistant est **facultatif**. Sans consentement explicite (versionné) et
@@ -140,10 +136,8 @@ OpenRouter géré par un adulte.
   utilises l'IA, et le scraper facultatif si tu le configures. GitHub sert au
   téléchargement d'une release, pas à l'app.
 
-Détail : [`PRIVACY.md`](PRIVACY.md), [`TERMS.md`](TERMS.md) et
-[`docs/legal/DATA-MAP.md`](docs/legal/DATA-MAP.md). Le scraper de manuels est
-un serveur séparé, facultatif, à garder sur la boucle locale ou derrière un
-proxy authentifié : [`server/README.md`](server/README.md).
+Le scraper de manuels est un serveur séparé, facultatif, à garder sur la boucle
+locale ou derrière un proxy authentifié : [`server/README.md`](server/README.md).
 
 ## Support et sécurité
 
@@ -153,13 +147,11 @@ privé n'est publié. Une issue est publique : n'y mets jamais de donnée
 scolaire, de QR/PIN, de session, de clé ni de capture non caviardée. Le
 diagnostic exporté (Réglages → Aide) aide sans contenu scolaire.
 
-- **Support et problèmes connus** :
-  [`docs/SUPPORT.md`](docs/SUPPORT.md) et
+- **Support, accessibilité et problèmes connus** :
   [ouvrir une issue](https://github.com/iguanacucumber/veryslopnynotes/issues/new/choose).
 - **Faille de sécurité ou secret exposé** : jamais une issue publique ; passe
-  par les [GitHub Security Advisories](https://github.com/iguanacucumber/veryslopnynotes/security/advisories/new)
-  ([`SECURITY.md`](SECURITY.md)). Le projet ne publie ni courriel, ni clé PGP,
-  ni `security.txt`.
+  par les [GitHub Security Advisories](https://github.com/iguanacucumber/veryslopnynotes/security/advisories/new).
+  Le projet ne publie ni courriel, ni clé PGP, ni `security.txt`.
 
 ## Développer
 
@@ -178,10 +170,8 @@ make updateApkToPhone # installe le debug en conservant les données
 make buildRelApk      # APK release signé (clé hors dépôt requise, échec sans clé)
 ```
 
-Parcours de contribution, DCO et gate : [`CONTRIBUTING.md`](CONTRIBUTING.md),
-[`AGENTS.md`](AGENTS.md),
-[`docs/architecture/BUILD.md`](docs/architecture/BUILD.md). Build et signature :
-[`docs/RELEASE.md`](docs/RELEASE.md). Modules :
+Parcours agent et gate : [`AGENTS.md`](AGENTS.md),
+[`docs/architecture/BUILD.md`](docs/architecture/BUILD.md). Modules :
 [`android/README.md`](android/README.md), [`web/README.md`](web/README.md),
 [`server/README.md`](server/README.md). Carte des docs et invariants
 (I1–I36) : [`docs/CONTEXT.md`](docs/CONTEXT.md),

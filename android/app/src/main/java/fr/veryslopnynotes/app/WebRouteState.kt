@@ -18,7 +18,7 @@ const val ROUTE_STATE_KEY = "fr.veryslopnynotes.app.route"
  */
 val WEB_ROUTES: Set<String> = setOf(
     "/", "/calendar", "/grades", "/tasks", "/profile", "/settings", "/help",
-    "/about", "/privacy", "/terms", "/licenses",
+    "/about", "/licenses",
     "/pairing", "/messages", "/attendance", "/sanctions", "/news",
     "/canteen", "/alerts", "/revision-sheets", "/course-notes", "/prof",
     // Aliases kept so a saved route or old deep link still resolves.

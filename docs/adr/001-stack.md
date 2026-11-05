@@ -10,8 +10,7 @@
 - Dépendances : versions épinglées dans les manifests et `bun.lock` ; préférer stdlib et APIs natives.
 
 L'app parle directement à Pronote ; le serveur n'est pas dans le flux de l'app
-(voir [ADR-003](003-client-direct.md)). Versions et outil de release :
-[`docs/RELEASE.md`](../RELEASE.md).
+(voir [ADR-003](003-client-direct.md)).
 
 ## Conséquences
 

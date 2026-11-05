@@ -5,7 +5,6 @@ android/**/build/
 android/.gradle/
 android/.kotlin/
 node_modules/
-docs/architecture/REVIEW-*.md
 shots/
 ref-papillon/
 tests/fixtures/pronote/

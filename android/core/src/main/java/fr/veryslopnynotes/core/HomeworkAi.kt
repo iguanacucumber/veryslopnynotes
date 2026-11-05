@@ -198,28 +198,6 @@ object HomeworkAi {
     }
 
     /**
-     * Corrigé à partir d'une PHOTO d'énoncé. Un lot de sources texte VIDE est
-     * valide : la photo elle-même est la source citable.
-     */
-    fun generateHomeworkFromPhoto(
-        provider: SafeVisionPromptProvider,
-        question: String,
-        sources: List<HomeworkSource>,
-        image: VisionImage,
-        apiKey: String?,
-        nonce: String? = null,
-        onPhase: ((String) -> Unit)? = null,
-    ): HomeworkOutcome = generateHomeworkFromPhotos(
-        provider = provider,
-        question = question,
-        sources = sources,
-        images = listOf(image),
-        apiKey = apiKey,
-        nonce = nonce,
-        onPhase = onPhase,
-    )
-
-    /**
      * Corrigé à partir de plusieurs PHOTOS du même énoncé. Un lot de sources
      * texte VIDE est valide : les photos elles-mêmes sont la source citable.
      */

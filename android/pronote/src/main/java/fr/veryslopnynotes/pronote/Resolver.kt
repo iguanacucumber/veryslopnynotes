@@ -112,8 +112,6 @@ fun boolOf(v: JVal?): Boolean = when (v) {
     else -> throw IllegalStateException("JVal non testable : ${v.javaClass.simpleName}")
 }
 
-fun <T> noopOf(v: T): T = v
-
 private val RE_DMY4 = Regex("""^\d{2}/\d{2}/\d{4}$""")
 private val RE_DMY2 = Regex("""^\d{2}/\d{2}/\d{2}$""")
 private val RE_DMY4HMS = Regex("""^\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}$""")

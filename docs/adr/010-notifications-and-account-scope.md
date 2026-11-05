@@ -53,9 +53,8 @@ Aucun développement n'est planifié pour ces deux fonctions.
 
 ## Conséquences
 
-- `README.md`, [`docs/PRODUCT.md`](../PRODUCT.md), l'aide et le profil disent
-  la même limite : pas de rappel, compte élève uniquement, comptes parent hors
-  périmètre.
+- `README.md`, l'aide et le profil disent la même limite : pas de rappel,
+  compte élève uniquement, comptes parent hors périmètre.
 - `tests/architecture/notifications-scope.test.ts` verrouille l'ADR, les
   copies et l'absence de permission de notifier.
 - Une notification ou un compte parent futur repart d'un nouvel ADR ; la

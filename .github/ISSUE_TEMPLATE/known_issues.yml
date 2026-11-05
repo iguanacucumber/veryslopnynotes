@@ -11,10 +11,8 @@ body:
         d'établissement, de note, de message, de pièce jointe ni de capture non
         caviardée. Un défaut déjà listé se commente ici, sans ouvrir de doublon.
 
-        Lis le [kit bêta](https://github.com/iguanacucumber/veryslopnynotes/blob/main/docs/BETA.md)
-        et le [support](https://github.com/iguanacucumber/veryslopnynotes/blob/main/docs/SUPPORT.md).
         Une faille exploitable ne s'ouvre pas ici : utilise
-        [SECURITY.md](https://github.com/iguanacucumber/veryslopnynotes/blob/main/SECURITY.md).
+        [GitHub Security Advisories](https://github.com/iguanacucumber/veryslopnynotes/security/advisories/new).
 
   - type: input
     id: version
@@ -65,7 +63,7 @@ body:
     id: gravite
     attributes:
       label: Gravité
-      description: Priorité de triage, selon docs/INCIDENTS.md.
+      description: Priorité de triage.
       options:
         - P0 — perte de données, démarrage cassé, faille, clé exposée
         - P1 — parcours principal bloqué
@@ -83,5 +81,5 @@ body:
           required: true
         - label: Je sais que cette issue est publique et ne contient aucune donnée scolaire.
           required: true
-        - label: Je n'ai pas ouvert de faille exploitable ici ; elle passe par SECURITY.md.
+        - label: Je n'ai pas ouvert de faille exploitable ici ; elle passe par GitHub Security Advisories.
           required: true

@@ -239,28 +239,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          extract() {
-            awk -v v="$1" '
-              index($0, "## [" v "]") == 1 { inside=1; next }
-              inside && /^## / { exit }
-              inside { print }
-            ' CHANGELOG.md
-          }
-          base="${VERSION%%-*}"
-          notes="$(extract "$VERSION")"
-          if [ -z "$(printf '%s' "$notes" | tr -d '[:space:]')" ] && [ "$base" != "$VERSION" ]; then
-            notes="$(extract "$base")"
-          fi
-          if [ -z "$(printf '%s' "$notes" | tr -d '[:space:]')" ]; then
-            echo "::error title=CHANGELOG sans section::aucune section « ## [$VERSION] » (ni « ## [$base] » pour une bêta) : renommer [Unreleased] avant le tag."
-            exit 1
-          fi
           body="$RUNNER_TEMP/release-notes.md"
           {
             if [ "$PRERELEASE" = "true" ]; then
               printf '> Pré-release `%s` : canal bêta, pas une version stable.\n\n' "$VERSION"
             fi
-            printf '## Notes\n\n%s\n\n' "$notes"
+            printf '## Notes\n\nVoir les commits de cette version.\n\n'
             printf '## Vérification\n\n```\n'
             cat dist/SHA256SUMS
             printf '```\n\nInstaller après téléchargement : `sha256sum -c SHA256SUMS`.\n\n'

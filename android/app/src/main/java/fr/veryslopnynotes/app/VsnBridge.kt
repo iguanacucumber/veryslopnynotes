@@ -47,7 +47,6 @@ import fr.veryslopnynotes.data.LessonNotesRepository
 import fr.veryslopnynotes.data.LlmKeys
 import fr.veryslopnynotes.data.LocalDataStore
 import fr.veryslopnynotes.data.ManualStore
-import fr.veryslopnynotes.data.ManualsClient
 import fr.veryslopnynotes.data.OpenRouterLlm
 import fr.veryslopnynotes.data.PairingInput
 import fr.veryslopnynotes.data.PairingRepository

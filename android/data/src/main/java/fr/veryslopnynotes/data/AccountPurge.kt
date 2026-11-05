@@ -23,7 +23,7 @@ enum class AccountStorePolicy {
  *
  * `RETAINED` est une décision explicite pour une déconnexion ou une bascule :
  * le serveur choisi, le consentement IA et `prompt_seen` survivent au compte
- * (docs/PRODUCT.md, Manuals.kt). La clé LLM est au contraire un credential
+ * (Manuals.kt). La clé LLM est au contraire un credential
  * personnel : elle part avec la session, pour qu'un appareil partagé ne
  * dépense pas le compte OpenRouter du précédent utilisateur. La suppression
  * TOTALE emporte aussi les stores retenus ; les préférences d'apparence restent.

@@ -12,7 +12,6 @@ const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 
 const DOCKERFILE = "Dockerfile.server";
 const README = "server/README.md";
-const THREAT_MODEL = "docs/THREAT-MODEL.md";
 const PROFILE = "server/chromium-seccomp.json";
 const SOURCE = "server/infrastructure/manuals-scrape.ts";
 
@@ -119,7 +118,6 @@ describe("sandbox Chromium — profil seccomp étroit", () => {
 describe("sandbox Chromium — commande Docker et documentation", () => {
   const dockerfile = read(DOCKERFILE);
   const readme = read(README);
-  const threat = read(THREAT_MODEL);
 
   test("la commande documentée charge le profil seccomp et durcit le conteneur", () => {
     expect(dockerRun).toContain("--security-opt seccomp=./server/chromium-seccomp.json");
@@ -145,10 +143,4 @@ describe("sandbox Chromium — commande Docker et documentation", () => {
     expect(readme).toMatch(/PAS une\s+isolation VM/);
   });
 
-  test("le modèle de menace nomme le sandbox et le risque résiduel hors VM", () => {
-    const t4 = threat.slice(threat.indexOf("## T4 — "), threat.indexOf("\n## T5 — "));
-    expect(t4).toMatch(/Chromium est SANDBOXÉ/);
-    expect(t4).toMatch(/PAS une\s+isolation VM/);
-    expect(t4).toContain("chromium-sandbox.test.ts");
-  });
 });

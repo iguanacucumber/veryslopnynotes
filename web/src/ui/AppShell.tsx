@@ -49,8 +49,6 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   "/settings": { title: "Réglages", back: "/profile" },
   "/help": { title: "Aide", back: "/settings" },
   "/about": { title: "À propos", back: "/settings" },
-  "/privacy": { title: "Confidentialité", back: "/about" },
-  "/terms": { title: "Conditions", back: "/about" },
   "/licenses": { title: "Licences", back: "/about" },
   "/news": { title: "Actualités", back: "/" },
   "/canteen": { title: "Cantine", back: "/" },

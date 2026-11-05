@@ -3,7 +3,6 @@
 - Statut : accepté (issue #635)
 - Complète : [ADR-001](001-stack.md), [ADR-003](003-client-direct.md),
   [ADR-004](004-webview.md). Aucun de ces ADR n'est remplacé.
-- Revue : [`docs/architecture/REVIEW-2026-10.md`](../architecture/REVIEW-2026-10.md)
 
 ## Contexte
 
@@ -136,8 +135,7 @@ après rebase, avant de pousser et de merger. Depuis #880, la PR était en outre
 conditionnée aux checks GitHub ; [ADR-011](011-local-gate-authority.md) y
 substitue le seul gate local : `make check` fait autorité, la CI vérifie a
 posteriori, et le ruleset garde PR obligatoire, suppression et force-push
-interdits sans exiger de check
-([`BRANCH-PROTECTION.md`](../architecture/BRANCH-PROTECTION.md)). Si le gate
+interdits sans exiger de check. Si le gate
 est allégé ou contourné, l'automatisme s'arrête : c'est le gate qui tient lieu
 de relecture finale, pas la confiance.
 Amendé par [ADR-007](007-agent-review-before-ship.md) : le gate ne juge ni le

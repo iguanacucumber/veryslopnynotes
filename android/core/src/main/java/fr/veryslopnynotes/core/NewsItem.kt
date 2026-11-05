@@ -26,7 +26,5 @@ data class NewsItem(
             if (item.author.length > MAX_META) return false
             return true
         }
-
-        fun readLabel(item: NewsItem): String = if (item.read) "Lu" else "Non lu"
     }
 }

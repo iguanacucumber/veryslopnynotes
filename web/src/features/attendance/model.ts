@@ -236,10 +236,6 @@ export function sanctionsVisible(capabilities: string[] | null): boolean {
   return capabilities === null || capabilities.includes("punishments");
 }
 
-export function absencesForPeriod(data: AttendanceData, periodId: string | null): Absence[] {
-  return periodId === null ? data.absences : data.absences.filter((a) => a.periodId === periodId);
-}
-
 const LONG_DATE = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 const TIME = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" });
 

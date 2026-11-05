@@ -24,6 +24,7 @@ dans `web/public/licenses/`, copiés dans `assets/web/licenses/` de l'APK.
 | androidx.work:work-runtime-ktx | 2.12.0 | Apache-2.0 | `APACHE-2.0.txt` |
 | com.squareup.okhttp3:okhttp | 5.5.1 | Apache-2.0 | `APACHE-2.0.txt` |
 | com.journeyapps:zxing-android-embedded | 4.3.0 | Apache-2.0 | `APACHE-2.0.txt` |
+| org.jetbrains.kotlinx:kotlinx-serialization-json | 1.12.0 | Apache-2.0 | `APACHE-2.0.txt` |
 | SN Pro | — | OFL-1.1 | `SN-PRO-OFL.txt` |
 | Papicons | 0.2.3 | MIT | `PAPICONS-MIT.txt` |
 

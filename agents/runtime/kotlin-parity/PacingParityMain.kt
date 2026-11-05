@@ -33,14 +33,6 @@ private fun ok(vararg pairs: Pair<String, JVal>): JVal.Obj = JVal.Obj(linkedMapO
 
 private fun nums(values: List<Long>): JVal = JVal.Arr(values.map { JVal.Num(it.toDouble()) })
 
-private class MemoryStore(private var until: Long = 0L) : fr.veryslopnynotes.data.CooldownStore {
-    override fun loadUntil(): Long = until
-
-    override fun saveUntil(until: Long) {
-        this.until = until
-    }
-}
-
 /** Horloge factice : `sleep` avance le temps au lieu d'attendre. */
 private class FakeTime {
     var now: Long = 0L

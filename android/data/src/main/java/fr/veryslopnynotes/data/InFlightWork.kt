@@ -60,8 +60,6 @@ class InFlightWork internal constructor(
 
     val isCancelled: Boolean get() = synchronized(lock) { cancelled }
 
-    internal val isFinished: Boolean get() = synchronized(lock) { finished }
-
     private fun invoke(action: () -> Unit) {
         try {
             action()

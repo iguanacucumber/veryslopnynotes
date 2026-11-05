@@ -460,10 +460,6 @@ export function parseAlerts(payload: string | null): Alert[] {
   return out;
 }
 
-export function countAlerts(payload: string | null): number {
-  return parseAlerts(payload).length;
-}
-
 export function alertCountLabel(count: number): string {
   if (count <= 0) return "Aucune alerte";
   return count === 1 ? "1 alerte" : `${count} alertes`;

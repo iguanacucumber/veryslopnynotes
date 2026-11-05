@@ -1,8 +1,8 @@
 package fr.veryslopnynotes.data
 
 import fr.veryslopnynotes.pronote.Client
-import org.json.JSONArray
-import org.json.JSONObject
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import java.time.Clock
 
 private fun mealOf(isDinner: Boolean, name: String?): String {
@@ -13,16 +13,30 @@ private fun mealOf(isDinner: Boolean, name: String?): String {
     return "lunch"
 }
 
+@Serializable
+private data class MenuEntry(
+    val id: String,
+    val date: String,
+    val meal: String,
+    val dishes: List<String>,
+    val allergens: List<String>? = null,
+)
+
+@Serializable
+private data class MenusPayload(
+    val menus: List<MenuEntry>,
+    val partial: Boolean = false,
+)
+
 internal fun menusPayload(client: Client, clock: Clock = schoolClock()): String {
     val (from, to) = currentWeekLocal(clock)
     val fromMs = from.atZone(SCHOOL_ZONE).toInstant().toEpochMilli()
     val toMs = to.plusDays(1).atZone(SCHOOL_ZONE).toInstant().toEpochMilli() - 1
-    val arr = JSONArray()
     var seq = 0
     val read = client.menusPartial(from, to)
-    for (m in read.value) {
+    val menus = read.value.mapNotNull { m ->
         val dateMs = m.date.atZone(SCHOOL_ZONE).toInstant().toEpochMilli()
-        if (dateMs < fromMs || dateMs > toMs) continue
+        if (dateMs < fromMs || dateMs > toMs) return@mapNotNull null
         val dishes = mutableListOf<String>()
         val allergens = mutableListOf<String>()
         for (group in listOf(m.firstMeal, m.mainMeal, m.sideMeal, m.otherMeal, m.cheese, m.dessert)) {
@@ -36,18 +50,14 @@ internal fun menusPayload(client: Client, clock: Clock = schoolClock()): String 
                 }
             }
         }
-        if (dishes.isEmpty()) continue
-        val mealId = m.id.ifBlank { "menu-${seq++}" }
-        val mealDate = m.date.parisIso()
-        val mealKind = mealOf(m.isDinner, m.name)
-        arr.put(JSONObject().apply {
-            put("id", mealId)
-            put("date", mealDate)
-            put("meal", mealKind)
-            put("dishes", JSONArray(dishes))
-            if (allergens.isNotEmpty()) put("allergens", JSONArray(allergens))
-        })
+        if (dishes.isEmpty()) return@mapNotNull null
+        MenuEntry(
+            id = m.id.ifBlank { "menu-${seq++}" },
+            date = m.date.parisIso(),
+            meal = mealOf(m.isDinner, m.name),
+            dishes = dishes,
+            allergens = allergens.ifEmpty { null },
+        )
     }
-    return JSONObject().put("menus", arr).apply { putFlag("partial", read.partial) }.toString()
+    return payloadJson.encodeToString(MenusPayload(menus, read.partial))
 }
-

@@ -150,7 +150,7 @@ describe("HTML scrapé borné (#422)", () => {
 
   test("le plafond s'applique AVANT le reparse : le contenu au-delà n'est jamais vu", async () => {
     stubFetch();
-    // Tronqué, le commentaire n'est jamais fermé : preuve que le plafond passe AVANT cheerio.
+    // Tronqué, le commentaire n'est jamais fermé : preuve que le plafond passe AVANT l'extraction.
     const page = (pad: number) => `<html><body><!--${"z".repeat(pad)}--><p>FIN</p></body></html>`;
 
     state = fakeState({ html: page(10) });

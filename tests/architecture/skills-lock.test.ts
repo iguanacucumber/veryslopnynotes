@@ -44,7 +44,6 @@ function treeHash(dir: string): string {
  */
 const ATTENDU: Record<string, string> = {
   "code-review": "5c784252646f78647d682f1ed3a2f0a87e836723869d07b2587ef52d6fec6a91",
-  impeccable: "b2e58e101de25ac171189f29b9c79fd41c3ccb3d60330e660970b0a9dfb9b8e3",
 };
 
 /**
@@ -52,13 +51,11 @@ const ATTENDU: Record<string, string> = {
  * ci-dessus ne couvrait que `skills/` : éditer le README ou une licence
  * passait sans bruit. Même règle de mise à jour que `ATTENDU`.
  */
-const RACINE_ATTENDUE = "41db7a3021de9ebfa8b7f64ae4843ca358a82b4313cccdf36f86e166fa6a1a65";
+const RACINE_ATTENDUE = "2cde84d5be3404bda64459835c1cb3dd59a054624c3f7dd2ff207e4cc77bdc0c";
 
 /** Plafond PAR skill : le dépassement doit être un choix visible en PR. */
 const PLAFOND: Record<string, number> = {
   "code-review": 24_576,
-  // Détecteur autonome + index de polices embarqués par la skill amont.
-  impeccable: 2_400_000,
 };
 
 const LOCK = JSON.parse(readFileSync(join(AGENTS, "..", "skills-lock.json"), "utf8")) as {

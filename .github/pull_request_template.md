@@ -20,4 +20,4 @@ Closes #
 
 - [ ] Aucun secret, `.env`, session ni clé dans le diff
 - [ ] Aucune donnée scolaire ni capture non caviardée
-- [ ] Une faille exploitable n'est pas décrite ici (voir `SECURITY.md`)
+- [ ] Une faille exploitable n'est pas décrite ici (voir GitHub Security Advisories)

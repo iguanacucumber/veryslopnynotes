@@ -28,7 +28,6 @@ const DETAIL = DETAIL_FILES.map((f) => DETAIL_BY_FILE[f]!).join("\n");
 const AGENTS = read("AGENTS.md");
 const README = read("README.md");
 const MAKEFILE = read("Makefile");
-const RELEASE = read("docs/RELEASE.md");
 // Seuls les docs du dépôt : `.agents/` est vendorisé et `node_modules/` n'est
 // pas de la documentation.
 const DOC_MARKDOWN = [
@@ -99,23 +98,6 @@ export function brokenDocLinks(
       .filter((link) => !resolves(join(dirname(path), link)))
       .map((link) => `${path} : lien \`${link}\` introuvable`),
   );
-}
-
-/** Colonne « Version » des lignes du tableau `## Versions épinglées` de RELEASE.md. */
-export function releasePins(md: string): Map<string, string> {
-  const pins = new Map<string, string>();
-  const lines = md.split("\n");
-  const start = lines.indexOf("## Versions épinglées");
-  if (start === -1) return pins;
-  for (const line of lines.slice(start + 1)) {
-    if (line.startsWith("## ")) break;
-    const cells = line.split("|").map((cell) => cell.trim());
-    const component = cells[1];
-    const version = cells[2];
-    if (!component || !version || component === "Composant" || /^-+$/.test(component)) continue;
-    pins.set(component, version);
-  }
-  return pins;
 }
 
 /** `info.version` du contrat OpenAPI : source de vérité du badge README. */
@@ -405,17 +387,6 @@ describe("registre d'invariants", () => {
       // +1000 pour le sandbox Chromium et le profil seccomp, +3800 pour
       // l'opérabilité (sondes, drain, cgroups, CA/HSTS).
       ["server/README.md", 9_600],
-      ["shared/contracts/README.md", 1_000],
-      // +500 loopback/digest (#921), +900 deep links (SEC-10), +200 démo (#873),
-      // +900 version dérivée des tags (#927), +900 budget de taille APK (#974),
-      // +1 400 canal bêta (#936), +800 assertions artefact release (#928).
-      ["docs/RELEASE.md", 12_600],
-      ["docs/HUMAN_INPUTS.md", 4_500],
-      // +500 pour la suppression totale et le compte élève (#853/#832),
-      // +750 pour le consentement IA versionné (#860),
-      // +550 pour l'attestation d'âge ou d'autorisation parentale (#849),
-      // +500 pour les écrans légaux (#847).
-      ["docs/PRODUCT.md", 9_800],
     ];
     for (const [file, max] of ceilings) {
       expect({ file, sousBudget: read(file).length <= max }).toEqual({ file, sousBudget: true });
@@ -477,79 +448,6 @@ describe("registre d'invariants", () => {
   });
 });
 
-describe("versions épinglées (RELEASE.md)", () => {
-  const pkg = JSON.parse(read("package.json")) as {
-    dependencies: Record<string, string>;
-    devDependencies: Record<string, string>;
-  };
-  const dep = (name: string) => pkg.dependencies[name] ?? pkg.devDependencies[name] ?? "";
-  const toml = (key: string) =>
-    new RegExp(`^${key} = "([^"]+)"`, "m").exec(read("android/gradle/libs.versions.toml"))?.[1] ?? "";
-  const gradle = /gradle-([\d.]+)-bin\.zip/.exec(read("android/gradle/wrapper/gradle-wrapper.properties"))?.[1] ?? "";
-
-  // Composant → version lue dans son manifeste. Une ligne absente de cette
-  // table doit être déclarée transitive : sinon un pin peut dériver sans test.
-  const SOURCES: Record<string, () => string> = {
-    "bun (runtime)": () => /oven\/bun:([\d.]+)/.exec(read("Dockerfile.server"))?.[1] ?? "",
-    typescript: () => dep("typescript"),
-    "@types/bun": () => dep("@types/bun"),
-    "Gradle / AGP / Kotlin": () => [gradle, toml("agp"), toml("kotlin")].join(" / "),
-    "compileSdk/targetSdk/minSdk": () => {
-      const build = read("android/app/build.gradle.kts");
-      const sdk = (key: string) => new RegExp(`\\b${key} = (\\d+)`).exec(build)?.[1] ?? "";
-      return [sdk("compileSdk"), sdk("targetSdk"), sdk("minSdk")].join(" / ");
-    },
-    "activity-ktx / OkHttp": () => [toml("activity-ktx"), toml("okhttp")].join(" / "),
-    "zxing-android-embedded": () => toml("zxing-android-embedded"),
-    "react / react-dom": () => {
-      const [react, dom] = [dep("react"), dep("react-dom")];
-      return react === dom ? react : `${react} / ${dom}`;
-    },
-    "react-router-dom": () => dep("react-router-dom"),
-    "vite / @vitejs/plugin-react": () => [dep("vite"), dep("@vitejs/plugin-react")].join(" / "),
-    "tough-cookie": () => dep("tough-cookie"),
-  };
-  // Lues dans `bun.lock` : un manifeste racine ne les déclare pas.
-  const TRANSITIVE = new Set([
-    "bun-types (transitif)",
-    "@types/node (transitif)",
-    "undici-types (transitif)",
-    "rolldown (transitif)",
-    "lightningcss (transitif)",
-  ]);
-
-  test("chaque version de la table correspond au manifeste", () => {
-    const pins = releasePins(RELEASE);
-    for (const [component, source] of Object.entries(SOURCES)) {
-      const manifeste = source();
-      expect({ component, table: pins.get(component), manifeste }).toEqual({
-        component,
-        table: manifeste,
-        manifeste,
-      });
-    }
-  });
-
-  test("aucune ligne épinglée n'échappe au contrôle", () => {
-    const unchecked = [...releasePins(RELEASE).keys()].filter(
-      (component) => !(component in SOURCES) && !TRANSITIVE.has(component),
-    );
-    expect(unchecked).toEqual([]);
-  });
-
-  test("le digest Docker de RELEASE.md est celui du Dockerfile", () => {
-    // Un tag seul n'épingle rien : le digest de l'index multi-arch est la preuve.
-    const ref = /oven\/bun:([\d.]+@sha256:[0-9a-f]{64})/.exec(read("Dockerfile.server"))?.[1] ?? "";
-    expect({ ref, cité: RELEASE.includes(`oven/bun:${ref}`) }).toEqual({ ref, cité: true });
-    expect(ref).not.toBe("");
-  });
-
-  test("sabotage : un pin dérivé ne correspond plus au manifeste", () => {
-    const drift = releasePins(RELEASE.replace("8.3.5 / 6.1.2", "8.3.4 / 6.1.2"));
-    expect(drift.get("vite / @vitejs/plugin-react")).toBe("8.3.4 / 6.1.2");
-    expect(drift.get("vite / @vitejs/plugin-react")).not.toBe(SOURCES["vite / @vitejs/plugin-react"]!());
-  });
-});
 
 describe("badge contracts du README (#1071)", () => {
   const version = openapiVersion(read("shared/contracts/api.openapi.yaml"));
@@ -572,7 +470,7 @@ describe("badge contracts du README (#1071)", () => {
 describe("carte de contexte", () => {
   test("CONTEXT.md reste sous son budget de lecture", () => {
     // Une carte qu'on relit à chaque tâche coûte plus qu'elle ne rapporte.
-    // +110 pour la déclaration d'accessibilité (#981), +80 pour le glossaire (#1072),
+    // +110 pour la déclaration d'accessibilité (#981),
     // +80 pour le consentement IA versionné (#860).
     expect({ fichier: "docs/CONTEXT.md", sousBudget: CONTEXT.length <= 2_800 }).toEqual({
       fichier: "docs/CONTEXT.md",
@@ -731,7 +629,6 @@ describe("check-fast", () => {
   test("la documentation nomme les deux étapes sautées", () => {
     const docs: [string, string][] = [
       ["AGENTS.md", AGENTS],
-      ["CONTRIBUTING.md", read("CONTRIBUTING.md")],
       ["docs/architecture/BUILD.md", read("docs/architecture/BUILD.md")],
     ];
     for (const [name, text] of docs) {
@@ -768,243 +665,6 @@ describe("liens et doublons des docs", () => {
     ]);
   });
 
-  test("PRODUCT.md n'existe qu'à un endroit", () => {
-    // Deux PRODUCT.md = deux vérités produit ; `docs/` est la source canonique.
-    expect({ racine: exists("PRODUCT.md"), docs: exists("docs/PRODUCT.md") }).toEqual({
-      racine: false,
-      docs: true,
-    });
-  });
-});
-
-describe("matrice QA (#939)", () => {
-  const FILE = "docs/QA-MATRIX.md";
-  const QA = read(FILE);
-  // Cas exigés par l'issue : l'ID et le libellé exact de la colonne « Cas ».
-  const REQUIRED: [string, string][] = [
-    ["QA-01", "Android 8.0 (API 26)"],
-    ["QA-02", "Android 12 (API 31)"],
-    ["QA-03", "Android 15 (API 35)"],
-    ["QA-04", "Android 16 (API 36)"],
-    ["QA-05", "WebView ancienne"],
-    ["QA-06", "2 Go de RAM"],
-    ["QA-07", "Police 200 %"],
-    ["QA-08", "Premier lancement hors-ligne"],
-    ["QA-09", "Stockage plein"],
-    ["QA-10", "Horloge fausse — contrat de fraîcheur"],
-    ["QA-12", "Portail captif"],
-  ];
-  const STATUTS = ["Réussi", "Échec", "Bloqué"];
-  const rows = QA.split("\n").filter((line) => /^\| QA-\d+ \|/.test(line));
-  const cells = (line: string) => line.split("|").map((cell) => cell.trim());
-  const byId = new Map(rows.map((line) => [cells(line)[1]!, cells(line)]));
-  const exists = (path: string) => {
-    try {
-      statSync(join(ROOT, path));
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  test("chaque cas requis par l'issue a sa ligne", () => {
-    for (const [id, cas] of REQUIRED) {
-      expect({ id, cas: byId.get(id)?.[2] ?? null }).toEqual({ id, cas });
-    }
-  });
-
-  test("chaque ligne porte un statut borné et une raison quand elle est bloquée", () => {
-    expect(rows.length).toBeGreaterThanOrEqual(REQUIRED.length);
-    for (const line of rows) {
-      const [, id, , , raw, execution] = cells(line);
-      const statut = (raw ?? "").replaceAll("`", "");
-      expect({ id, statut: STATUTS.includes(statut) }).toEqual({ id, statut: true });
-      // Une ligne bloquée sans raison ne dit rien : elle ne doit pas passer.
-      if (statut === "Bloqué") expect({ id, raison: (execution ?? "").length > 20 }).toEqual({ id, raison: true });
-    }
-  });
-
-  test("ses liens résolvent et l'index des docs pointe dessus", () => {
-    expect(relativeLinks(QA).length).toBeGreaterThan(0);
-    expect({ bad: brokenDocLinks([{ path: FILE, text: QA }], exists) }).toEqual({ bad: [] });
-    expect(relativeLinks(CONTEXT)).toContain("QA-MATRIX.md");
-  });
-});
-
-describe("modèle de menace", () => {
-  const FILE = "docs/THREAT-MODEL.md";
-  // Les cinq menaces nommées par #904 : un identifiant stable, un titre lisible.
-  const THREATS = [
-    { id: "T1", titre: "Appareil partagé" },
-    { id: "T2", titre: "Charge scolaire malveillante" },
-    { id: "T3", titre: "Dépendance compromise" },
-    { id: "T4", titre: "Scraper local" },
-    { id: "T5", titre: "Clé perdue" },
-  ] as const;
-  const SECTIONS = [
-    "Actifs",
-    "Attaquant",
-    "Point d'entrée",
-    "Mitigations existantes",
-    "Risque résiduel",
-    "Preuves",
-  ];
-  const exists = (path: string) => {
-    try {
-      statSync(join(ROOT, path));
-      return true;
-    } catch {
-      return false;
-    }
-  };
-  const block = (text: string, id: string) => {
-    const start = text.indexOf(`## ${id} — `);
-    if (start === -1) return "";
-    const end = text.indexOf("\n## ", start + 1);
-    return text.slice(start, end === -1 ? undefined : end);
-  };
-
-  test("le fichier existe et couvre les cinq menaces nommées", () => {
-    expect({ fichier: FILE, existe: exists(FILE) }).toEqual({ fichier: FILE, existe: true });
-    const text = read(FILE);
-    for (const { id, titre } of THREATS) {
-      expect({ id, titre, présent: new RegExp(`^## ${id} — ${titre}$`, "m").test(text) }).toEqual({
-        id,
-        titre,
-        présent: true,
-      });
-    }
-  });
-
-  test("chaque menace porte actifs, attaquant, entrée, mitigations, risque et preuve", () => {
-    const text = read(FILE);
-    for (const { id } of THREATS) {
-      const body = block(text, id);
-      expect({ id, nonVide: body.length > 0 }).toEqual({ id, nonVide: true });
-      for (const section of SECTIONS) {
-        expect({ id, section, présent: body.includes(`**${section}**`) }).toEqual({
-          id,
-          section,
-          présent: true,
-        });
-      }
-    }
-  });
-
-  test("ses liens relatifs résolvent depuis le fichier", () => {
-    const text = read(FILE);
-    const links = relativeLinks(text);
-    expect(links.length).toBeGreaterThan(0);
-    expect({ bad: brokenDocLinks([{ path: FILE, text }], exists) }).toEqual({ bad: [] });
-  });
-});
-
-describe("métadonnées du dépôt (#979)", () => {
-  const FILE = "docs/REPOSITORY.md";
-  const REPO = read(FILE);
-  const DESCRIPTION =
-    "Client Android open source pour Pronote : session locale, IA sans relais, hors-ligne d’abord. Kotlin, React, Bun.";
-  const TOPICS = [
-    "android",
-    "bun",
-    "education",
-    "kotlin",
-    "offline-first",
-    "open-source",
-    "privacy",
-    "pronote",
-    "react",
-    "typescript",
-    "webview",
-  ];
-  const section = (heading: string) => {
-    const start = REPO.indexOf(`${heading}\n`);
-    if (start === -1) return "";
-    const end = REPO.indexOf("\n## ", start + heading.length + 1);
-    return REPO.slice(start, end === -1 ? undefined : end);
-  };
-
-  test("les sections et la description sont présentes", () => {
-    for (const heading of [
-      "## Description",
-      "## Sujets",
-      "## Site",
-      "## Aperçu social",
-      "## Bonnes premières issues",
-      "## Vérification",
-    ]) {
-      expect({ heading, présente: REPO.includes(heading) }).toEqual({ heading, présente: true });
-    }
-    // Le blockquote coupe la description : on compare la prose aplatie.
-    expect(REPO.replace(/\s+/g, " ")).toContain(DESCRIPTION);
-    expect(REPO.toLowerCase()).toContain("homepage");
-    expect(REPO).toContain("vide");
-  });
-
-  test("les sujets sont ceux de GitHub et respectent son format", () => {
-    const listed = [...section("## Sujets").matchAll(/^- `([^`]+)`$/gm)].map((m) => m[1]!);
-    expect([...listed].sort()).toEqual([...TOPICS].sort());
-    expect(listed.length).toBeLessThanOrEqual(20);
-    for (const topic of listed) {
-      expect({ topic, valide: /^[a-z0-9][a-z0-9-]{0,49}$/.test(topic) }).toEqual({
-        topic,
-        valide: true,
-      });
-    }
-  });
-
-  test("exactement cinq issues distinctes sont listées", () => {
-    const numbers = [...REPO.matchAll(/^\| [1-5] \| #(\d+) \|/gm)].map((m) => m[1]!);
-    expect(numbers.length).toBe(5);
-    expect(new Set(numbers).size).toBe(5);
-    // Chaque ligne porte le label qui rend l'issue découvrable.
-    expect((REPO.match(/`good first issue`/g) ?? []).length).toBeGreaterThanOrEqual(5);
-  });
-
-  test("CONTRIBUTING renvoie vers le fichier", () => {
-    expect(read("CONTRIBUTING.md")).toContain("docs/REPOSITORY.md");
-  });
-
-  test("la vérification cite les commandes gh", () => {
-    const verification = section("## Vérification");
-    expect(verification).toContain("gh repo view");
-    expect(verification).toContain("gh api repos/iguanacucumber/veryslopnynotes/topics");
-    expect(verification).toContain('label "good first issue"');
-  });
-});
-
-describe("glossaire (#1072)", () => {
-  const FILE = "docs/GLOSSARY.md";
-  const GLOSSARY = read(FILE);
-  const REQUIRED = ["ADR", "APK", "DCO", "ENT", "MFA", "PIN", "QR", "SSRF", "TTL", "WebView"];
-  const rows = GLOSSARY.split("\n").filter((line) => /^\| [A-Za-z]+ \|/.test(line));
-  const cells = (line: string) => line.split("|").map((cell) => cell.trim());
-  const byTerm = new Map(rows.map((line) => [cells(line)[1]!, cells(line)[2]!]));
-  const exists = (path: string) => {
-    try {
-      statSync(join(ROOT, path));
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  test("chaque acronyme requis a sa ligne et sa phrase", () => {
-    for (const term of REQUIRED) {
-      expect({ term, phrase: (byTerm.get(term) ?? "").length > 20 }).toEqual({ term, phrase: true });
-    }
-  });
-
-  test("chaque définition cite un lien relatif qui résout", () => {
-    for (const term of REQUIRED) {
-      expect({ term, lien: relativeLinks(byTerm.get(term) ?? "").length > 0 }).toEqual({ term, lien: true });
-    }
-    expect({ bad: brokenDocLinks([{ path: FILE, text: GLOSSARY }], exists) }).toEqual({ bad: [] });
-  });
-
-  test("CONTEXT.md pointe vers le glossaire", () => {
-    expect(relativeLinks(CONTEXT)).toContain("GLOSSARY.md");
-  });
 });
 
 describe("ADR", () => {
@@ -1016,68 +676,6 @@ describe("ADR", () => {
       const text = readFileSync(join(dir, file), "utf8");
       expect({ file, statut: /^- Statut :/m.test(text) }).toEqual({ file, statut: true });
     }
-  });
-});
-
-describe("checklist de publication (#956)", () => {
-  const FILE = "docs/RELEASE-CHECKLIST.md";
-  const CHECKLIST = read(FILE);
-  // Libellés stables : une section renommée sans mettre à jour ce test rend le
-  // gate rouge, pour qu'une preuve de release ne disparaisse pas en silence.
-  const SECTIONS = [
-    "Gate vert",
-    "Version",
-    "Build",
-    "Licences et notices",
-    "Confidentialité et consentement",
-    "CHANGELOG et notes",
-    "Clé, signature et empreinte",
-    "Préparation du tag",
-    "Publication du tag",
-    "Signature et empreinte publiées",
-    "SHA-256",
-    "Offre de source",
-    "Soak de la bêta",
-    "Issue known-issues",
-    "Annonce",
-    "Retrait et retour arrière",
-  ];
-
-  test("chaque étape exigée a sa section numérotée", () => {
-    for (const titre of SECTIONS) {
-      expect({ titre, present: new RegExp(`^## \\d+\\. ${titre}$`, "m").test(CHECKLIST) }).toEqual({
-        titre,
-        present: true,
-      });
-    }
-  });
-
-  test("chaque étape porte propriétaire, date et preuve", () => {
-    const preuves = CHECKLIST.match(/\*\*Preuve\*\* — propriétaire :/g) ?? [];
-    expect({ preuves: preuves.length }).toEqual({ preuves: SECTIONS.length });
-  });
-
-  test("la règle de refus et les signatures restent présentes", () => {
-    expect(CHECKLIST).toContain("## Ne pas livrer si");
-    const refus = CHECKLIST.split("## Ne pas livrer si")[1]!.split("\n## ")[0]!;
-    expect(refus.match(/^- /gm)?.length ?? 0).toBeGreaterThanOrEqual(10);
-    expect(CHECKLIST).toContain("## Signatures");
-    expect(CHECKLIST).toContain("Un agent ne remplit ni ne signe ces lignes.");
-    expect(CHECKLIST).toMatch(/^\| Responsable de release \|  \|  \|/m);
-    expect(CHECKLIST).toMatch(/^\| Mainteneur de garde \|  \|  \|/m);
-  });
-
-  test("RELEASE.md renvoie vers la checklist", () => {
-    expect(relativeLinks(RELEASE)).toContain("RELEASE-CHECKLIST.md");
-  });
-
-  test("la checklist reste sous son budget de lecture", () => {
-    // Document de travail lu une fois par release : plafond large, mais borné
-    // pour qu'une étape ajoutée ne transforme pas la preuve en roman.
-    expect({ fichier: FILE, sousBudget: CHECKLIST.length <= 18_000 }).toEqual({
-      fichier: FILE,
-      sousBudget: true,
-    });
   });
 });
 

@@ -82,14 +82,8 @@ private data class StoredCookie(
 
 class CookieJar {
     private val cookies = mutableListOf<StoredCookie>()
-    private var clock: Long = 0
 
-    private fun now(): Long = if (clock > 0) clock else System.currentTimeMillis()
-
-    /** Horloge injectée (tests) ; `0` = heure réelle. */
-    fun setNow(millis: Long) {
-        clock = millis
-    }
+    private fun now(): Long = System.currentTimeMillis()
 
     /** `""` = rien à envoyer. */
     fun getCookieString(url: String): String {

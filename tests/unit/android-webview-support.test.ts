@@ -19,7 +19,6 @@ const SUPPORT = read(SUPPORT_PATH);
 const HELP = read(join(ROOT, "web/src/features/help/HelpScreen.tsx"));
 const SETTINGS = read(join(ROOT, "web/src/features/settings/SettingsScreen.tsx"));
 const README = read(join(ROOT, "README.md"));
-const COMPATIBILITY = read(join(ROOT, "docs/COMPATIBILITY.md"));
 const BUILD = read(join(ROOT, "android/app/build.gradle.kts"));
 
 const skip = parityToolchain.skipReason !== null;
@@ -140,10 +139,8 @@ describe("WebView minimale (#907)", () => {
   });
 
   test("la politique est dans le README et dans l'aide de l'app", () => {
-    for (const doc of [README, COMPATIBILITY]) {
-      expect(doc).toMatch(/Chromium\s+100/);
-      expect(doc).toContain("Android 8.0");
-    }
+    expect(README).toMatch(/Chromium\s+100/);
+    expect(README).toContain("Android 8.0");
     expect(HELP).toContain('id="aide-compatibilite"');
     expect(HELP).toContain("Configuration minimale");
     expect(HELP).toMatch(/Chromium 100/);

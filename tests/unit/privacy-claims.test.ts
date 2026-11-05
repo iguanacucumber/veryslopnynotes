@@ -592,16 +592,7 @@ describe("confidentialité — la purge efface les artefacts (#943)", () => {
 });
 
 describe("confidentialité — la copie livrée nomme destinataire et condition (#851)", () => {
-  const COPY_DOCS = [
-    "README.md",
-    "PRIVACY.md",
-    "TERMS.md",
-    "docs/PRODUCT.md",
-    "docs/HUMAN_INPUTS.md",
-    "docs/THREAT-MODEL.md",
-    "docs/RELEASE-HEALTH.md",
-    "docs/legal/DATA-MAP.md",
-  ];
+  const COPY_DOCS = ["README.md"];
   const copies = [
     ...COPY_DOCS.map((path) => ({ path, text: readFileSync(join(ROOT, path), "utf8") })),
     ...listFiles(join(ROOT, "web", "src"))
@@ -633,28 +624,6 @@ describe("confidentialité — la copie livrée nomme destinataire et condition 
       }
     }
     expect({ offenders }).toEqual({ offenders: [] });
-  });
-
-  test("la notice et la carte des données suivent la version de consentement du code", () => {
-    for (const path of ["PRIVACY.md", "docs/legal/DATA-MAP.md"]) {
-      const text = readFileSync(join(ROOT, path), "utf8");
-      expect({ path, version: text.includes(`version ${AI_CONSENT_VERSION}`) }).toEqual({
-        path,
-        version: true,
-      });
-    }
-  });
-
-  test("la rétention des photos est conditionnelle et nomme le fournisseur", () => {
-    for (const path of ["PRIVACY.md", "docs/legal/DATA-MAP.md"]) {
-      const text = readFileSync(join(ROOT, path), "utf8").replaceAll("’", "'");
-      expect({ path, politique: text.includes("Selon la politique d'OpenRouter") }).toEqual({
-        path,
-        politique: true,
-      });
-      expect({ path, csam: text.includes("CSAM") }).toEqual({ path, csam: true });
-      expect({ path, limite: text.includes("ne peut garantir") }).toEqual({ path, limite: true });
-    }
   });
 
   test("cours et photos nomment OpenRouter et la copie locale", () => {

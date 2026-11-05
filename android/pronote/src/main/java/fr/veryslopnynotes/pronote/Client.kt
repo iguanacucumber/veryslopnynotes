@@ -711,8 +711,6 @@ open class Client(
         ((((funcOptions as? JVal.Obj)?.fields?.get("dataSec") as? JVal.Obj)
             ?.fields?.get("data") as? JVal.Obj)?.fields?.get("General") as? JVal.Obj)
 
-    private fun objStr(obj: JVal?, key: String): JVal? = (obj as? JVal.Obj)?.fields?.get(key)
-
     private fun userResource(): JVal? =
         ((((userSettings as? JVal.Obj)?.fields?.get("dataSec") as? JVal.Obj)
             ?.fields?.get("data") as? JVal.Obj)?.fields?.get("ressource"))

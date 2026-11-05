@@ -10,16 +10,16 @@
 // WebSocket gardés et service workers bloqués. Les hôtes du document et de la
 // chaîne de redirections sont ÉPINGLÉS dans Chromium (adresse validée) ; les
 // sous-ressources gardent la fenêtre TOCTOU, fermée au niveau réseau par la
-// politique d'égression (docs/architecture/SERVER-EGRESS.md).
+// politique d'égression.
 // Jar de session : celui du SERVEUR uniquement (I24) ; un corps qui demande
 // `authFile` est refusé. Répertoire 0700, jar 0600, une seule sauvegarde.
 // Le scraper ne s'authentifie pas : `username`/`password` sont refusés, et une
 // page de connexion (HTTP 200) n'est jamais ingérée.
 // HTML sérialisé de façon BORNÉE dans le navigateur, borné en caractères avant
-// reparse et refusé sur un `content-length` trop grand, avec délai : jamais
+// extraction et refusé sur un `content-length` trop grand, avec délai : jamais
 // `outerHTML` ni `page.content()` en entier.
 import { join } from "node:path";
-import { load } from "cheerio";
+import { decode } from "he";
 import { saveJar } from "./jar-store";
 import { truncateManualText } from "./manuals";
 import type { ManualDoc } from "./manuals";
@@ -118,7 +118,7 @@ export const AUTH_DIR = "playwright/.auth";
 export const DEFAULT_AUTH_FILE = join(AUTH_DIR, "manuals.json");
 const DEFAULT_TIMEOUT_MS = 30_000;
 /**
- * Plafond du HTML RÉCUPÉRÉ (caractères), appliqué AVANT le reparse cheerio :
+ * Plafond du HTML RÉCUPÉRÉ (caractères), appliqué AVANT l'extraction :
  * le parse coûte plusieurs fois la taille du HTML, et 2 scrapes concurrents
  * peuvent épuiser la mémoire.
  * ponytail: 1 Mo suffit à une page de manuel (l'extrait final fait 4 000
@@ -222,9 +222,8 @@ const MAX_REDIRECT_HOPS = 20;
  * Arguments Chromium du proxy d'égression imposé par l'exploitant.
  *
  * `SCRAPER_EGRESS_PROXY` n'est PAS un paramètre d'appelant : il vient de
- * l'environnement du service. Un proxy absent laisse la garde réseau faire foi
- * (`SERVER-EGRESS.md`) ; un proxy illisible REFUSE le scrape plutôt que de
- * partir en direct. `<-loopback>` retire le contournement implicite de la
+ * l'environnement du service. Un proxy absent laisse la garde réseau faire foi ;
+ * un proxy illisible REFUSE le scrape plutôt que de partir en direct. `<-loopback>` retire le contournement implicite de la
  * boucle locale : même `127.0.0.1` passe par le proxy contrôlé.
  */
 export function chromiumEgressArgs(proxy: string | undefined): readonly string[] {
@@ -253,7 +252,7 @@ export function chromiumEgressArgs(proxy: string | undefined): readonly string[]
  * le scrape (fail-closed). Les littéraux publics n'ont rien à épingler.
  *
  * Les sous-ressources restent hors de ces règles (hôte inconnu au lancement) :
- * voir `SERVER-EGRESS.md` pour la fermeture réseau.
+ * la politique d'égression assure la fermeture réseau.
  */
 export async function chromiumResolverRules(
   hosts: readonly string[],
@@ -347,25 +346,98 @@ export async function assertPublicRedirectChain(
   return [...hosts];
 }
 
-// Extraction texte : script/style retirés, entités HTML DÉCODÉES (« &eacute; »,
-// « &nbsp; » laissés tels quels = extrait illisible et introuvable à la
-// recherche). Cheerio déjà dépendance, zéro ajoutée.
-// Espace ajouté après chaque élément : sinon deux paragraphes se collent.
-// L'entrée est DÉJÀ bornée (readHtml) : le parse est linéaire, donc c'est
-// l'appelant qui borne, pas cette fonction.
-function stripTags(html: string): string {
-  const $ = load(html);
-  $("script,style").remove();
-  $("*").each((_i, el) => {
-    $(el).append(" ");
-  });
-  // Un lecteur de manuel met le sommaire ET la page dans le DOM : le texte
-  // complet commençait par la navigation et la page réelle était coupée par
-  // le budget de source. Le contenu du document passe en premier ; les sites
-  // sans ce conteneur gardent le texte complet d'avant.
-  const document = $(".lls-new-viewer-document-root").first();
-  const text = document.length > 0 ? document.text() : $.root().text();
-  return text.replace(/\s+/g, " ").trim();
+/** Résultat d'un parse HTML borné, sans DOM ni dépendance de parsing. */
+export interface ExtractedHtml {
+  readonly text: string;
+  readonly title: string;
+  readonly ogTitle: string | null;
+  readonly login: boolean;
+  readonly initialState: string;
+}
+
+const normalizeText = (value: string): string =>
+  decode(value).replace(/\s+/g, " ").trim();
+
+/**
+ * Extrait en une passe les quatre signaux utiles au scraper.
+ *
+ * HTMLRewriter est fourni par Bun : pas de DOM complet, pas de dépendance de
+ * parsing. `he` ne décode que les entités du texte déjà borné. Le contenu est
+ * TOUJOURS l'entrée bornée de `readHtml`, jamais la page entière.
+ *
+ * Un lecteur de manuel met le sommaire ET la page dans le DOM : le texte du
+ * conteneur de document passe en premier ; les sites sans ce conteneur gardent
+ * le texte complet. Un espace est ajouté à chaque élément pour ne pas coller
+ * deux paragraphes, puis les blancs sont normalisés.
+ */
+export async function extractHtml(html: string): Promise<ExtractedHtml> {
+  let title = "";
+  let ogTitle: string | null = null;
+  let login = false;
+  let initialState = "";
+  await new HTMLRewriter()
+    .on("title", {
+      text(chunk) {
+        title += chunk.text;
+      },
+    })
+    .on('meta[property="og:title"]', {
+      element(element) {
+        ogTitle = element.getAttribute("content");
+      },
+    })
+    .on("input", {
+      element(element) {
+        const type = (element.getAttribute("type") ?? "").toLowerCase();
+        const name = (element.getAttribute("name") ?? "").toLowerCase();
+        if (type === "password" || name === "password") login = true;
+      },
+    })
+    .on("#id-initial-state", {
+      text(chunk) {
+        initialState += chunk.text;
+      },
+    })
+    .transform(new Response(html))
+    .text();
+
+  const cleaned = await new HTMLRewriter()
+    .on("script, style", {
+      element(element) {
+        element.remove();
+      },
+    })
+    .transform(new Response(html))
+    .text();
+
+  let full = "";
+  let documentText = "";
+  await new HTMLRewriter()
+    .on(".lls-new-viewer-document-root", {
+      text(chunk) {
+        documentText += chunk.text;
+      },
+    })
+    .on("*", {
+      element() {
+        full += " ";
+        documentText += " ";
+      },
+      text(chunk) {
+        full += chunk.text;
+      },
+    })
+    .transform(new Response(cleaned))
+    .text();
+
+  const rawText = documentText.trim() ? documentText : full;
+  return {
+    text: normalizeText(rawText),
+    title: normalizeText(title),
+    ogTitle: ogTitle === null ? null : normalizeText(ogTitle),
+    login,
+    initialState,
+  };
 }
 
 /**
@@ -380,15 +452,8 @@ function stripTags(html: string): string {
  * Un formulaire masqué en JavaScript n'est pas détecté : défaut ACCEPTÉ, pas
  * un trou silencieux (le refus reste visible : 502 « login_required »).
  */
-export function isLoginPage(html: string): boolean {
-  const $ = load(html);
-  let login = false;
-  $("input").each((_i, el) => {
-    const type = ($(el).attr("type") ?? "").toLowerCase();
-    const name = ($(el).attr("name") ?? "").toLowerCase();
-    if (type === "password" || name === "password") login = true;
-  });
-  return login;
+export async function isLoginPage(html: string): Promise<boolean> {
+  return (await extractHtml(html)).login;
 }
 
 /**
@@ -573,7 +638,7 @@ export const BOUNDED_HTML = (max: number): string => {
  *  - délai propre : la course tranche et le refus porte le motif `timeout`
  *    (=> 504 côté HTTP) ; sans lui, une page qui ne finit pas de streamer
  *    survit au délai HTTP et garde le Chromium vivant ;
- *  - plafond de caractères AVANT le reparse cheerio : le coût du parse est
+ *  - plafond de caractères AVANT l'extraction : le coût du parse est
  *    linéaire, donc on borne la chaîne qu'il va reparcourir ;
  *  - la borne est appliquée DANS le navigateur (`BOUNDED_HTML`) : le processus
  *    ne matérialise jamais une page de plusieurs centaines de Mo.
@@ -840,16 +905,17 @@ export async function scrapePage(
     // DÉLAI : le navigateur n'écrit jamais la page entière, seule la chaîne
     // bornée (+1 témoin) traverse le pont.
     const html = await readHtml(page, opts.contentTimeoutMs ?? CONTENT_TIMEOUT_MS, log);
+    const extracted = await extractHtml(html);
     // Une PAGE DE CONNEXION (HTTP 200) n'est JAMAIS une source : le refus
     // arrive AVANT l'extraction ET avant l'écriture du jar, pour ne pas
     // écraser la session du serveur avec un mur de connexion.
-    if (isLoginPage(html)) {
+    if (extracted.login) {
       throw new ScrapeManualsError(
         "page de connexion detectee (session du scraper a renouveler)",
         "login_required",
       );
     }
-    const text = truncateManualText(stripTags(html), 4000);
+    const text = truncateManualText(extracted.text, 4000);
     if (jar) {
       await saveJar(context, jar, log).catch(() => {
         log(`scrape ${config.label} -> jar non persiste`);
@@ -875,12 +941,9 @@ export async function scrapePage(
  * résolue (« Activités | … ») ne nomme pas la matière, et la fiche d'ouvrage
  * précis s'en sert pour refuser un manuel d'une autre discipline (fail-closed).
  */
-export function manualBookSubject(html: string): string | null {
-  const $ = load(html);
-  const og = $('meta[property="og:title"]').attr("content")?.trim();
-  if (og) return og;
-  const title = $("title").first().text().trim();
-  return title || null;
+export async function manualBookSubject(html: string): Promise<string | null> {
+  const { ogTitle, title } = await extractHtml(html);
+  return ogTitle || title || null;
 }
 
 /**
@@ -890,10 +953,13 @@ export function manualBookSubject(html: string): string | null {
  * et l'URL est reconstruite sur l'origine déjà validée. Un slug absolu ou
  * privé ne peut donc pas détourner la navigation (I8).
  */
-export function manualPageFromHtml(html: string, requested: number, baseUrl: string): string | null {
+export async function manualPageFromHtml(
+  html: string,
+  requested: number,
+  baseUrl: string,
+): Promise<string | null> {
   if (!Number.isInteger(requested) || requested < 1) return null;
-  const $ = load(html);
-  const script = $("#id-initial-state").first().text().trim();
+  const script = (await extractHtml(html)).initialState.trim();
   const marker = script.indexOf("window.__PRELOADED_STATE__");
   if (marker < 0) return null;
   const eq = script.indexOf("=", marker);
@@ -1046,8 +1112,8 @@ async function resolveManualPageUrl(
     const finalUrl = res.url || current;
     await assertPublicUrl(finalUrl, "sommaire final", resolve, false);
     const html = (await readCappedBody(res, MAX_HTML_BYTES, signal, caller)).slice(0, MAX_HTML_CHARS);
-    const url = manualPageFromHtml(html, requested, finalUrl);
-    return url === null ? null : { url, subject: manualBookSubject(html) };
+    const url = await manualPageFromHtml(html, requested, finalUrl);
+    return url === null ? null : { url, subject: await manualBookSubject(html) };
   }
   throw new ScrapeManualsError("trop de redirections (chaine non verifiee)", "private_host");
 }

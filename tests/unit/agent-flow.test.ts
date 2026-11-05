@@ -188,8 +188,6 @@ describe("agents/protect-main.sh (#963)", () => {
   test("les docs portent l'autorité du gate local (ADR-011)", () => {
     for (const path of [
       "AGENTS.md",
-      "CONTRIBUTING.md",
-      "docs/architecture/BRANCH-PROTECTION.md",
       "docs/adr/005-rules-and-architecture.md",
       "docs/adr/011-local-gate-authority.md",
     ]) {
@@ -202,10 +200,6 @@ describe("agents/protect-main.sh (#963)", () => {
         });
       }
     }
-    const protection = readFileSync(join(ROOT, "docs/architecture/BRANCH-PROTECTION.md"), "utf8");
-    expect(protection).toContain("PR obligatoire");
-    expect(protection).toContain("Force-push interdit");
-    expect(protection).toContain("Suppression interdite");
   });
 
   function protectFixture(): Fixture {

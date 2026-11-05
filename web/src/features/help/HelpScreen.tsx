@@ -124,9 +124,8 @@ export default function HelpScreen() {
       <Section id="aide-accessibilite" title="Accessibilité">
         <Card className="card--flat">
           <p className="help-paragraph">
-            La déclaration d’accessibilité complète est publiée avec le dépôt
-            dans <code>docs/ACCESSIBILITY.md</code> : cible WCAG 2.2 AA, limites
-            connues, versions testées et contact.
+            La cible est WCAG 2.2 AA. Les limites connues, les versions testées
+            et le contact sont décrits dans cette aide.
           </p>
           <ul className="help-list">
             <li>TalkBack n’a pas encore été vérifié sur un appareil réel.</li>
@@ -231,11 +230,11 @@ export default function HelpScreen() {
         <Card className="card--flat">
           <p className="help-paragraph">
             GitHub Issues est le seul canal de support : aucune adresse de
-            courriel n’est publiée. Le processus complet, les délais et les
-            données à ne jamais joindre sont dans <code>docs/SUPPORT.md</code>.
+            courriel n’est publiée. Les délais et les données à ne jamais
+            joindre sont rappelés ci-dessous.
           </p>
           <ul className="help-list">
-            <li>Avant d’ouvrir un bug, lis l’issue épinglée <code>[known-issues] vX.Y.Z</code> et <code>docs/COMPATIBILITY.md</code>.</li>
+            <li>Avant d’ouvrir un bug, lis l’issue épinglée <code>[known-issues] vX.Y.Z</code>.</li>
             <li>Indique la version de l’app, Android, la WebView, l’écran, les étapes et le message exact, sans aucune donnée scolaire.</li>
             <li>Réglages → Aide → Exporter un diagnostic prépare un fichier local : l’aperçu montre les champs exacts, rien n’est envoyé automatiquement et tu choisis l’application dans le sélecteur Android.</li>
             <li>Une faille exploitable ou un secret exposé passe par GitHub Security Advisories, jamais par une issue publique.</li>

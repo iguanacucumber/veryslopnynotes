@@ -20,6 +20,9 @@
     "@types/bun": {
       "license": "MIT"
     },
+    "@types/he": {
+      "license": "MIT"
+    },
     "@types/node": {
       "license": "MIT"
     },
@@ -86,6 +89,9 @@
       "license": "MIT"
     },
     "fsevents": {
+      "license": "MIT"
+    },
+    "he": {
       "license": "MIT"
     },
     "htmlparser2": {
@@ -226,6 +232,12 @@
       "license": "Apache-2.0"
     },
     "com.journeyapps:zxing-android-embedded": {
+      "license": "Apache-2.0"
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-json": {
+      "license": "Apache-2.0"
+    },
+    "org.jetbrains.kotlin.plugin.serialization": {
       "license": "Apache-2.0"
     },
     "androidx.test.ext:junit": {

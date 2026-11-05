@@ -117,8 +117,6 @@ function isAllowedEmailDomain(domain: string): boolean {
   return ALLOWED_EMAIL_DOMAINS.has(d) || ALLOWED_EMAIL_SUFFIXES.some((s) => d.endsWith(s));
 }
 
-// ponytail: allowlist placeholders docs légitimes. Upgrade: gitleaks.
-export const PLACEHOLDER_RE = /your|example|placeholder|x{3,}|<[^>]*>|TODO|change-?me|dummy/i;
 // Valeur manifestement factice : on ignore le MOT entier, pas un fragment
 // (un "xxx" au milieu d'une vraie clé base64 ne l'innocente pas).
 export const VALUE_PLACEHOLDER_RE = /^(your|example|dummy|mock|test|changeme|placeholder|xxx)/i;

@@ -9,7 +9,6 @@ const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 
 const ADR = read("docs/adr/010-notifications-and-account-scope.md");
 const README = read("README.md");
-const PRODUCT = read("docs/PRODUCT.md");
 
 describe("ADR-010 — rappels et périmètre des comptes (#832)", () => {
   test("l'ADR est accepté et complète ADR-006", () => {
@@ -23,12 +22,9 @@ describe("ADR-010 — rappels et périmètre des comptes (#832)", () => {
     expect(ADR).toMatch(/comptes parent sont hors périmètre/i);
   });
 
-  test("README et PRODUCT portent la même limite", () => {
+  test("README porte la même limite", () => {
     expect(README).toMatch(/pas de rappels/i);
     expect(README).toMatch(/compte élève/i);
-    expect(PRODUCT).toMatch(/sans rappel ni notification/i);
-    expect(PRODUCT).toMatch(/comptes parent hors\s+périmètre/i);
-    expect(PRODUCT).toContain("adr/010-notifications-and-account-scope.md");
   });
 
   test("l'aide et le profil ne promettent ni rappel ni bascule parent", () => {

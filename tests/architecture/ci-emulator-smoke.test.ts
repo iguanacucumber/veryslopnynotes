@@ -11,7 +11,6 @@ const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 const CI = read(".github/workflows/ci.yml");
 const SCRIPT = read("agents/runtime/emulator-smoke.ts");
 const BUILD = read("docs/architecture/BUILD.md");
-const CHANGELOG = read("CHANGELOG.md");
 
 /** Lignes d'un job YAML, jusqu'au job suivant (clé à l'indentation 2). */
 function jobBlock(yaml: string, name: string): string {
@@ -136,12 +135,5 @@ describe("script du smoke émulateur", () => {
     expect(SCRIPT).not.toContain("demo.index-education.net");
     expect(SCRIPT).not.toContain("pronotevs");
     expect(SCRIPT).not.toContain('"demonstration"');
-  });
-});
-
-describe("changelog", () => {
-  test("la PR annonce le smoke émulateur", () => {
-    expect(CHANGELOG).toMatch(/[ÉE]mulateur/i);
-    expect(CHANGELOG).toMatch(/non bloquant/i);
   });
 });
