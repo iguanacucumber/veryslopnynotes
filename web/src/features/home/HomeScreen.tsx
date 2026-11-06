@@ -66,7 +66,7 @@ function WidgetHeader({
       <h2 className="home-widget__title">{title}</h2>
       {onMore ? (
         <button type="button" className="home-widget__more" onClick={onMore} aria-label={`${title} — Afficher plus`}>
-          Afficher plus
+          <span className="home-widget__more-label">Afficher plus</span>
           <IconArrowRightUp size={20} />
         </button>
       ) : null}
@@ -205,7 +205,9 @@ export function TasksWidget({
         // Un devoir en retard compte dans `total` : « Rien à rendre » ne vaut
         // que si le compte est vraiment nul.
         <p className="home-widget__empty">
-          {total === 0 ? "Rien à rendre" : "Aucun devoir à venir"}
+          {total === 0
+            ? "Rien à rendre"
+            : `Aucun devoir à venir · ${total} en retard`}
         </p>
       ) : (
         <div className="home-tasks">

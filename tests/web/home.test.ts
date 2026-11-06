@@ -287,6 +287,7 @@ describe("accueil : capacités visibles, donnée absente (#804)", () => {
     );
     expect(html).not.toContain("Rien à rendre");
     expect(html).toContain("Aucun devoir à venir");
+    expect(html).toContain("4 en retard");
     expect(html).toContain("4 devoirs à faire");
   });
 

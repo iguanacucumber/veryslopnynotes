@@ -75,6 +75,11 @@ describe("IA — modèle indisponible dit clairement, sans repli", () => {
     expect(aiFailureNotice(undefined, VISION_MODEL_UNAVAILABLE_MESSAGE).kind).toBe("model");
   });
 
+  test("un consentement manquant n'est pas une panne réseau", () => {
+    expect(aiFailureNotice("consent", "").kind).toBe("consent");
+    expect(aiFailureNotice(undefined, "Consentement IA requis : ouvre Réglages.").kind).toBe("consent");
+  });
+
   test("le modèle vision livré est payant et la requête impose ZDR", () => {
     const policy = codeOnly(source(join(DATA, "LlmPolicy.kt")));
     const llm = codeOnly(source(join(DATA, "OpenRouterLlm.kt")));

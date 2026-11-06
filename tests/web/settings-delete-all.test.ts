@@ -70,6 +70,9 @@ describe("réglages — suppression totale (#853)", () => {
     // Export et suppression ont chacun leur ancre : un id dupliqué rendait la
     // tuile « Tout supprimer » dépendante de l'ordre du DOM.
     expect(settings.match(/id="reglages-donnees"/g)).toHaveLength(1);
+    // Un seul titre « Données » : l'export a le sien, sinon deux sections
+    // portent le même nom et la tuile ne dit plus laquelle elle ouvre.
+    expect(settings.match(/title="Données"/g)).toHaveLength(1);
     expect(settings).toContain('id="reglages-suppression"');
     expect(settings).toContain('target: "reglages-suppression"');
     expect(settings).toContain("<DeleteAllCard");

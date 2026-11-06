@@ -19,7 +19,7 @@ import {
   IconBook,
   IconCamera,
   IconCheck,
-  IconChevronLeft,
+  IconChevronDown,
   IconChevronRight,
   IconImage,
   IconSparkles,
@@ -643,7 +643,7 @@ function TasksWeek({ week, now }: { week: string; now: number }) {
                       aria-label={collapsed ? "Déplier les devoirs terminés" : "Replier les devoirs terminés"}
                       onClick={() => setDoneOpen((open) => !open)}
                     >
-                      {collapsed ? <IconChevronRight /> : <IconChevronLeft size={18} />}
+                      {collapsed ? <IconChevronRight /> : <IconChevronDown size={18} />}
                     </button>
                   ) : null}
                 </div>
@@ -655,6 +655,7 @@ function TasksWeek({ week, now }: { week: string; now: number }) {
                     <AssignmentCard
                       key={assignment.id}
                       assignment={assignment}
+                      now={now}
                       busy={Boolean(pending[assignment.id])}
                       assistantDisabled={assistantDisabled}
                       assistantReasonId={assistantDisabled ? "tasks-assistant-reason" : undefined}
@@ -724,6 +725,7 @@ function TasksWeek({ week, now }: { week: string; now: number }) {
       {help && helpAssignment ? (
         <HomeworkChat
           assignment={helpAssignment}
+          now={now}
           state={help}
           manualReady={manualSubjects.includes(helpAssignment.subject)}
           lessonReady={lessonSubjects.includes(helpAssignment.subject)}
@@ -733,6 +735,7 @@ function TasksWeek({ week, now }: { week: string; now: number }) {
           onRetry={retryHelp}
           onAddCourse={() => navigate("/course-notes")}
           onEnableManual={() => navigate("/settings")}
+          onOpenSettings={() => navigate("/settings")}
           onOpenAttachment={(attachment) => void openAttachment(helpAssignment, attachment)}
         />
       ) : null}
@@ -742,6 +745,7 @@ function TasksWeek({ week, now }: { week: string; now: number }) {
 
 function AssignmentCard({
   assignment,
+  now,
   busy,
   assistantDisabled,
   assistantReasonId,
@@ -758,6 +762,7 @@ function AssignmentCard({
   onGenerateSheet,
 }: {
   assignment: Assignment;
+  now: number;
   busy: boolean;
   assistantDisabled: boolean;
   assistantReasonId?: string;
@@ -778,7 +783,7 @@ function AssignmentCard({
   const text = assignmentCardText(assignment);
   const subjectBase = subjectColor(assignment.subject);
   const tinted = tint(subjectBase, dark ? 0.3 : -0.3);
-  const due = relativeLongFr(assignment.dueDate, Date.now());
+  const due = relativeLongFr(assignment.dueDate, now);
   // Sans consigne ni cours, l'aide TEXTE refuserait avant le modèle. La photo
   // reste disponible : c'est une source à part entière.
   const hasMaterial = assignmentHasAssistantMaterial(assignment, manualReady, lessonReady);

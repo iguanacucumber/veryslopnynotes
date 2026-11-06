@@ -31,7 +31,7 @@ export function boundedNotice(text: string, max = AI_NOTICE_MAX_CHARS): string {
   return text.replace(/\s+/g, " ").trim().slice(0, Math.max(1, max));
 }
 
-export type AiFailureKind = "model" | "key" | "quota" | "network";
+export type AiFailureKind = "model" | "key" | "quota" | "consent" | "network";
 
 export interface AiFailureNotice {
   kind: AiFailureKind;
@@ -56,6 +56,9 @@ export function aiFailureNotice(
   }
   if (stable === "key" || lower.includes("clé llm")) {
     return { kind: "key", message: clean || "Clé LLM absente : renseigne-la dans Réglages." };
+  }
+  if (stable === "consent" || lower.includes("consentement ia requis")) {
+    return { kind: "consent", message: clean || "Consentement IA requis dans Réglages > Assistant." };
   }
   if (stable === "quota" || lower.includes("quota") || lower.includes("crédits")) {
     return { kind: "quota", message: clean || "Quota LLM dépassé : réessaie plus tard." };

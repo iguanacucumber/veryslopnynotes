@@ -1770,11 +1770,37 @@ html[data-text-zoom="large"] .tab,
 html[data-text-zoom="large"] .chip,
 html[data-text-zoom="large"] .btn,
 html[data-text-zoom="large"] .list-row__title,
-html[data-text-zoom="large"] .list-row__subtitle {
+html[data-text-zoom="large"] .list-row__subtitle,
+html[data-text-zoom="large"] .home-action__label,
+html[data-text-zoom="large"] .home-action__status,
+html[data-text-zoom="large"] .home-widget__title,
+html[data-text-zoom="large"] .home-average__label,
+html[data-text-zoom="large"] .home-average__origin,
+html[data-text-zoom="large"] .tt-day-chip__count,
+html[data-text-zoom="large"] .tt-card__subject,
+html[data-text-zoom="large"] .tt-card__foot,
+html[data-text-zoom="large"] .grades-subject__title,
+html[data-text-zoom="large"] .grades-grade__title {
   white-space: normal;
   overflow: visible;
   text-overflow: clip;
   overflow-wrap: anywhere;
+}
+
+html[data-text-zoom="large"] .home-actions {
+  /* Les libellés ne tiennent plus sur deux colonnes sans coupure au milieu du
+     mot : une seule colonne rend le texte complet. */
+  grid-template-columns: 1fr;
+}
+
+html[data-text-zoom="large"] .home-widget__more-label {
+  /* Le bouton garde son libellé accessible, l'icône seule rend le titre sa place. */
+  display: none;
+}
+
+html[data-text-zoom="large"] .tab {
+  /* 13 px × 1,5 = 19,5 px : « Accueil » ne tient plus dans une colonne de 64 px. */
+  font-size: 12px;
 }
 
 html[data-text-zoom="large"] .search-field input {
