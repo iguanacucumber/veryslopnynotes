@@ -197,6 +197,13 @@ describe("IA — aide devoirs", () => {
     expect(chat).toContain('className="spinner"');
   });
 
+  test("un consentement ou une clé manquants mènent aux réglages, pas au réessai", () => {
+    expect(tasks).toContain('onOpenSettings={() => navigate("/settings")}');
+    const turn = between(chat, "function AssistantTurn", "export function HomeworkChat");
+    expect(turn).toContain('errorNotice.kind === "consent"');
+    expect(turn).toContain("Ouvrir les réglages");
+  });
+
   test("un refus mène au cahier, jamais au corps brut (#610)", () => {
     expect(chat).toContain("Ajouter un cours au cahier");
     expect(tasks).toContain('onAddCourse={() => navigate("/course-notes")}');

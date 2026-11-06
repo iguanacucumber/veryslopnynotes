@@ -9,6 +9,7 @@ import { parseAiContext } from "../tasks/assignments";
 export type TeacherErrorKind =
   | "model"
   | "key"
+  | "consent"
   | "quota"
   | "timeout"
   | "empty"
@@ -165,11 +166,21 @@ export function parseTeacherTurnResult(raw: unknown): TeacherTurnResult {
   const ok = value["ok"] === true;
   const message = boundedString(value["message"], 400);
   if (!ok && !refused) {
-    return { ok: false, message: message || "Le professeur est indisponible : réessaie." };
+    return {
+      ok: false,
+      message: message || "Le professeur est indisponible : réessaie.",
+      // Le code stable porte la récupération (clé, consentement, quota) :
+      // le perdre transformait tout en panne réseau avec un réessai stérile.
+      code: boundedString(value["code"], 40) || undefined,
+    };
   }
   const answer = boundedString(value["answer"], TEACHER_MAX_ANSWER);
   if (ok && !answer) {
-    return { ok: false, message: message || "Le professeur n’a pas répondu : réessaie." };
+    return {
+      ok: false,
+      message: message || "Le professeur n’a pas répondu : réessaie.",
+      code: boundedString(value["code"], 40) || undefined,
+    };
   }
   const sources = parseSources(value["sources"]);
   const context = parseAiContext(value["context"]).slice(0, TEACHER_MAX_SOURCES);
@@ -212,6 +223,12 @@ export function classifyTeacherFailure(result: TeacherTurnResult): TeacherTurnEr
   }
   if (code === "key" || lower.includes("clé llm") || lower.includes("clé absente")) {
     return { kind: "key", message: message || "Clé LLM absente : renseigne-la dans Réglages." };
+  }
+  if (code === "consent" || lower.includes("consentement ia requis")) {
+    return {
+      kind: "consent",
+      message: message || "Consentement IA requis dans Réglages > Assistant.",
+    };
   }
   if (code === "quota" || lower.includes("quota") || lower.includes("crédits")) {
     return { kind: "quota", message: message || "Quota LLM dépassé : réessaie dans quelques minutes." };

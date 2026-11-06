@@ -159,7 +159,7 @@ export default function SettingsScreen() {
         <AssistantCards snapshot={snapshot} loading={loading} />
       </Section>
 
-      <Section id="reglages-donnees" title="Données">
+      <Section id="reglages-donnees" title="Export">
         <DataExportCard />
       </Section>
 

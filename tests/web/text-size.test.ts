@@ -46,6 +46,23 @@ describe("taille du texte (#942)", () => {
     const css = source("styles/app.css");
     expect(css).toContain('html[data-text-zoom="large"]');
     expect(css).toContain("white-space: normal");
+    // Les libellés qui vivaient en nowrap hors de la coquille refluent aussi :
+    // sans cela, « Vie scolaire » ou « NUMERIQUE SC.INFORM. » sont coupés à 150 %.
+    for (const selector of [
+      "home-action__label",
+      "home-action__status",
+      "home-widget__title",
+      "home-average__label",
+      "tt-card__subject",
+      "grades-subject__title",
+    ]) {
+      expect(css).toContain(`html[data-text-zoom="large"] .${selector}`);
+    }
+    // Les tuiles passent sur une colonne et le bouton « Afficher plus » garde
+    // son libellé accessible tout en laissant la place au titre.
+    expect(css).toContain('html[data-text-zoom="large"] .home-actions');
+    expect(css).toContain('html[data-text-zoom="large"] .home-widget__more-label');
+    expect(source("features/home/HomeScreen.tsx")).toContain("home-widget__more-label");
   });
 
   test("le choix est relu depuis le pont (persistance native)", async () => {

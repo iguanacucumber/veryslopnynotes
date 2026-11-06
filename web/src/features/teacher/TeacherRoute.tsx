@@ -164,7 +164,9 @@ export function TeacherRoute() {
     } catch (e) {
       if (id !== seq.current) return;
       setError({
-        kind: "unavailable",
+        // Le pont rejette le consentement AVANT l'appel : « Réessayer » ne peut
+        // pas aboutir tant que Réglages > Assistant n'a pas été ouvert.
+        kind: e instanceof BridgeCallError && e.code === "consent" ? "consent" : "unavailable",
         message: messageOf(e, "Le professeur est indisponible : réessaie dans un instant."),
       });
       persist(subject, messagesRef.current);
@@ -322,6 +324,7 @@ export function TeacherRoute() {
         onSend={send}
         onAsk={ask}
         onRetry={retry}
+        onOpenSettings={() => navigate("/settings")}
         onRegenerate={regenerate}
         onReject={reject}
         onNewDiscussion={() => setConfirmAction("new")}

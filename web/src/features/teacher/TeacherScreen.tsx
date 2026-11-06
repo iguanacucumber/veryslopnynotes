@@ -55,6 +55,8 @@ export interface TeacherViewProps {
   /** Envoie directement une suggestion ; sans lui, elle remplit le brouillon. */
   onAsk?: (question: string) => void;
   onRetry: () => void;
+  /** Erreur de clé ou de consentement : la récupération vit dans Réglages. */
+  onOpenSettings?: () => void;
   /** Renvoie la dernière question et remplace la réponse. */
   onRegenerate?: () => void;
   onReject: (index: number) => void;
@@ -107,6 +109,7 @@ export function TeacherView({
   onSend,
   onAsk,
   onRetry,
+  onOpenSettings,
   onRegenerate,
   onReject,
   onNewDiscussion,
@@ -444,9 +447,15 @@ export function TeacherView({
                       <IconWarning size={18} />
                       {error.message}
                     </p>
-                    <button type="button" className="btn btn--small" onClick={onRetry} disabled={busy}>
-                      Réessayer
-                    </button>
+                    {(error.kind === "consent" || error.kind === "key") && onOpenSettings ? (
+                      <button type="button" className="btn btn--small" onClick={onOpenSettings}>
+                        Ouvrir les réglages
+                      </button>
+                    ) : (
+                      <button type="button" className="btn btn--small" onClick={onRetry} disabled={busy}>
+                        Réessayer
+                      </button>
+                    )}
                   </div>
                 ) : null}
               </div>

@@ -157,6 +157,12 @@ describe("professeur IA — modèle local (#633)", () => {
     expect(result.message).toContain("n’a pas répondu");
   });
 
+  test("le code d'erreur du pont survit au parseur, la récupération aussi", () => {
+    const result = parseTeacherTurnResult({ ok: false, code: "consent", message: "Consentement requis." });
+    expect(result.code).toBe("consent");
+    expect(classifyTeacherFailure(result).kind).toBe("consent");
+  });
+
   test("les sources citées et le contexte sont bornés", () => {
     const result = parseTeacherTurnResult({
       ok: true,
@@ -187,6 +193,7 @@ describe("professeur IA — modèle local (#633)", () => {
         .kind,
     ).toBe("model");
     expect(classifyTeacherFailure({ ok: false, code: "key", message: "clé" }).kind).toBe("key");
+    expect(classifyTeacherFailure({ ok: false, code: "consent", message: "" }).kind).toBe("consent");
     expect(classifyTeacherFailure({ ok: false, code: "quota", message: "429" }).kind).toBe("quota");
     expect(classifyTeacherFailure({ ok: false, code: "timeout", message: "" }).kind).toBe("timeout");
     expect(classifyTeacherFailure({ ok: false, code: "empty", message: "" }).kind).toBe("empty");
@@ -299,6 +306,15 @@ describe("écran Prof — rendu (#633)", () => {
     expect(html).toContain("Réessayer");
     expect(html).toContain("role=\"alert\"");
     expect(html.indexOf("teacher-log")).toBeLessThan(html.indexOf("Le professeur a mis trop de temps."));
+  });
+
+  test("un consentement manquant mène aux réglages, pas à un réessai stérile", () => {
+    const html = renderView({
+      error: { kind: "consent", message: "Consentement IA requis." },
+      onOpenSettings: () => {},
+    });
+    expect(html).toContain("Ouvrir les réglages");
+    expect(html).not.toContain("Réessayer");
   });
 
   test("refus du corpus : message + action stable, dans le journal", () => {

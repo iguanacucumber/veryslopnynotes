@@ -145,6 +145,7 @@ function AssistantTurn({
   onRetry,
   onAddCourse,
   onEnableManual,
+  onOpenSettings,
   onOpenAttachment,
   attachment,
   interactive = true,
@@ -157,11 +158,13 @@ function AssistantTurn({
   onRetry: () => void;
   onAddCourse: () => void;
   onEnableManual: () => void;
+  onOpenSettings: () => void;
   onOpenAttachment: (attachment: AssignmentAttachment) => void;
   attachment?: AssignmentAttachment;
   interactive?: boolean;
 }) {
   const unsourced = !loading && turn.answer !== null && turn.sources.length === 0;
+  const errorNotice = turn.error ? aiFailureNotice(undefined, turn.error) : null;
   return (
     <div className="hw-assistant ai-turn ai-turn--assistant">
       <div className="hw-assistant__head ai-turn__head">
@@ -249,13 +252,19 @@ function AssistantTurn({
         </div>
       ) : null}
 
-      {turn.error ? (
+      {errorNotice ? (
         <div className="hw-error" role="alert">
-          <p>{aiFailureNotice(undefined, turn.error).message}</p>
+          <p>{errorNotice.message}</p>
           {interactive ? (
-            <button type="button" className="btn btn--small" onClick={onRetry}>
-              Réessayer
-            </button>
+            errorNotice.kind === "consent" || errorNotice.kind === "key" ? (
+              <button type="button" className="btn btn--small" onClick={onOpenSettings}>
+                Ouvrir les réglages
+              </button>
+            ) : (
+              <button type="button" className="btn btn--small" onClick={onRetry}>
+                Réessayer
+              </button>
+            )
           ) : null}
         </div>
       ) : null}
@@ -278,6 +287,7 @@ function AssistantTurn({
 
 export function HomeworkChat({
   assignment,
+  now,
   state,
   manualReady,
   lessonReady,
@@ -287,9 +297,11 @@ export function HomeworkChat({
   onRetry,
   onAddCourse,
   onEnableManual,
+  onOpenSettings,
   onOpenAttachment,
 }: {
   assignment: Assignment;
+  now: number;
   state: HomeworkChatState;
   manualReady: boolean;
   lessonReady: boolean;
@@ -299,6 +311,7 @@ export function HomeworkChat({
   onRetry: () => void;
   onAddCourse: () => void;
   onEnableManual: () => void;
+  onOpenSettings: () => void;
   onOpenAttachment: (attachment: AssignmentAttachment) => void;
 }) {
   const composerId = useId();
@@ -311,7 +324,7 @@ export function HomeworkChat({
   ]);
   const { dark } = useApp();
   const tinted = tint(subjectColor(assignment.subject), dark ? 0.3 : -0.3);
-  const due = relativeLongFr(assignment.dueDate, Date.now());
+  const due = relativeLongFr(assignment.dueDate, now);
   const last = state.current;
   const canSend = !state.loading && draft.trim().length > 0;
 
@@ -397,6 +410,7 @@ export function HomeworkChat({
                   onRetry={onRetry}
                   onAddCourse={onAddCourse}
                   onEnableManual={onEnableManual}
+                  onOpenSettings={onOpenSettings}
                   onOpenAttachment={onOpenAttachment}
                   attachment={assignment.attachments[0]}
                   interactive={false}
@@ -420,6 +434,7 @@ export function HomeworkChat({
                 onRetry={onRetry}
                 onAddCourse={onAddCourse}
                 onEnableManual={onEnableManual}
+                onOpenSettings={onOpenSettings}
                 onOpenAttachment={onOpenAttachment}
                 attachment={assignment.attachments[0]}
               />
