@@ -28,7 +28,7 @@
     "@vitejs/plugin-react": "6.1.2",
     "axe-core": "4.14.0",
     "pronotets": "1.0.0",
-    "tough-cookie": "6.0.2",
+    "tough-cookie": "6.1.0",
     "typescript": "7.0.2",
     "vite": "8.3.5"
   },
