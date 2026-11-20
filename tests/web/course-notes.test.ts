@@ -107,6 +107,53 @@ describe("course notes — bridge and screen (#586)", () => {
     );
   });
 
+  test("une réponse de chargement périmée n'ouvre pas le cours demandé ensuite", () => {
+    const screen = source("features/course-notes/CourseNotesScreen.tsx");
+    const open = screen.indexOf("async function openNote");
+    const seq = screen.indexOf("const seq = openSeq.current.next()");
+    const call = screen.indexOf("await bridge.lesson(id)");
+    const guard = screen.indexOf("if (!openSeq.current.isCurrent(seq)) return;");
+    // Le numéro est pris avant l'appel ; la réponse est filtrée avant tout état.
+    expect(seq).toBeGreaterThan(open);
+    expect(guard).toBeGreaterThan(call);
+    expect(screen.indexOf("setEditor({", open)).toBeGreaterThan(guard);
+    expect(screen).toContain("if (openSeq.current.isCurrent(seq)) setEditorLoading(false);");
+    // Le choix de photo annule aussi l'ouverture en vol.
+    const chooser = screen.indexOf("function openPhotoChooser");
+    expect(chooser).toBeGreaterThan(0);
+    expect(screen.indexOf("openSeq.current.invalidate()", chooser)).toBeGreaterThan(chooser);
+    expect(screen.match(/openPhotoChooser\(subject\.subject\)/g)).toHaveLength(2);
+  });
+
+  test("fermer pendant le chargement annule l'ouverture", () => {
+    const screen = source("features/course-notes/CourseNotesScreen.tsx");
+    expect(screen).toContain("const editorOpen = editor !== null || editorLoading;");
+    expect(screen).toContain("open={editorOpen}");
+    expect(screen).toContain("onClose={closeEditor}");
+    const close = screen.indexOf("function closeEditor");
+    const invalidate = screen.indexOf("openSeq.current.invalidate()", close);
+    const stopLoading = screen.indexOf("setEditorLoading(false)", close);
+    const clearEditor = screen.indexOf("setEditor(null)", close);
+    // Annuler invalide la demande avant de retirer l'éditeur : rien ne le rouvre.
+    expect(invalidate).toBeGreaterThan(close);
+    expect(invalidate).toBeLessThan(stopLoading);
+    expect(stopLoading).toBeLessThan(clearEditor);
+    expect(screen).toContain('"Ouverture du cours"');
+    expect(screen).toContain("editorLoading ? (");
+  });
+
+  test("la confirmation de suppression remplace l'éditeur, sans second dialogue", () => {
+    const screen = source("features/course-notes/CourseNotesScreen.tsx");
+    // Quatre dialogues à l'écran : photo, transcription, échec photo, éditeur.
+    expect(screen.match(/<Dialog\b/g)).toHaveLength(4);
+    expect(screen.match(/open=\{editorOpen\}/g)).toHaveLength(1);
+    const editorDialog = screen.indexOf("open={editorOpen}");
+    const deleteTitle = screen.indexOf('"Supprimer ce cours ?"');
+    expect(deleteTitle).toBeGreaterThan(editorDialog);
+    // La suppression reste un mode du même dialogue, jamais une pile.
+    expect(screen.indexOf('role={confirmDelete ? "alertdialog" : "dialog"}')).toBeGreaterThan(editorDialog);
+  });
+
   test("subjects without notes are compact rows, not cards", () => {
     const screen = source("features/course-notes/CourseNotesScreen.tsx");
     // A full card only when the subject has notes.

@@ -296,11 +296,18 @@ export function CourseNotesScreen() {
     void addPhoto(editor.subject, source, true);
   }
 
+  function openPhotoChooser(subject: string) {
+    // Une lecture de cours en vol ne doit pas ouvrir l'éditeur sous le choix.
+    openSeq.current.invalidate();
+    setEditorLoading(false);
+    setPhotoTarget(subject);
+  }
+
   function retryPhoto() {
     const issue = photoIssue;
     if (!issue) return;
     setPhotoIssue(null);
-    setPhotoTarget(issue.subject);
+    openPhotoChooser(issue.subject);
   }
 
   if (loading && snapshot === null && error === "") {
@@ -327,6 +334,21 @@ export function CourseNotesScreen() {
   const maxNotes = snapshot?.maxNotesPerSubject ?? 8;
   const maxTitle = snapshot?.maxTitleChars ?? 120;
   const editorBusy = saving || (photoBusy !== null && editor?.fromPhoto === true);
+  const editorOpen = editor !== null || editorLoading;
+
+  function closeEditor() {
+    if (editorBusy || deleting) return;
+    if (confirmDelete) {
+      setConfirmDelete(false);
+      return;
+    }
+    // Un chargement en vol ne doit pas rouvrir l'éditeur après l'annulation.
+    if (editorLoading) {
+      openSeq.current.invalidate();
+      setEditorLoading(false);
+    }
+    setEditor(null);
+  }
 
   return (
     <Page className="course-notes">
@@ -442,7 +464,7 @@ export function CourseNotesScreen() {
                 className="btn btn--ghost btn--small"
                 disabled={photoBusy !== null}
                 aria-label={`Ajouter une photo de cours pour ${subject.subject}`}
-                onClick={() => setPhotoTarget(subject.subject)}
+                onClick={() => openPhotoChooser(subject.subject)}
               >
                 <IconCamera size={16} />
                 {photoBusy === subject.subject ? "Transcription…" : "Photo"}
@@ -470,7 +492,7 @@ export function CourseNotesScreen() {
                       className="icon-btn"
                       disabled={photoBusy !== null}
                       aria-label={`Ajouter une photo de cours pour ${subject.subject}`}
-                      onClick={() => setPhotoTarget(subject.subject)}
+                      onClick={() => openPhotoChooser(subject.subject)}
                     >
                       <IconCamera size={18} />
                     </button>
@@ -590,33 +612,30 @@ export function CourseNotesScreen() {
       </Dialog>
 
       <Dialog
-        open={editor !== null}
+        open={editorOpen}
         title={
           confirmDelete
             ? "Supprimer ce cours ?"
-            : editor?.fromPhoto
-              ? "Vérifier la photo"
-              : editor?.id
-                ? "Modifier le cours"
-                : "Ajouter un cours"
+            : editorLoading
+              ? "Ouverture du cours"
+              : editor?.fromPhoto
+                ? "Vérifier la photo"
+                : editor?.id
+                  ? "Modifier le cours"
+                  : "Ajouter un cours"
         }
         description={
           confirmDelete
             ? "Le cours sera retiré du cahier et ne sera plus utilisé par l’assistant."
-            : editor?.fromPhoto
+            : editorLoading
               ? undefined
-              : "Le texte est envoyé au fournisseur comme une donnée, jamais comme une instruction."
+              : editor?.fromPhoto
+                ? undefined
+                : "Le texte est envoyé au fournisseur comme une donnée, jamais comme une instruction."
         }
         busy={editorBusy || deleting}
         role={confirmDelete ? "alertdialog" : "dialog"}
-        onClose={() => {
-          if (editorBusy || deleting) return;
-          if (confirmDelete) {
-            setConfirmDelete(false);
-            return;
-          }
-          setEditor(null);
-        }}
+        onClose={closeEditor}
         actions={
           confirmDelete ? (
             <>
@@ -637,6 +656,10 @@ export function CourseNotesScreen() {
                 {deleting ? "Suppression…" : "Supprimer"}
               </button>
             </>
+          ) : editorLoading ? (
+            <button type="button" className="btn btn--ghost btn--small" onClick={closeEditor}>
+              Annuler
+            </button>
           ) : (
             <>
               {editor?.id ? (
