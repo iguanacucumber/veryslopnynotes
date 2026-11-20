@@ -41,6 +41,8 @@ export type MarkdownBlock =
 type ListMarker = { ordered: boolean; start: number; text: string };
 
 const ESCAPABLE = "\\`*_{}[]()#+-.!|>$";
+/** Regex collante : le libellé et l'URL sont bornés, sans copier le reste. */
+const INLINE_LINK = /\[([^\]\n]{0,500})\]\(([^)\n]{0,2000})\)/y;
 
 /** Commandes LaTeX courantes -> texte Unicode lisible (#759). */
 const MATH_SYMBOLS: ReadonlyArray<readonly [RegExp, string]> = [
@@ -323,7 +325,8 @@ function parseInline(source: string, depth = 0): InlineNode[] {
     // Lien/image : le libellé reste du texte, l'URL n'est même pas conservée.
     if (char === "[" || (char === "!" && source[i + 1] === "[")) {
       const start = char === "!" ? i + 1 : i;
-      const match = /^\[([^\]\n]{0,500})\]\(([^)\n]{0,2000})\)/.exec(source.slice(start));
+      INLINE_LINK.lastIndex = start;
+      const match = INLINE_LINK.exec(source);
       if (match) {
         flush();
         nodes.push({ type: "link", children: parseInline(match[1]!, depth + 1) });

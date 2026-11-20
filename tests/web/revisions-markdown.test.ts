@@ -116,6 +116,31 @@ describe("parseur markdown borné (#630)", () => {
     expect(blockText(html)).toBe("<script>alert(1)</script>");
   });
 
+  test("un libellé ou une URL qui déborde n'ouvre pas de lien", () => {
+    const longLabel = `[${"a".repeat(501)}](https://exemple.test)`;
+    const longUrl = `[lien](https://exemple.test/${"a".repeat(2_001)})`;
+    for (const source of [longLabel, longUrl]) {
+      const paragraph = parseMarkdown(source)[0];
+      expect(paragraph?.type).toBe("paragraph");
+      if (paragraph?.type !== "paragraph") throw new Error("paragraphe attendu");
+      expect(paragraph.children.some((node) => node.type === "link")).toBe(false);
+      expect(blockText([paragraph])).toBe(source);
+    }
+  });
+
+  test("un lien normal reste reconnu, sans exposer son URL", () => {
+    const text = "Voir [le cours](https://exemple.test/cours).";
+    const paragraph = parseMarkdown(text)[0];
+    expect(paragraph?.type).toBe("paragraph");
+    if (paragraph?.type !== "paragraph") throw new Error("paragraphe attendu");
+    expect(paragraph.children.some((node) => node.type === "link")).toBe(true);
+
+    const html = render(text);
+    expect(html).toContain("le cours");
+    expect(html).not.toContain("href=");
+    expect(html).not.toContain("exemple.test");
+  });
+
   test("la taille est bornée, avec une marque de troncature", () => {
     const blocks = parseMarkdown("x".repeat(MAX_MARKDOWN_CHARS + 5_000));
     const text = blockText(blocks);
