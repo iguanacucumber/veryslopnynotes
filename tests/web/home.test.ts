@@ -465,6 +465,15 @@ describe("notes et moyennes", () => {
     ).toBe(15);
   });
 
+  test("une facultative qui améliore la moyenne est retenue", () => {
+    expect(
+      subjectAverage([
+        grade({ subject: "MATHS", value: 10, scale: 20 }),
+        grade({ subject: "MATHS", value: 18, scale: 20, optional: true }),
+      ]),
+    ).toBe(14);
+  });
+
   test("sans note exploitable, aucune moyenne (jamais 0 inventé)", () => {
     expect(generalAverage(null, [grade({ subject: "MATHS", value: 8, scale: 20, coefficient: 0 })]).value).toBeNull();
     expect(generalAverage(null, [grade({ subject: "MATHS", value: 8, scale: 20, coefficient: -2 })]).value).toBeNull();

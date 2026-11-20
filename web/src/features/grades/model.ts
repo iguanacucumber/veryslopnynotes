@@ -89,6 +89,10 @@ const MAX_TEACHER_CHARS = 100;
 const MAX_PERIOD_NAME_CHARS = 100;
 const MAX_ID_CHARS = 64;
 const MAX_AVERAGE_POINTS = 200;
+// Bornes de rendu propres au web : un payload corrompu ne fait pas rendre
+// des milliers de lignes.
+const MAX_GRADES = 5000;
+const MAX_PERIODS = 200;
 
 const NO_DATA = -1;
 
@@ -100,6 +104,19 @@ function record(value: unknown): Json | null {
 
 function items(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+/** Première occurrence de chaque id, dans l'ordre du payload et borné. */
+function uniqueById<T extends { id: string }>(items: readonly T[], max: number): T[] {
+  const out: T[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    if (out.length >= max) break;
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    out.push(item);
+  }
+  return out;
 }
 
 export function parseJson(payload: string | null): unknown {
@@ -230,11 +247,17 @@ export function parseGradesPayload(
 ): GradesData {
   const root = record(parseJson(payload));
   if (!root) return { grades: [], report: null };
-  const grades = items(root["grades"] ?? root["items"])
-    .map(parseGrade)
-    .filter((g): g is Grade => g !== null)
-    .sort((a, b) => (b.millis ?? 0) - (a.millis ?? 0));
+  const grades = uniqueById(
+    items(root["grades"] ?? root["items"])
+      .slice(0, MAX_GRADES)
+      .map(parseGrade)
+      .filter((g): g is Grade => g !== null),
+    MAX_GRADES,
+  );
+  // Le rapport local est calculé dans l'ordre du payload (comme le natif) :
+  // trier d'abord inverserait l'historique de deux notes de même date.
   const report = parseReport(root["averages"]) ?? (grades.length > 0 ? computeAverages(grades, algorithm, periodId) : null);
+  grades.sort((a, b) => (b.millis ?? 0) - (a.millis ?? 0));
   return { grades, report };
 }
 
@@ -260,7 +283,7 @@ export function parsePeriods(payload: string | null): Period[] {
   const root = record(parseJson(payload));
   if (!root) return [];
   const out: Period[] = [];
-  for (const raw of items(root["periods"] ?? root["items"])) {
+  for (const raw of items(root["periods"] ?? root["items"]).slice(0, MAX_PERIODS)) {
     const obj = record(raw);
     if (!obj) continue;
     const id = bounded(obj["id"], MAX_ID_CHARS);
@@ -271,7 +294,7 @@ export function parsePeriods(payload: string | null): Period[] {
     if (start?.millis != null && end?.millis != null && end.millis < start.millis) continue;
     out.push({ id, name, start: start?.text ?? null, end: end?.text ?? null });
   }
-  return out;
+  return uniqueById(out, MAX_PERIODS);
 }
 
 function weightOf(grade: Grade): number {

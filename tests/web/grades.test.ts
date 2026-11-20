@@ -134,6 +134,30 @@ describe("parseGradesPayload", () => {
     expect(parseGradesPayload('{"grades":"nope"}')).toEqual({ grades: [], report: null });
   });
 
+  test("un identifiant répété n'apparaît qu'une fois et le calcul suit le payload", () => {
+    const payload = JSON.stringify({
+      grades: [
+        { id: "a", subject: "Maths", value: 10, scale: 20, date: "2026-10-01T08:00:00.000Z" },
+        { id: "a", subject: "Maths", value: 20, scale: 20, date: "2026-10-01T08:00:00.000Z" },
+        { id: "b", subject: "Maths", value: 20, scale: 20, date: "2026-10-01T08:00:00.000Z" },
+      ],
+    });
+    const data = parseGradesPayload(payload, "subject", null);
+    expect(data.grades.map((grade) => grade.id)).toEqual(["a", "b"]);
+    // La moyenne porte sur la PREMIÈRE occurrence de `a` (10), pas sur 20.
+    expect(data.report?.generalValue).toBe(15);
+  });
+
+  test("les périodes sont dédoublonnées et bornées", () => {
+    const periods = Array.from({ length: 205 }, (_, index) => ({
+      id: `p-${index}`,
+      name: `Période ${index}`,
+    }));
+    const parsed = parsePeriods(JSON.stringify({ periods }));
+    expect(parsed).toHaveLength(200);
+    expect(new Set(parsed.map((period) => period.id)).size).toBe(200);
+  });
+
   test("écarte les notes incohérentes et borne les textes", () => {
     const longSubject = "s".repeat(101);
     const payload = JSON.stringify({
