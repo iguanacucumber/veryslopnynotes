@@ -426,7 +426,7 @@ export async function extractHtml(html: string): Promise<ExtractedHtml> {
     .text();
 
   const cleaned = await new HTMLRewriter()
-    .on("script, style", {
+    .on("script, style, title", {
       element(element) {
         element.remove();
       },
@@ -528,6 +528,53 @@ function contentTypeOf(response: unknown): string {
  */
 interface HtmlPage {
   evaluate: (fn: (max: number) => string, max: number) => Promise<string>;
+}
+
+/** Page Playwright réduite à la lecture bornée du titre. */
+interface TitleHandle {
+  jsonValue?: () => Promise<unknown>;
+  dispose?: () => Promise<void>;
+}
+
+interface TitlePage {
+  title: () => Promise<string>;
+  evaluateHandle?: (fn: () => string) => Promise<TitleHandle | null>;
+}
+
+/**
+ * Titre lu DANS la page et borné AVANT le pont CDP : `page.title()` renvoie
+ * toute la chaîne, et un `<title>` chunked peut faire des mégaoctets.
+ * `evaluateHandle` n'est utilisé que s'il existe ; les faux de test n'ont que
+ * `title`, d'où le repli (le vrai Playwright a toujours `evaluateHandle`).
+ */
+async function readBoundedTitle(page: TitlePage, fallback: string): Promise<string> {
+  if (typeof page?.evaluateHandle === "function") {
+    try {
+      const handle = await page.evaluateHandle(() => {
+        const doc = (globalThis as unknown as { document?: { title?: string } }).document;
+        return (doc?.title ?? "").slice(0, 201);
+      });
+      try {
+        const value = await handle?.jsonValue?.();
+        if (typeof value === "string") return value;
+      } finally {
+        try {
+          await handle?.dispose?.();
+        } catch {
+          /* noop */
+        }
+      }
+    } catch {
+      // Page morte ou lecture impossible : le libellé suffit, jamais la
+      // chaîne non bornée de `page.title()`.
+      return fallback;
+    }
+    return fallback;
+  }
+  if (typeof page?.title === "function") {
+    return await page.title().catch(() => fallback);
+  }
+  return fallback;
 }
 
 /**
@@ -930,8 +977,10 @@ export async function scrapePage(
     if (config.textOnly && !isTextContentType(contentType)) {
       throw new ScrapeManualsError("contenu non textuel refuse", "not_text");
     }
+    // Un titre vide ou blanc retombe sur le libellé : le contrat exige un titre
+    // non vide, et un `<title>` blanc ferait rejeter un scrape réussi.
     const title = truncateManualText(
-      ((await page.title().catch(() => config.label)) || config.label).trim(),
+      (await readBoundedTitle(page, config.label)).trim() || config.label,
       200,
     );
     // La TAILLE annoncée (`content-length`) est un pré-contrôle : au-delà du
