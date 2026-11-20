@@ -19,10 +19,13 @@ import {
   durationLabel,
   isCancelled,
   isMoved,
+  isTimetablePayloadReadable,
   movedHint,
   parisDayKeyOf,
   parseTimetable,
   timeRange,
+  TIMETABLE_UNAVAILABLE,
+  TIMETABLE_UNREADABLE,
   type Lesson,
 } from "../home/parse";
 import { useNow } from "../../lib/useNow";
@@ -182,6 +185,16 @@ function WeekView({
   const todayKey = parisDayKeyOf(now);
   const loaded = Boolean(resource.payload);
   const empty = !resource.loading && weekLessons.length === 0;
+  // Un payload illisible ou absent n'est pas « aucun cours » (I14).
+  const error =
+    resource.error ??
+    (resource.payload === null
+      ? resource.loading
+        ? null
+        : TIMETABLE_UNAVAILABLE
+      : isTimetablePayloadReadable(resource.payload)
+        ? null
+        : TIMETABLE_UNREADABLE);
 
   return (
     <Page className="tt">
@@ -193,31 +206,33 @@ function WeekView({
         onToday={onToday}
       />
 
-      {loaded && (resource.stale || resource.error) ? (
+      {loaded && (resource.stale || (error && !empty)) ? (
         <div className="tt-status" role="status">
-          <StaleBadge
-            fetchedAt={resource.fetchedAt}
-            cause={resource.cause}
-            now={now}
-            onRetry={resource.refresh}
-          />
-          {resource.error && resource.cause === "other" ? (
-            <span className="tiny muted">Affichage du cache · {resource.error}</span>
+          {resource.stale ? (
+            <StaleBadge
+              fetchedAt={resource.fetchedAt}
+              cause={resource.cause}
+              now={now}
+              onRetry={resource.refresh}
+            />
+          ) : null}
+          {error && resource.cause === "other" ? (
+            <span className="tiny muted">Affichage du cache · {error}</span>
           ) : null}
         </div>
       ) : null}
 
       {resource.loading && !loaded ? <Loading label="Chargement de l’emploi du temps…" /> : null}
 
-      {!resource.loading && empty && resource.error ? (
-        <ErrorBox message={resource.error}>
+      {empty && error ? (
+        <ErrorBox message={error}>
           <button type="button" className="btn btn--small" onClick={resource.refresh}>
             Réessayer
           </button>
         </ErrorBox>
       ) : null}
 
-      {empty && !resource.error ? (
+      {empty && !error ? (
         <EmptyState
           icon={<IconCalendar size={30} />}
           title="Aucun cours cette semaine"

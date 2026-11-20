@@ -26,6 +26,7 @@ import {
   parseAssignments,
   parseCapabilities,
   parseGrades,
+  isTimetablePayloadReadable,
   parseTimetable,
   pendingAssignments,
   pendingCount,
@@ -154,6 +155,17 @@ describe("parseTimetable", () => {
     expect(parseTimetable(null)).toEqual([]);
     expect(parseTimetable("{")).toEqual([]);
     expect(parseTimetable(JSON.stringify({ entries: "nope" }))).toEqual([]);
+  });
+
+  test("un payload illisible n'est pas « aucun cours » (I14)", () => {
+    expect(isTimetablePayloadReadable(null)).toBe(false);
+    expect(isTimetablePayloadReadable("{")).toBe(false);
+    expect(isTimetablePayloadReadable("null")).toBe(false);
+    expect(isTimetablePayloadReadable(JSON.stringify({ entries: "nope" }))).toBe(false);
+    expect(isTimetablePayloadReadable(JSON.stringify({ autres: [] }))).toBe(false);
+    // Liste vide lisible : une semaine sans cours est un état légitime.
+    expect(isTimetablePayloadReadable(JSON.stringify({ entries: [] }))).toBe(true);
+    expect(isTimetablePayloadReadable(JSON.stringify({ items: [] }))).toBe(true);
   });
 
   test("un cours déplacé garde son statut et son horaire d'origine", () => {

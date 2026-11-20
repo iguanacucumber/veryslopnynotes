@@ -245,6 +245,16 @@ export function isGradesPayloadReadable(payload: string | null): boolean {
   return record(parseJson(payload)) !== null;
 }
 
+/** Un JSON illisible n'est PAS « aucune période » (I14). `{}` reste lisible
+ *  comme pour les notes : l'absence de liste est un état vide, pas une erreur. */
+export function isPeriodsPayloadReadable(payload: string | null): boolean {
+  if (payload === null) return false;
+  const root = record(parseJson(payload));
+  if (!root) return false;
+  const list = root["periods"] ?? root["items"];
+  return list === undefined || Array.isArray(list);
+}
+
 /** Payload `/v1/periods` -> tranches, dans l'ordre du contrat. */
 export function parsePeriods(payload: string | null): Period[] {
   const root = record(parseJson(payload));
