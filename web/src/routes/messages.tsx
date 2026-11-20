@@ -9,6 +9,7 @@ import {
 } from "../features/messages/MessagesScreen";
 import {
   isMessagesPayloadReadable,
+  isRecipientsPayloadReadable,
   mergeEnrichedDiscussions,
   mergeOlderMessages,
   messagePreview,
@@ -394,9 +395,9 @@ export default function MessagesRoute() {
     try {
       const result = await bridge.recipients();
       setRecipients(parseRecipients(result.payload));
-      // Un payload illisible n'est pas « aucun destinataire » (I14).
+      // Un payload sans liste n'est pas « aucun destinataire » (I14).
       setRecipientsError(
-        isMessagesPayloadReadable(result.payload)
+        isRecipientsPayloadReadable(result.payload)
           ? (result.error ?? null)
           : "Destinataires illisibles : la donnée n’a pas pu être lue.",
       );

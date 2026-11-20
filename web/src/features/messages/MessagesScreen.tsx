@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { DISCUSSION_MAX_RECIPIENTS } from "../../../../shared/contracts/models";
 import {
   Avatar,
   Card,
@@ -315,6 +316,7 @@ export function ThreadScreen({
             className="icon-btn"
             aria-label="Supprimer la discussion"
             onClick={() => setConfirming(true)}
+            disabled={sending}
           >
             <IconTrash />
           </button>
@@ -523,9 +525,31 @@ export function NewDiscussionScreen({ recipients, loading, error, sending, onRet
   const [body, setBody] = useState("");
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<string[]>([]);
+  const pickedRef = useRef<string[]>([]);
+  const [limitNotice, setLimitNotice] = useState("");
 
   const groups: RecipientGroup[] = groupRecipients(recipients.filter((r) => recipientMatches(r, query)));
   const canSend = subject.trim() !== "" && body.trim() !== "" && picked.length > 0 && !sending;
+
+  function updatePicked(next: string[]): void {
+    pickedRef.current = next;
+    setPicked(next);
+  }
+
+  function toggleRecipient(id: string): void {
+    const current = pickedRef.current;
+    if (current.includes(id)) {
+      updatePicked(current.filter((item) => item !== id));
+      setLimitNotice("");
+      return;
+    }
+    if (current.length >= DISCUSSION_MAX_RECIPIENTS) {
+      setLimitNotice(`Vous pouvez choisir au plus ${DISCUSSION_MAX_RECIPIENTS} destinataires.`);
+      return;
+    }
+    updatePicked([...current, id]);
+    setLimitNotice("");
+  }
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -567,7 +591,10 @@ export function NewDiscussionScreen({ recipients, loading, error, sending, onRet
 
       <SearchField
         value={query}
-        onChange={setQuery}
+        onChange={(value) => {
+          setQuery(value);
+          setLimitNotice("");
+        }}
         placeholder="Rechercher un destinataire"
         label="Rechercher un destinataire"
       />
@@ -620,13 +647,7 @@ export function NewDiscussionScreen({ recipients, loading, error, sending, onRet
                       type="button"
                       className={`chip${on ? " chip--active" : ""}`}
                       aria-pressed={on}
-                      onClick={() =>
-                        setPicked((current) =>
-                          current.includes(recipient.id)
-                            ? current.filter((id) => id !== recipient.id)
-                            : [...current, recipient.id],
-                        )
-                      }
+                      onClick={() => toggleRecipient(recipient.id)}
                     >
                       {recipient.displayName}
                     </button>
@@ -637,6 +658,12 @@ export function NewDiscussionScreen({ recipients, loading, error, sending, onRet
           ))}
         </div>
       )}
+
+      {limitNotice ? (
+        <p className="tiny" role="status" style={{ margin: 0, color: "var(--danger-ink)" }}>
+          {limitNotice}
+        </p>
+      ) : null}
 
       <div className="row" style={{ justifyContent: "flex-end" }}>
         <span className="tiny muted grow">{pickedCountLabel(picked.length)}</span>
