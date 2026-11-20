@@ -73,7 +73,7 @@ describe("web palettes", () => {
   test("ids uniques, deux variantes par palette, libellés non vides", () => {
     const ids = SCHEMES.map((scheme) => scheme.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids).toEqual([DEFAULT_SCHEME_ID, "material", "liquid-glass", "frutiger-aero"]);
+    expect(ids).toEqual([DEFAULT_SCHEME_ID, "material", "liquid-glass", "frutiger-aero", "cyberpunk"]);
     expect(ids).toContain(DEFAULT_SCHEME_ID);
     for (const scheme of SCHEMES) {
       expect(scheme.id).toMatch(/^[a-z0-9-]+$/);
@@ -117,6 +117,17 @@ describe("web palettes", () => {
     const shell = readFileSync(join(ROOT, "web/src/ui/AppShell.tsx"), "utf8");
     expect(shell).toContain("<GlassBackdrop");
     expect(shell).toContain('scheme === "frutiger-aero"');
+  });
+
+  test("la palette Cyberpunk existe et son skin néon est câblé", () => {
+    const scheme = SCHEMES.find((entry) => entry.id === "cyberpunk");
+    expect(scheme?.label).toBe("Cyberpunk");
+    const main = readFileSync(join(ROOT, "web/src/main.tsx"), "utf8");
+    expect(main).toContain('import "./styles/cyberpunk.css";');
+    const css = readFileSync(join(ROOT, "web/src/styles/cyberpunk.css"), "utf8");
+    expect(css).toContain(':root[data-scheme="cyberpunk"]');
+    expect(css).toContain("--cyber-magenta");
+    expect(css).toContain("--wallpaper-pink");
   });
 
   test("parseScheme : valeur inconnue = palette par défaut", () => {

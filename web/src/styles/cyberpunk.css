@@ -1,0 +1,255 @@
+/* Skin « Cyberpunk » : la palette porte le cyan et le magenta ; le skin ajoute
+   les filets néon, les coins HUD et les halos. Tout est scopé sur
+   `:root[data-scheme="cyberpunk"]`, donc aucune autre palette ne le voit.
+   Pas d'image, pas de texture : le papier peint reste le SVG généré. */
+
+:root[data-scheme="cyberpunk"] {
+  --cyber-magenta: #ff2a6d;
+  --cyber-cyan: var(--brand);
+  --cyber-line: color-mix(in srgb, var(--brand) 46%, var(--rule));
+  --cyber-glow: color-mix(in srgb, var(--brand) 38%, transparent);
+  --cyber-glow-soft: color-mix(in srgb, var(--brand) 18%, transparent);
+  --wallpaper-deep: #03010c;
+  --wallpaper-mid: #0d0630;
+  --wallpaper-warm: #2b0322;
+  --wallpaper-pink: #ff2a6d;
+  --wallpaper-blue: #05d9e8;
+  --wallpaper-amber: #ffb000;
+  --wallpaper-violet: #b967ff;
+}
+
+:root[data-scheme="cyberpunk"][data-theme="light"] {
+  --cyber-magenta: #c2007a;
+  --cyber-cyan: #007a99;
+  --cyber-line: color-mix(in srgb, var(--brand) 42%, var(--rule));
+  --cyber-glow: color-mix(in srgb, var(--brand) 26%, transparent);
+  --cyber-glow-soft: color-mix(in srgb, var(--brand) 10%, transparent);
+  --wallpaper-deep: #18002e;
+  --wallpaper-mid: #33004d;
+  --wallpaper-warm: #4d0033;
+  --wallpaper-pink: #ff2a6d;
+  --wallpaper-blue: #05d9e8;
+  --wallpaper-amber: #ffb000;
+  --wallpaper-violet: #b967ff;
+}
+
+/* En-tête et dock : des instruments, pas des surfaces neutres. */
+:root[data-scheme="cyberpunk"] .topbar {
+  border-bottom: 1px solid var(--cyber-line);
+  box-shadow: 0 1px 0 var(--cyber-glow-soft);
+}
+
+:root[data-scheme="cyberpunk"] .topbar--home {
+  border-bottom-color: color-mix(in srgb, #ffffff 24%, transparent);
+  box-shadow: none;
+}
+
+:root[data-scheme="cyberpunk"] .topbar__title,
+:root[data-scheme="cyberpunk"] .page-heading__title,
+:root[data-scheme="cyberpunk"] .section-title__heading {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+:root[data-scheme="cyberpunk"] .topbar__title {
+  text-shadow: 0 0 16px var(--cyber-glow);
+}
+
+:root[data-scheme="cyberpunk"] .tabbar {
+  border-color: var(--cyber-line);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--brand) 8%);
+  box-shadow:
+    0 0 0 1px var(--cyber-glow-soft),
+    0 0 28px -10px var(--cyber-glow),
+    var(--shadow-dock);
+}
+
+:root[data-scheme="cyberpunk"] .tab {
+  border-radius: 14px;
+  font-size: 11px;
+  line-height: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:root[data-scheme="cyberpunk"] .tab[aria-current="page"] {
+  background: color-mix(in srgb, var(--brand) 16%, transparent);
+  box-shadow:
+    inset 0 0 0 1px var(--cyber-line),
+    0 0 18px -8px var(--cyber-glow);
+}
+
+/* Cartes : coins plus francs, liseré néon, halo bas. */
+:root[data-scheme="cyberpunk"] .card {
+  position: relative;
+  border: 1px solid var(--cyber-line);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px var(--cyber-glow-soft),
+    0 0 26px -16px var(--cyber-glow);
+}
+
+:root[data-scheme="cyberpunk"] .card--brand {
+  border-color: color-mix(in srgb, var(--on-brand) 34%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--on-brand) 14%, transparent),
+    0 0 34px -14px var(--cyber-glow);
+}
+
+:root[data-scheme="cyberpunk"] .card--danger {
+  border-color: var(--danger);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--danger) 22%, transparent),
+    0 0 26px -16px color-mix(in srgb, var(--danger) 55%, transparent);
+}
+
+/* Coins HUD : deux repères cyan en haut à gauche, deux magenta en bas à droite. */
+:root[data-scheme="cyberpunk"] .card::before {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--cyber-cyan), var(--cyber-cyan)) left top / 12px 1px no-repeat,
+    linear-gradient(var(--cyber-cyan), var(--cyber-cyan)) left top / 1px 12px no-repeat,
+    linear-gradient(var(--cyber-magenta), var(--cyber-magenta)) right bottom / 12px 1px no-repeat,
+    linear-gradient(var(--cyber-magenta), var(--cyber-magenta)) right bottom / 1px 12px no-repeat;
+  opacity: 0.72;
+}
+
+:root[data-scheme="cyberpunk"] .card--brand::before {
+  background:
+    linear-gradient(var(--on-brand), var(--on-brand)) left top / 12px 1px no-repeat,
+    linear-gradient(var(--on-brand), var(--on-brand)) left top / 1px 12px no-repeat,
+    linear-gradient(var(--cyber-magenta), var(--cyber-magenta)) right bottom / 12px 1px no-repeat,
+    linear-gradient(var(--cyber-magenta), var(--cyber-magenta)) right bottom / 1px 12px no-repeat;
+}
+
+:root[data-scheme="cyberpunk"] .card--danger::before {
+  background:
+    linear-gradient(var(--danger), var(--danger)) left top / 12px 1px no-repeat,
+    linear-gradient(var(--danger), var(--danger)) left top / 1px 12px no-repeat,
+    linear-gradient(var(--danger), var(--danger)) right bottom / 12px 1px no-repeat,
+    linear-gradient(var(--danger), var(--danger)) right bottom / 1px 12px no-repeat;
+}
+
+/* Actions : rectangulaires, avec un halo qui ne dépend pas d'une image. */
+:root[data-scheme="cyberpunk"] .btn {
+  border-radius: 8px;
+  box-shadow: 0 0 18px -10px var(--cyber-glow);
+}
+
+:root[data-scheme="cyberpunk"] .btn:hover:not(:disabled) {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--on-brand) 22%, transparent),
+    0 0 22px -8px var(--cyber-glow);
+}
+
+:root[data-scheme="cyberpunk"] .btn--ghost {
+  border: 1px solid var(--cyber-line);
+  box-shadow: none;
+}
+
+:root[data-scheme="cyberpunk"] .chip {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  letter-spacing: 0.04em;
+}
+
+:root[data-scheme="cyberpunk"] .chip--active {
+  border-color: var(--cyber-line);
+  box-shadow: 0 0 16px -8px var(--cyber-glow);
+}
+
+:root[data-scheme="cyberpunk"] .chip--danger {
+  border-color: color-mix(in srgb, var(--on-danger) 30%, transparent);
+}
+
+:root[data-scheme="cyberpunk"] .field,
+:root[data-scheme="cyberpunk"] .search-field {
+  border: 1px solid var(--cyber-line);
+  border-radius: 8px;
+}
+
+:root[data-scheme="cyberpunk"] .field:focus,
+:root[data-scheme="cyberpunk"] .search-field:focus-within {
+  outline-color: var(--brand);
+  box-shadow: 0 0 18px -8px var(--cyber-glow);
+}
+
+:root[data-scheme="cyberpunk"] .dialog {
+  border-color: var(--cyber-line);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px var(--cyber-glow-soft),
+    0 0 38px -12px var(--cyber-glow);
+}
+
+:root[data-scheme="cyberpunk"] .notice {
+  border: 1px solid var(--cyber-line);
+  border-radius: 8px;
+  box-shadow: 0 0 24px -10px var(--cyber-glow);
+}
+
+:root[data-scheme="cyberpunk"] .scheme-card {
+  border-radius: 10px;
+}
+
+:root[data-scheme="cyberpunk"] .scheme-card--active {
+  box-shadow:
+    0 0 0 2px var(--brand),
+    0 0 20px -8px var(--cyber-glow);
+}
+
+:root[data-scheme="cyberpunk"] ::selection {
+  background: var(--cyber-magenta);
+  color: #ffffff;
+}
+
+:root[data-scheme="cyberpunk"] .stale {
+  border: 1px solid var(--cyber-line);
+  border-radius: 8px;
+}
+
+/* Les raccourcis d'accueil gardent leur rôle par la couleur, mais passent au
+   vocabulaire néon du skin. */
+:root[data-scheme="cyberpunk"] .home-action {
+  border: 1px solid var(--cyber-line);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px var(--cyber-glow-soft),
+    0 0 24px -16px var(--cyber-glow);
+}
+
+:root[data-scheme="cyberpunk"][data-theme="dark"] .home-action--news { --home-tone: #00f0ff; }
+:root[data-scheme="cyberpunk"][data-theme="dark"] .home-action--canteen { --home-tone: #7dff6b; }
+:root[data-scheme="cyberpunk"][data-theme="dark"] .home-action--attendance { --home-tone: #ffb000; }
+:root[data-scheme="cyberpunk"][data-theme="dark"] .home-action--messages { --home-tone: #ff2a6d; }
+
+:root[data-scheme="cyberpunk"][data-theme="light"] .home-action--news { --home-tone: #007a99; }
+:root[data-scheme="cyberpunk"][data-theme="light"] .home-action--canteen { --home-tone: #2f8f00; }
+:root[data-scheme="cyberpunk"][data-theme="light"] .home-action--attendance { --home-tone: #a86400; }
+:root[data-scheme="cyberpunk"][data-theme="light"] .home-action--messages { --home-tone: #c2007a; }
+
+/* L'assistant garde sa surface de lecture calme ; seuls les repères passent
+   au langage HUD. */
+:root[data-scheme="cyberpunk"] .ai-mark {
+  border-radius: 8px;
+  box-shadow: 0 0 18px -7px var(--cyber-glow);
+}
+
+:root[data-scheme="cyberpunk"] .ai-turn--user {
+  border: 1px solid var(--cyber-line);
+  border-radius: 8px;
+}
+
+:root[data-scheme="cyberpunk"] .ai-pulse {
+  box-shadow: 0 0 12px var(--cyber-glow);
+}
+
+:root[data-scheme="cyberpunk"] .ai-jump {
+  border-color: var(--cyber-line);
+  border-radius: 8px;
+  box-shadow: 0 0 22px -10px var(--cyber-glow);
+}
