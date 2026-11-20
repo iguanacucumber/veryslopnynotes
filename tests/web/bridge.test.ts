@@ -125,6 +125,28 @@ describe("pont : progression", () => {
     g.__vsnProgress?.(requestId, JSON.stringify({ phase: "done" }));
     expect(seen).toHaveLength(1);
   });
+
+  test("des compteurs négatifs ou infinis sont ignorés", async () => {
+    stubNative();
+    const seen: Array<{ phase: string; sources?: number; chars?: number }> = [];
+    const promise = call("llm.askHomework", { assignmentId: "a1" }, undefined, undefined, (progress) => {
+      seen.push(progress);
+    });
+    const requestId = nativeCalls[0]!.requestId;
+    const g = globalThis as unknown as {
+      __vsnProgress?: (requestId: string, progressJson: string) => void;
+      __vsnResolve?: (requestId: string, resultJson: string) => void;
+    };
+    // JSON.parse("1e999") donne Infinity : le compteur n'est pas affichable.
+    g.__vsnProgress?.(requestId, '{"phase":"model","sources":1e999,"chars":-4}');
+    g.__vsnProgress?.(requestId, JSON.stringify({ phase: "verify", sources: 2.9 }));
+    expect(seen).toEqual([
+      { phase: "model", sources: undefined, chars: undefined },
+      { phase: "verify", sources: 2, chars: undefined },
+    ]);
+    g.__vsnResolve?.(requestId, '{"ok":true}');
+    await promise;
+  });
 });
 
 describe("pont : identité", () => {
@@ -243,6 +265,32 @@ describe("pont : un rejet natif règle la promesse", () => {
     expect(erreur.code).toBe("unknown");
     expect(erreur.message.trim()).not.toBe("");
     expect(pendingCount()).toBe(0);
+  });
+
+  test("un code inconnu devient `unknown`", async () => {
+    stubNative();
+    const promise = call("resources.load", { key: "grades" });
+    const g = globalThis as unknown as {
+      __vsnReject?: (requestId: string, errorJson: string) => void;
+    };
+    g.__vsnReject?.(nativeCalls[0]!.requestId, JSON.stringify({ code: "autre", message: "Erreur native." }));
+    const erreur = (await promise.catch((e: unknown) => e)) as { code: string; message: string };
+    expect(erreur.code).toBe("unknown");
+    expect(erreur.message).toBe("Erreur native.");
+  });
+
+  test("un code connu sans phrase garde son code et un message de repli", async () => {
+    // `auth_required` ramène à l'appairage : le perdre en `unknown` prive
+    // l'UI de la seule action possible.
+    stubNative();
+    const promise = call("resources.load", { key: "grades" });
+    const g = globalThis as unknown as {
+      __vsnReject?: (requestId: string, errorJson: string) => void;
+    };
+    g.__vsnReject?.(nativeCalls[0]!.requestId, JSON.stringify({ code: "auth_required" }));
+    const erreur = (await promise.catch((e: unknown) => e)) as { code: string; message: string };
+    expect(erreur.code).toBe("auth_required");
+    expect(erreur.message.trim()).not.toBe("");
   });
 });
 

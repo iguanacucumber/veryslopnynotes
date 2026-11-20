@@ -227,9 +227,35 @@ export interface ResourceResult {
   cause?: "network" | "offline" | "other";
 }
 
+export const BRIDGE_ERROR_CODES = [
+  "auth_required",
+  "bad_request",
+  "consent",
+  "unavailable",
+  "unknown",
+  "stale_session",
+] as const;
+
+export type BridgeErrorCode = (typeof BRIDGE_ERROR_CODES)[number];
+
 export interface BridgeError {
-  code: "auth_required" | "bad_request" | "consent" | "unavailable" | "unknown" | "stale_session";
+  code: BridgeErrorCode;
   message: string;
+}
+
+export function isBridgeErrorCode(v: unknown): v is BridgeErrorCode {
+  return typeof v === "string" && (BRIDGE_ERROR_CODES as readonly string[]).includes(v);
+}
+
+/** Rejet natif exploitable : code connu et message affichable. */
+export function isBridgeError(v: unknown): v is BridgeError {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  return (
+    isBridgeErrorCode(r["code"]) &&
+    typeof r["message"] === "string" &&
+    r["message"].trim().length > 0
+  );
 }
 
 export class BridgeCallError extends Error {

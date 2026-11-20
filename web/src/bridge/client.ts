@@ -3,6 +3,7 @@ import {
   BridgeCallError,
   DEFAULT_TIMEOUT_MS,
   MAX_PARALLEL_READS,
+  isBridgeErrorCode,
   resourceTimeoutMs,
   type AiConsentResult,
   type AiContextSourceMeta,
@@ -80,8 +81,14 @@ function installCallbacks(): void {
         if (typeof parsed.phase !== "string" || !parsed.phase.trim()) return;
         handler({
           phase: parsed.phase.slice(0, 32),
-          sources: typeof parsed.sources === "number" ? parsed.sources : undefined,
-          chars: typeof parsed.chars === "number" ? parsed.chars : undefined,
+          sources:
+            typeof parsed.sources === "number" && Number.isFinite(parsed.sources) && parsed.sources >= 0
+              ? Math.trunc(parsed.sources)
+              : undefined,
+          chars:
+            typeof parsed.chars === "number" && Number.isFinite(parsed.chars) && parsed.chars >= 0
+              ? Math.trunc(parsed.chars)
+              : undefined,
         });
       } catch {
         // Une étape illisible n'interrompt pas l'appel en cours.
@@ -109,8 +116,15 @@ function installCallbacks(): void {
     window.clearTimeout(entry.timer);
     let error: BridgeError = { code: "unknown", message: "erreur native" };
     try {
-      const parsed = JSON.parse(errorJson) as Partial<BridgeError>;
-      if (parsed.code && parsed.message) error = parsed as BridgeError;
+      const parsed: unknown = JSON.parse(errorJson);
+      if (typeof parsed === "object" && parsed !== null) {
+        const r = parsed as Record<string, unknown>;
+        // Le code connu est conservé même si la phrase manque : l'UI traite
+        // `auth_required` et `unavailable` différemment.
+        const code = isBridgeErrorCode(r["code"]) ? r["code"] : "unknown";
+        const message = typeof r["message"] === "string" ? r["message"].trim().slice(0, 200) : "";
+        error = { code, message: message || "erreur native" };
+      }
     } catch {
       // garde le repli
     }
