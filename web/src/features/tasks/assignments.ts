@@ -77,7 +77,7 @@ const MAX_LESSON_EXCERPT = 8000;
 // tout autre schéma, chemin absolu ou URL est rejeté.
 const HOMEWORK_REF = /^homework:[A-Za-z0-9._:-]+$/;
 
-const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
 
 function text(value: unknown, max = MAX_DESCRIPTION): string {
   if (typeof value !== "string") return "";
@@ -93,6 +93,19 @@ function record(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
+}
+
+/** Première occurrence de chaque id, dans l'ordre du payload et bornée. */
+function uniqueById<T extends { id: string }>(items: readonly T[], max: number): T[] {
+  const out: T[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    if (out.length >= max) break;
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    out.push(item);
+  }
+  return out;
 }
 
 // --- Dates -----------------------------------------------------------------
@@ -247,7 +260,7 @@ function parseLesson(raw: unknown): AssignmentLessonContent | null {
   const lesson: AssignmentLessonContent = {
     title: text(o["title"], MAX_LESSON_TITLE),
     excerpt: text(o["excerpt"], MAX_LESSON_EXCERPT),
-    attachments,
+    attachments: uniqueById(attachments, MAX_ATTACHMENTS),
   };
   if (!lesson.title) return null;
   return lesson;
@@ -298,7 +311,7 @@ export function parseAssignment(raw: unknown): Assignment | null {
     description,
     lessonContent,
     lessonContents,
-    attachments,
+    attachments: uniqueById(attachments, MAX_ATTACHMENTS),
     periodId: optionalText(o["periodId"]),
     weekId: optionalText(o["weekId"]),
   };
@@ -686,6 +699,36 @@ export function assignmentHasAssistantMaterial(
     (assignment.lessonContent?.excerpt.trim() ?? "") !== "" ||
     (assignment.attachments?.length ?? 0) > 0
   );
+}
+
+/**
+ * Pièces jointes du devoir ET de ses cours, sans doublon d'id ni de `ref` :
+ * l'id identifie les rendus React, la `ref` écarte les doublons natifs. Bornée
+ * comme le payload : une pièce jointe de cours ouvre le même CTA qu'une pièce
+ * jointe de devoir.
+ */
+export function allAssignmentAttachments(assignment: Assignment): AssignmentAttachment[] {
+  const lessons =
+    assignment.lessonContents.length > 0
+      ? assignment.lessonContents
+      : assignment.lessonContent
+        ? [assignment.lessonContent]
+        : [];
+  const out: AssignmentAttachment[] = [];
+  const seenIds = new Set<string>();
+  const seenRefs = new Set<string>();
+  const add = (list: readonly AssignmentAttachment[] | undefined) => {
+    for (const attachment of list ?? []) {
+      if (out.length >= MAX_ATTACHMENTS) break;
+      if (seenIds.has(attachment.id) || seenRefs.has(attachment.ref)) continue;
+      seenIds.add(attachment.id);
+      seenRefs.add(attachment.ref);
+      out.push(attachment);
+    }
+  };
+  add(assignment.attachments);
+  for (const lesson of lessons) add(lesson.attachments);
+  return out;
 }
 
 /**

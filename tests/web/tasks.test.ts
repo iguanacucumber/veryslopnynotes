@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
+  allAssignmentAttachments,
   ASSIGNMENTS_MAX_ITEMS,
   assignmentCardText,
   assignmentDate,
@@ -163,9 +164,86 @@ describe("web tâches — parsing défensif", () => {
     expect(parsed?.lessonContents[1]?.attachments?.[0]?.label).toBe("td.pdf");
   });
 
-  test("nettoie les caractères de contrôle et garde le texte comme donnée", () => {    const parsed = parseAssignment({ ...VALID, description: "  <img src=x onerror=alert(1)>\u0007  " });
+  test("nettoie les caractères de contrôle et garde le texte comme donnée", () => {
+    const parsed = parseAssignment({
+      ...VALID,
+      description: "  <img src=x onerror=alert(1)>\u0007\u007F\u0085\u009F  ",
+    });
     expect(parsed?.description).toBe("<img src=x onerror=alert(1)>");
     expect(parsed?.done).toBe(false);
+  });
+
+  test("une pièce jointe en double ne garde que sa première occurrence", () => {
+    const parsed = parseAssignment({
+      ...VALID,
+      attachments: [
+        { id: "att1", label: "sujet.pdf", ref: "homework:1:file:0:att1" },
+        { id: "att1", label: "doublon.pdf", ref: "homework:1:file:0:att1bis" },
+        { id: "att2", label: "annexe.pdf", ref: "homework:1:file:0:att2" },
+      ],
+      lessonContent: {
+        title: "Chapitre 4",
+        excerpt: "Cours.",
+        attachments: [
+          { id: "f1", label: "td.pdf", ref: "homework:0:lesson:1:file:0:f1" },
+          { id: "f1", label: "td-copie.pdf", ref: "homework:0:lesson:1:file:0:f1bis" },
+        ],
+      },
+    });
+    expect(parsed?.attachments.map((item) => item.label)).toEqual(["sujet.pdf", "annexe.pdf"]);
+    expect(parsed?.lessonContent?.attachments?.map((item) => item.label)).toEqual(["td.pdf"]);
+  });
+
+  test("les pièces jointes des cours suivent celles du devoir, sans doublon", () => {
+    const parsed = parseAssignment({
+      ...VALID,
+      attachments: [{ id: "att1", label: "sujet.pdf", ref: "homework:1:file:0:att1" }],
+      lessonContents: [
+        {
+          title: "Chapitre 4",
+          excerpt: "Cours.",
+          attachments: [
+            { id: "att1", label: "sujet.pdf", ref: "homework:1:file:0:att1" },
+            { id: "autre", label: "sujet-copie.pdf", ref: "homework:1:file:0:att1" },
+            { id: "f1", label: "td.pdf", ref: "homework:0:lesson:1:file:0:f1" },
+          ],
+        },
+        {
+          title: "Chapitre 5",
+          excerpt: "Suite.",
+          attachments: [
+            { id: "f2", label: "td2.pdf", ref: "homework:0:lesson:2:file:0:f2" },
+            { id: "f2", label: "td2-bis.pdf", ref: "homework:0:lesson:2:file:0:f2bis" },
+          ],
+        },
+      ],
+    });
+    if (!parsed) throw new Error("devoir attendu");
+    expect(allAssignmentAttachments(parsed).map((item) => item.label)).toEqual([
+      "sujet.pdf",
+      "td.pdf",
+      "td2.pdf",
+    ]);
+  });
+
+  test("les pièces jointes réunies restent bornées", () => {
+    const attachments = Array.from({ length: 10 }, (_, index) => ({
+      id: `att${index}`,
+      label: `fichier-${index}.pdf`,
+      ref: `homework:1:file:0:att${index}`,
+    }));
+    const lessonAttachments = Array.from({ length: 10 }, (_, index) => ({
+      id: `cours${index}`,
+      label: `cours-${index}.pdf`,
+      ref: `homework:0:lesson:1:file:0:cours${index}`,
+    }));
+    const parsed = parseAssignment({
+      ...VALID,
+      attachments,
+      lessonContent: { title: "Chapitre 4", excerpt: "Cours.", attachments: lessonAttachments },
+    });
+    if (!parsed) throw new Error("devoir attendu");
+    expect(allAssignmentAttachments(parsed)).toHaveLength(10);
   });
 
   test("lit les bornes de semaine et dérive le dimanche", () => {

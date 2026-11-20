@@ -21,6 +21,7 @@ import { relativeLongFr, subjectColor, tint } from "../../lib/format";
 import { subjectEmoji } from "../../lib/subjectVisual";
 import type { AiContextSourceMeta } from "../../bridge/types";
 import {
+  allAssignmentAttachments,
   dueLabel,
   isAllDayDue,
   subjectDisplayFr,
@@ -329,6 +330,7 @@ export function HomeworkChat({
   const due = isAllDayDue(assignment.dueDate)
     ? dueLabel(assignment.dueDate)
     : relativeLongFr(assignment.dueDate, now);
+  const attachment = allAssignmentAttachments(assignment)[0];
   const last = state.current;
   const canSend = !state.loading && draft.trim().length > 0;
 
@@ -416,7 +418,7 @@ export function HomeworkChat({
                   onEnableManual={onEnableManual}
                   onOpenSettings={onOpenSettings}
                   onOpenAttachment={onOpenAttachment}
-                  attachment={assignment.attachments[0]}
+                  attachment={attachment}
                   interactive={false}
                 />
               </div>
@@ -440,7 +442,7 @@ export function HomeworkChat({
                 onEnableManual={onEnableManual}
                 onOpenSettings={onOpenSettings}
                 onOpenAttachment={onOpenAttachment}
-                attachment={assignment.attachments[0]}
+                attachment={attachment}
               />
             </div>
 
