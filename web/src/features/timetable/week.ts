@@ -1,11 +1,13 @@
-// Semaine de l'EDT : arithmétique par DATE locale, jamais par 7 × 24 h.
+// Semaine de l'EDT : arithmétique par DATE civile de l'établissement (Paris),
+// jamais par 7 × 24 h. Les `Date` manipulées sont des étiquettes LOCALES à
+// minuit : seule la clé `AAAA-MM-JJ` compte, pas l'instant.
 //
 // Port de la partie « semaine » de `TimetableWeek.kt`. Les 168 h fixes sont le
 // bug connu de l'onglet : une semaine qui traverse un changement d'heure dure
 // 167 h ou 169 h. `addDays` / `startOfWeek` travaillent sur la date, donc le
 // lundi 00:00 reste le lundi 00:00.
 import { addDays, frDayShort, isoDay, parseDate, startOfWeek } from "../../lib/format";
-import type { Lesson } from "../home/parse";
+import { parisDayKeyOf, type Lesson } from "../home/parse";
 
 export interface DayGroup {
   date: Date;
@@ -13,8 +15,29 @@ export interface DayGroup {
   lessons: Lesson[];
 }
 
+const DAY_KEY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+function localNoonOfDayKey(key: string): Date | null {
+  const match = DAY_KEY.exec(key);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const date = new Date(year, month, day, 12);
+  if (date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) return null;
+  return date;
+}
+
+/** Lundi de la semaine de l'établissement (jour civil de Paris), représenté par
+ *  une date LOCALE à minuit : les étiquettes restent des jours civils. */
+export function parisStartOfWeek(base: Date = new Date()): Date {
+  const key = parisDayKeyOf(base.getTime());
+  const noon = key ? localNoonOfDayKey(key) : null;
+  return startOfWeek(noon ?? base);
+}
+
 export function weekStartFrom(offset: number, base: Date = new Date()): Date {
-  return addDays(startOfWeek(base), offset * 7);
+  return addDays(parisStartOfWeek(base), offset * 7);
 }
 
 /** Semaine ± `weeks` par DATE locale, jamais par 7 × 24 h (heure d'été). */
@@ -24,7 +47,13 @@ export function shiftWeeks(weekStart: Date, weeks: number): Date {
 
 /** La semaine affichée est-elle celle de `now` ? (minuit ne la déplace pas) */
 export function isCurrentWeek(weekStart: Date, now: Date = new Date()): boolean {
-  return isoDay(weekStart) === isoDay(startOfWeek(now));
+  return isoDay(weekStart) === isoDay(parisStartOfWeek(now));
+}
+
+/** Semaine publiée dans le hash (`#/calendar?week=AAAA-MM-JJ`) ; une valeur
+ *  absente ou illisible retombe sur `fallback`, sinon la semaine courante. */
+export function weekStartFromParam(value: string | null, fallback?: Date): Date {
+  return startOfWeek(parseDate(value) ?? fallback ?? parisStartOfWeek());
 }
 
 export function weekDays(weekStart: Date): Date[] {
@@ -33,19 +62,28 @@ export function weekDays(weekStart: Date): Date[] {
 
 export function lessonsInWeek(lessons: Lesson[], weekStart: Date): Lesson[] {
   const keys = new Set(weekDays(weekStart).map((date) => isoDay(date)));
-  return lessons.filter((lesson) => keys.has(isoDay(new Date(lesson.start))));
+  return lessons.filter((lesson) => {
+    const key = parisDayKeyOf(lesson.start);
+    return key !== null && keys.has(key);
+  });
 }
 
 /** Sept groupes, jours vides compris : la bande a toujours 7 cases. */
 export function groupDays(lessons: Lesson[], weekStart: Date): DayGroup[] {
+  const buckets = new Map<string, Lesson[]>();
+  for (const lesson of lessons) {
+    const key = parisDayKeyOf(lesson.start);
+    if (!key) continue;
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(lesson);
+    else buckets.set(key, [lesson]);
+  }
   return weekDays(weekStart).map((date) => {
     const key = isoDay(date);
     return {
       date,
       key,
-      lessons: lessons
-        .filter((lesson) => isoDay(new Date(lesson.start)) === key)
-        .sort((a, b) => a.start - b.start),
+      lessons: (buckets.get(key) ?? []).sort((a, b) => a.start - b.start),
     };
   });
 }
@@ -84,12 +122,6 @@ export function highlightOf(
   if (current && lesson.id === current.id) return "current";
   if (next && lesson.id === next.id) return "next";
   return null;
-}
-
-/** Semaine publiée dans le hash (`#/calendar?week=YYYY-MM-DD`) ; une valeur
- *  absente ou illisible retombe sur la semaine de `fallback`. */
-export function weekStartFromParam(value: string | null, fallback: Date = new Date()): Date {
-  return startOfWeek(parseDate(value) ?? fallback);
 }
 
 export function weekQuery(weekStart: Date): string {

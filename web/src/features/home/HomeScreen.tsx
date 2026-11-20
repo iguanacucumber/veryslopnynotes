@@ -223,7 +223,7 @@ export function TasksWidget({
                     <span className="home-task__subject" style={{ color: palette.ink }}>
                       {task.subject}
                     </span>
-                    <span className="home-task__due">{dueLabel(task.due, now)}</span>
+                    <span className="home-task__due">{dueLabel(task.due, now, task.dueRaw)}</span>
                   </div>
                   <div className="home-task__title">{task.title}</div>
                 </div>

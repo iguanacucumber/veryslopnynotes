@@ -132,7 +132,7 @@ export function isAllDayDue(value: unknown): boolean {
   if (typeof value !== "string") return false;
   const raw = value.trim();
   if (!raw) return false;
-  if (DATE_ONLY.test(raw)) return true;
+  if (DATE_ONLY.test(raw)) return assignmentDate(raw) !== null;
   const date = assignmentDate(raw);
   return date !== null && parisClock(date) === "00:00:00";
 }

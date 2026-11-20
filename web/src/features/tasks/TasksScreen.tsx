@@ -34,8 +34,10 @@ import {
   assignmentSections,
   assignmentsInWeek,
   assignmentsMatching,
+  dueLabel,
   homeworkFollowUpQuestion,
   homeworkRefusalText,
+  isAllDayDue,
   isAssignmentsPayloadReadable,
   overdueCount,
   parseAiContext,
@@ -783,7 +785,9 @@ function AssignmentCard({
   const text = assignmentCardText(assignment);
   const subjectBase = subjectColor(assignment.subject);
   const tinted = tint(subjectBase, dark ? 0.3 : -0.3);
-  const due = relativeLongFr(assignment.dueDate, now);
+  const due = isAllDayDue(assignment.dueDate)
+    ? dueLabel(assignment.dueDate)
+    : relativeLongFr(assignment.dueDate, now);
   // Sans consigne ni cours, l'aide TEXTE refuserait avant le modèle. La photo
   // reste disponible : c'est une source à part entière.
   const hasMaterial = assignmentHasAssistantMaterial(assignment, manualReady, lessonReady);

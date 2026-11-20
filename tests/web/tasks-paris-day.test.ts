@@ -8,6 +8,16 @@ import {
   parseAssignmentsPayload,
   weekStartOf,
 } from "../../web/src/features/tasks/assignments";
+import {
+  clockLabel,
+  dueLabel as homeDueLabel,
+  isUpcomingTask,
+  parisDayKeyOf,
+  parseAssignments,
+  parseTimetable,
+} from "../../web/src/features/home/parse";
+import { isoDay } from "../../web/src/lib/format";
+import { lessonsInWeek, parisStartOfWeek } from "../../web/src/features/timetable/week";
 
 const previous = process.env.TZ;
 process.env.TZ = "Pacific/Honolulu";
@@ -51,5 +61,38 @@ describe("web tâches — jour de Paris, appareil ailleurs", () => {
     ).items;
     expect(assignmentsInWeek(items, week).map((item) => item.id)).toEqual(["lundi"]);
     expect(assignmentSections(items, week, now).map((section) => section.id)).toEqual(["today"]);
+  });
+
+  test("une date seule est minuit de Paris, jamais celui de l'appareil", () => {
+    const [task] = parseAssignments(
+      payload([{ id: "jour", subject: "MATHS", title: "À rendre", dueDate: "2026-11-01" }]),
+    );
+    expect(task).toBeDefined();
+    expect(parisDayKeyOf(task!.due)).toBe("2026-11-01");
+    expect(clockLabel(task!.due)).toBe("00:00");
+    // 23:00 à Paris le jour même : la journée entière n'est pas « en retard ».
+    const now = Date.parse("2026-11-01T23:00:00+01:00");
+    expect(isUpcomingTask(task!, now)).toBe(true);
+    expect(homeDueLabel(task!.due, now, task!.dueRaw)).toBe("aujourd’hui");
+  });
+
+  test("un lundi 00:30 de Paris ouvre la semaine même vu de Honolulu", () => {
+    // Dimanche 1er novembre 23:30 UTC = lundi 2 novembre 00:30 à Paris.
+    const base = new Date("2026-11-01T23:30:00Z");
+    const week = parisStartOfWeek(base);
+    expect(isoDay(week)).toBe("2026-11-02");
+    const lessons = parseTimetable(
+      JSON.stringify({
+        entries: [
+          {
+            id: "l1",
+            subject: "MATHS",
+            start: "2026-11-01T23:30:00Z",
+            end: "2026-11-02T00:30:00Z",
+          },
+        ],
+      }),
+    );
+    expect(lessonsInWeek(lessons, week).map((lesson) => lesson.id)).toEqual(["l1"]);
   });
 });
