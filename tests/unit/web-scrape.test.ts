@@ -34,6 +34,8 @@ interface FakeState {
   html: string | null;
   finalUrl: string;
   title: string;
+  /** Valeur bornée lue par `evaluateHandle` ; `undefined` = pas de handle. */
+  titleHandle?: string;
 }
 
 function fakeState(overrides: Partial<FakeState> = {}): FakeState {
@@ -72,6 +74,13 @@ mock.module("playwright", () => ({
             newPage: async () => ({
               url: () => state.finalUrl,
               title: async () => state.title,
+              evaluateHandle:
+                state.titleHandle === undefined
+                  ? undefined
+                  : async () => ({
+                      jsonValue: async () => state.titleHandle,
+                      dispose: async () => {},
+                    }),
               evaluate: async (_fn: unknown, max: number) => {
                 state.contentCalls += 1;
                 if (state.html === null) return await new Promise<string>(() => {});
@@ -229,6 +238,24 @@ describe("page web : contenu et session (#634)", () => {
     stubFetch();
     state = fakeState({ html: "<html><body><script>x()</script></body></html>" });
     expect(await scrapeWebPage({ startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER })).toEqual([]);
+  });
+
+  test("le titre est borné avant le pont CDP, pas après", async () => {
+    stubFetch();
+    state = fakeState({ title: "X".repeat(50_000), titleHandle: "Y".repeat(201) });
+    const docs = await scrapeWebPage({ startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
+    expect(docs[0]?.title).toBe("Y".repeat(200));
+  });
+
+  test("le <title> n'entre pas dans l'extrait lisible", async () => {
+    stubFetch();
+    state = fakeState({
+      title: "Titre",
+      html: "<html><head><title>Secret du titre</title></head><body><p>Texte lisible.</p></body></html>",
+    });
+    const docs = await scrapeWebPage({ startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
+    expect(docs[0]?.excerpt).toContain("Texte lisible");
+    expect(docs[0]?.excerpt).not.toContain("Secret du titre");
   });
 });
 
