@@ -13,6 +13,17 @@ const FR_MONTHS_SHORT = [
 
 /** Une date seule (`YYYY-MM-DD`) est un jour civil : minuit LOCAL. */
 const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+const DATE_PREFIX = /^(\d{4})-(\d{2})-(\d{2})/;
+
+/** `Date.parse` reporte un 30 février au 2 mars : une date civile impossible
+ *  doit être refusée, jamais décalée d'un jour. */
+function validCivilDate(year: number, month: number, day: number): boolean {
+  // `Date.UTC` mappe les années 0-99 sur 1900-1999 : poser l'année après coup
+  // évite de refuser une date ISO pourtant valide.
+  const probe = new Date(Date.UTC(2000, month, day));
+  probe.setUTCFullYear(year);
+  return probe.getUTCFullYear() === year && probe.getUTCMonth() === month && probe.getUTCDate() === day;
+}
 
 /** Instant (ms) d'un ISO du contrat, ou null s'il est illisible. Une date
  *  SEULE est minuit LOCAL (comme le parseur natif), sinon elle glisse d'un
@@ -26,9 +37,18 @@ export function parseInstant(value: string | null | undefined): number | null {
     const year = Number(dateOnly[1]);
     const month = Number(dateOnly[2]) - 1;
     const day = Number(dateOnly[3]);
-    const local = new Date(year, month, day);
-    if (local.getFullYear() !== year || local.getMonth() !== month || local.getDate() !== day) return null;
+    if (!validCivilDate(year, month, day)) return null;
+    const local = new Date(2000, month, day);
+    local.setFullYear(year);
+    local.setHours(0, 0, 0, 0);
     return local.getTime();
+  }
+  const prefix = DATE_PREFIX.exec(raw);
+  if (prefix) {
+    const year = Number(prefix[1]);
+    const month = Number(prefix[2]) - 1;
+    const day = Number(prefix[3]);
+    if (!validCivilDate(year, month, day)) return null;
   }
   const ms = Date.parse(raw);
   return Number.isFinite(ms) ? ms : null;
@@ -85,7 +105,8 @@ export function frDayShort(value: string | Date): string {
 }
 
 export function isoDay(d: Date): string {
-  const y = d.getFullYear();
+  if (Number.isNaN(d.getTime())) return "";
+  const y = String(d.getFullYear()).padStart(4, "0");
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
@@ -144,6 +165,12 @@ export function relativeFr(value: string, now: number = Date.now()): string {
   return frDateShort(value);
 }
 
+/** `Math.round(-1,5)` vaut -1 : sans ce miroir, 90 min à venir diraient
+ *  « dans 1 heure » alors que 90 min passées disent « il y a 2 heures ». */
+function roundRelative(value: number): number {
+  return value < 0 ? -Math.round(-value) : Math.round(value);
+}
+
 /** « il y a 27 jours », « dans 2 heures » : la distance longue de Papillon,
  *  au lieu de la date courte. */
 export function relativeLongFr(
@@ -156,23 +183,26 @@ export function relativeLongFr(
       : value instanceof Date
         ? value.getTime()
         : parseInstant(value);
-  if (millis === null || !Number.isFinite(millis)) return "";
+  if (millis === null || !Number.isFinite(millis) || !Number.isFinite(now)) return "";
   const diff = millis - now;
+  // `Intl.RelativeTimeFormat` lève sur un nombre non fini : la soustraction
+  // peut déborder même avec deux opérandes finis.
+  if (!Number.isFinite(diff)) return "";
   const abs = Math.abs(diff);
   const format = new Intl.RelativeTimeFormat("fr", { numeric: "always" });
-  if (abs < 60_000) return format.format(Math.round(diff / 1_000), "second");
-  if (abs < 3_600_000) return format.format(Math.round(diff / 60_000), "minute");
-  if (abs < 86_400_000) return format.format(Math.round(diff / 3_600_000), "hour");
-  if (abs < 2_592_000_000) return format.format(Math.round(diff / 86_400_000), "day");
-  if (abs < 31_536_000_000) return format.format(Math.round(diff / 2_592_000_000), "month");
-  return format.format(Math.round(diff / 31_536_000_000), "year");
+  if (abs < 60_000) return format.format(roundRelative(diff / 1_000), "second");
+  if (abs < 3_600_000) return format.format(roundRelative(diff / 60_000), "minute");
+  if (abs < 86_400_000) return format.format(roundRelative(diff / 3_600_000), "hour");
+  if (abs < 2_592_000_000) return format.format(roundRelative(diff / 86_400_000), "day");
+  if (abs < 31_536_000_000) return format.format(roundRelative(diff / 2_592_000_000), "month");
+  return format.format(roundRelative(diff / 31_536_000_000), "year");
 }
 
 /** Les payloads peuvent contenir des caractères de contrôle : jamais rendus
- *  bruts. React échappe déjàle HTML ; ceci nettoie seulement le texte. */
+ *  bruts. React échappe déjà le HTML ; ceci nettoie seulement le texte. */
 export function cleanText(value: unknown): string {
   if (typeof value !== "string") return "";
-  return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim();
+  return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, "").trim();
 }
 
 export function asNumber(value: unknown, fallback = 0): number {

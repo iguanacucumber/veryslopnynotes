@@ -20,6 +20,7 @@ import {
   isoDay,
   parseDate,
   parseInstant,
+  relativeLongFr,
   startOfWeek,
   subjectColor,
   tint,
@@ -30,6 +31,7 @@ useParisTz();
 describe("format web", () => {
   test("bornes et nettoyage des payloads", () => {
     expect(cleanText("  a\u0000b  ")).toBe("ab");
+    expect(cleanText("a\u0085b")).toBe("ab");
     expect(cleanText(null)).toBe("");
     expect(asNumber("12,5")).toBe(12.5);
     expect(asNumber("nope", 7)).toBe(7);
@@ -129,8 +131,26 @@ describe("dates web", () => {
     );
   });
 
-  test("parité : format, actualités et fiches de révision rendent la même date", () => {
-    avecTz(OUEST_DE_GREENWICH, () => {
+  test("une date civile impossible n'est jamais reportée", () => {
+    expect(parseInstant("2026-02-30")).toBeNull();
+    expect(parseInstant("2026-02-30T00:00:00Z")).toBeNull();
+    expect(parseInstant("2026-04-31T00:00:00Z")).toBeNull();
+    expect(parseInstant("2024-02-29T00:00:00Z")).not.toBeNull();
+  });
+
+  test("la distance relative arrondit dans les deux sens et ne lève pas sur un infini", () => {
+    const now = Date.parse("2026-10-16T12:00:00Z");
+    expect(relativeLongFr(now + 90 * 60_000, now)).toBe("dans 2 heures");
+    expect(relativeLongFr(now - 90 * 60_000, now)).toBe("il y a 2 heures");
+    expect(relativeLongFr(now, Number.NaN)).toBe("");
+    expect(relativeLongFr(Number.MAX_VALUE, -Number.MAX_VALUE)).toBe("");
+  });
+
+  test("une Date invalide ne fuit pas dans les libellés", () => {
+    expect(isoDay(new Date("nope"))).toBe("");
+  });
+
+  test("parité : format, actualités et fiches de révision rendent la même date", () => {    avecTz(OUEST_DE_GREENWICH, () => {
       const date = "2026-10-16";
       const fiche = { id: "s1", title: "Fiche", subject: "HISTOIRE", date, sources: [], body: "b" };
       expect(jourMois(frDate(date))).toBe("16 octobre");
