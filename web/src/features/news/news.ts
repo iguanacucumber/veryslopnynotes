@@ -1,6 +1,6 @@
 // Actualités : payload -> modèle d'affichage. Le contenu est une DONNÉE, jamais
 // du HTML : ces fonctions ne produisent que des chaînes rendues en nœuds texte.
-import { cleanText, frDateLong } from "../../lib/format";
+import { cleanText, frDateLong, parseInstant } from "../../lib/format";
 
 export const NEWS_MAX_ITEMS = 100;
 export const NEWS_MAX_TITLE = 200;
@@ -100,6 +100,12 @@ export function newsByline(item: NewsItem): string {
   return date ? `Par ${author} · ${date}` : `Par ${author}`;
 }
 
+/** Instant de publication : le tri porte sur l'instant, pas sur la chaîne ISO
+ *  (deux offsets différents ne se comparent pas lexicographiquement). */
+function publishedMillis(item: NewsItem | undefined): number {
+  return item ? (parseInstant(item.publishedAt) ?? Number.NEGATIVE_INFINITY) : Number.NEGATIVE_INFINITY;
+}
+
 /** Groupes par catégorie, du plus récent au plus ancien ; à date égale,
  *  l'identifiant départage pour que deux rendus soient identiques. */
 export function newsGroups(items: NewsItem[]): NewsGroup[] {
@@ -113,18 +119,16 @@ export function newsGroups(items: NewsItem[]): NewsGroup[] {
   return [...buckets.entries()]
     .map(([category, group]) => ({
       category,
-      items: [...group].sort((a, b) =>
-        a.publishedAt === b.publishedAt
-          ? a.id.localeCompare(b.id)
-          : a.publishedAt < b.publishedAt
-            ? 1
-            : -1,
-      ),
+      items: [...group].sort((a, b) => {
+        const am = publishedMillis(a);
+        const bm = publishedMillis(b);
+        return am === bm ? a.id.localeCompare(b.id) : bm - am;
+      }),
     }))
     .sort((a, b) => {
-      const left = a.items[0]?.publishedAt ?? "";
-      const right = b.items[0]?.publishedAt ?? "";
-      return left === right ? 0 : left < right ? 1 : -1;
+      const left = publishedMillis(a.items[0]);
+      const right = publishedMillis(b.items[0]);
+      return left === right ? 0 : right - left;
     });
 }
 

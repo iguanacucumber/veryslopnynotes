@@ -122,6 +122,35 @@ describe("web actualités", () => {
     expect(groups[0]?.items.map((i) => i.id)).toEqual(["c", "a"]);
   });
 
+  test("trie par instant réel, pas par chaîne ISO", () => {
+    const groups = newsGroups(
+      parseNewsPayload(
+        JSON.stringify({
+          news: [
+            newsItem({ id: "a", publishedAt: "2026-10-10T10:00:00.000+05:00" }),
+            newsItem({ id: "b", publishedAt: "2026-10-10T06:00:00.000Z" }),
+          ],
+        }),
+      ),
+    );
+    // « a » est plus récent en chaîne, mais « b » l'est en instant (06:00Z > 05:00Z).
+    expect(groups[0]?.items.map((i) => i.id)).toEqual(["b", "a"]);
+  });
+
+  test("à instant égal, l’identifiant départage", () => {
+    const groups = newsGroups(
+      parseNewsPayload(
+        JSON.stringify({
+          news: [
+            newsItem({ id: "b", publishedAt: "2026-10-10T06:00:00.000Z" }),
+            newsItem({ id: "a", publishedAt: "2026-10-10T08:00:00.000+02:00" }),
+          ],
+        }),
+      ),
+    );
+    expect(groups[0]?.items.map((i) => i.id)).toEqual(["a", "b"]);
+  });
+
   test("date longue française, vide si illisible", () => {
     expect(newsDateLabel("2026-10-16T12:00:00.000Z")).toContain("octobre 2026");
     expect(newsDateLabel("pas une date")).toBe("");
