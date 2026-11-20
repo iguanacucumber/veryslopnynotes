@@ -314,7 +314,8 @@ export function parseParticipants(payload: string | null): string[] {
   return out.slice(0, MAX_PARTICIPANTS);
 }
 
-export function parseRecipients(payload: string | null): DiscussionRecipient[] {  const root = payloadRoot(payload);
+export function parseRecipients(payload: string | null): DiscussionRecipient[] {
+  const root = payloadRoot(payload);
   if (!root) return [];
   const out: DiscussionRecipient[] = [];
   for (const raw of arrayOf(root, "recipients")) {
@@ -332,6 +333,13 @@ export function parseRecipients(payload: string | null): DiscussionRecipient[] {
     });
   }
   return out;
+}
+
+/** Un payload sans liste de destinataires n'est PAS « personne publié » (I14).
+ *  `null` = aucun payload, traité à part par l'appelant. */
+export function isRecipientsPayloadReadable(payload: string | null): boolean {
+  const root = payloadRoot(payload);
+  return root !== null && (Array.isArray(root["recipients"]) || Array.isArray(root["items"]));
 }
 
 /** Millis du fil pour le tri : `lastMessageAt`, sinon `updatedAt` ; null quand
@@ -383,6 +391,7 @@ export function isRead(d: Discussion): boolean {
 }
 
 export function unreadTotalLabel(count: number): string {
+  if (count <= 0) return "0 non lu";
   return count > 1 ? `${count} non lus` : "1 non lu";
 }
 

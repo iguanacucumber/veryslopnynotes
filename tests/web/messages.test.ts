@@ -11,6 +11,7 @@ import { ConversationListScreen, NewDiscussionScreen, ThreadScreen } from "../..
 import { readBridgeSource } from "../unit/fixtures/bridge-source";
 import {
   isMessagesPayloadReadable,
+  isRecipientsPayloadReadable,
   MESSAGE_WINDOW,
   mergeEnrichedDiscussions,
   mergeOlderMessages,
@@ -20,6 +21,7 @@ import {
   remainingMessages,
   threadPageStart,
   threadPageTotal,
+  unreadTotalLabel,
   visibleMessages,
   type Discussion,
   type DiscussionMessage,
@@ -463,9 +465,24 @@ describe("messagerie : une erreur n'est jamais un état vide (#918)", () => {
     const start = route.indexOf("const loadRecipients");
     const end = route.indexOf("useEffect(", start);
     const block = route.slice(start, end);
-    expect(block).toContain("isMessagesPayloadReadable(result.payload)");
+    expect(block).toContain("isRecipientsPayloadReadable(result.payload)");
     expect(block).toContain("result.error");
     expect(block).toContain("Destinataires illisibles");
+  });
+
+  test("un payload sans liste de destinataires n'est pas « personne publié » (I14)", () => {
+    expect(isRecipientsPayloadReadable(null)).toBe(false);
+    expect(isRecipientsPayloadReadable("pas du json")).toBe(false);
+    expect(isRecipientsPayloadReadable("{}")).toBe(false);
+    expect(isRecipientsPayloadReadable('{"recipients":"nope"}')).toBe(false);
+    expect(isRecipientsPayloadReadable('{"recipients":[]}')).toBe(true);
+    expect(isRecipientsPayloadReadable('{"items":[]}')).toBe(true);
+  });
+
+  test("le compteur de non-lus ne dit pas « 1 non lu » à zéro", () => {
+    expect(unreadTotalLabel(0)).toBe("0 non lu");
+    expect(unreadTotalLabel(1)).toBe("1 non lu");
+    expect(unreadTotalLabel(3)).toBe("3 non lus");
   });
 });
 
