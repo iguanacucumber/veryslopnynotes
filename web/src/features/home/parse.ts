@@ -449,21 +449,15 @@ function addWeighted(sum: Sum, grade: Grade): void {
   }
 }
 
-function sumOf(grades: Grade[]): Sum | null {
-  const sum: Sum = { value: 0, outOf: 0 };
-  for (const grade of grades) {
-    if (!gradeUsable(grade)) continue;
-    if (grade.bonus) {
-      const corrected = grade.value - grade.scale / 2;
-      if (corrected >= 0) {
-        sum.value += corrected;
-        sum.outOf += 1;
-      }
-      continue;
-    }
-    addWeighted(sum, grade);
+function contributionOf(grade: Grade): Sum | null {
+  if (!gradeUsable(grade)) return null;
+  if (grade.bonus) {
+    const corrected = grade.value - grade.scale / 2;
+    return corrected >= 0 ? { value: corrected, outOf: 1 } : { value: 0, outOf: 0 };
   }
-  return sum.outOf > 0 ? sum : null;
+  const sum: Sum = { value: 0, outOf: 0 };
+  addWeighted(sum, grade);
+  return sum;
 }
 
 function ratioTo20(sum: Sum | null): number | null {
@@ -472,19 +466,39 @@ function ratioTo20(sum: Sum | null): number | null {
   return Number.isFinite(result) ? result : null;
 }
 
-/** Moyenne d'une matière : facultatives retenues seulement si elles améliorent. */
+/** Moyenne d'une matière : facultatives retenues seulement si elles améliorent
+ *  la moyenne calculée SANS elles, comme `subjectAverageInner` d'`Averages.kt`.
+ *  Chaque contribution est calculée une fois : le payload peut porter 400 notes. */
 export function subjectAverage(grades: Grade[]): number | null {
-  const required = grades.filter((grade) => !grade.optional);
-  let chosen = required;
-  let best = ratioTo20(sumOf(required));
-  for (const optional of grades.filter((grade) => grade.optional)) {
-    const candidate = ratioTo20(sumOf([...chosen, optional]));
-    if (candidate !== null && (best === null || candidate > best)) {
-      chosen = [...chosen, optional];
-      best = candidate;
-    }
+  const contributions = grades.map(contributionOf);
+  const full: Sum = { value: 0, outOf: 0 };
+  for (const contribution of contributions) {
+    if (!contribution) continue;
+    full.value += contribution.value;
+    full.outOf += contribution.outOf;
   }
-  return best;
+  const withAll = ratioTo20(full);
+  if (withAll === null) return null;
+  const excluded = new Set<number>();
+  for (let index = 0; index < grades.length; index++) {
+    const grade = grades[index];
+    const contribution = contributions[index];
+    if (!grade || !contribution || !grade.optional) continue;
+    const without = ratioTo20({
+      value: full.value - contribution.value,
+      outOf: full.outOf - contribution.outOf,
+    });
+    if ((without ?? -1) > withAll) excluded.add(index);
+  }
+  if (excluded.size === 0) return withAll;
+  const retained: Sum = { value: full.value, outOf: full.outOf };
+  for (const index of excluded) {
+    const contribution = contributions[index];
+    if (!contribution) continue;
+    retained.value -= contribution.value;
+    retained.outOf -= contribution.outOf;
+  }
+  return ratioTo20(retained);
 }
 
 export interface GeneralAverage {
