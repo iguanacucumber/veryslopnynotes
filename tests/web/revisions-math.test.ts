@@ -38,6 +38,16 @@ describe("formules : parseur TeX borné", () => {
     expect(html).toContain("<mtd>");
   });
 
+  test("cases n'ouvre qu'une accolade, sans délimiteur fermant", () => {
+    const html = render("\\begin{cases}x&1\\\\0&2\\end{cases}", true);
+    expect(html.match(/<mo[^>]*>\{<\/mo>/g)).toHaveLength(1);
+    expect(html).not.toContain("}");
+
+    const pmatrix = render("\\begin{pmatrix}1&2\\end{pmatrix}", true);
+    expect(pmatrix.match(/<mo[^>]*>\(<\/mo>/g)).toHaveLength(1);
+    expect(pmatrix.match(/<mo[^>]*>\)<\/mo>/g)).toHaveLength(1);
+  });
+
   test("une taille absurde est coupée, sans boucle ni exception", () => {
     const huge = parseMath("x".repeat(MAX_MATH_CHARS + 5_000));
     const text = mathToText(huge);

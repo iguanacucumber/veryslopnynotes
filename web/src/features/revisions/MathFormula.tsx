@@ -103,14 +103,14 @@ function render(node: MathNode, display: boolean, key: string): ReactNode {
         ),
       );
       if (node.mode === "matrix" || node.mode === "aligned") return table;
-      const open = node.mode === "cases" || node.mode === "pmatrix" ? "(" : node.mode === "bmatrix" ? "[" : "|";
-      const close = node.mode === "cases" || node.mode === "pmatrix" ? ")" : node.mode === "bmatrix" ? "]" : "|";
+      const open = node.mode === "cases" ? "{" : node.mode === "pmatrix" ? "(" : node.mode === "bmatrix" ? "[" : "|";
+      const close = node.mode === "cases" ? "" : node.mode === "pmatrix" ? ")" : node.mode === "bmatrix" ? "]" : "|";
       return html(
         "mrow",
         { key },
         html("mo", { stretchy: "true", fence: "true" }, open),
         table,
-        html("mo", { stretchy: "true", fence: "true" }, close),
+        close ? html("mo", { stretchy: "true", fence: "true" }, close) : null,
       );
     }
   }
