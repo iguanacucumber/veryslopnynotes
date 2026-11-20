@@ -1,13 +1,6 @@
 import { Fragment, useCallback, useMemo, type CSSProperties } from "react";
 import { useSearchParams } from "react-router-dom";
-import {
-  frDateShort,
-  frDay,
-  isSameDay,
-  isoDay,
-  startOfWeek,
-  weeksBetween,
-} from "../../lib/format";
+import { frDateShort, frDay, isoDay, weeksBetween } from "../../lib/format";
 import { subjectPalette, type SubjectPalette } from "../../lib/subjectVisual";
 import { useApp, useResource } from "../../ui/AppContext";
 import {
@@ -20,13 +13,14 @@ import {
 } from "../../ui/components";
 import { IconCalendar, IconPin, IconUser, IconWarning } from "../../ui/icons";
 import {
+  civilDayOffset,
   clockLabel,
   countdownFr,
-  dayLabel,
   durationLabel,
   isCancelled,
   isMoved,
   movedHint,
+  parisDayKeyOf,
   parseTimetable,
   timeRange,
   type Lesson,
@@ -38,6 +32,7 @@ import {
   highlightOf,
   lessonsInWeek,
   nextLesson,
+  parisStartOfWeek,
   shiftWeeks,
   shortDay,
   weekDays,
@@ -135,14 +130,14 @@ export default function TimetableScreen() {
   // La semaine vit dans l'URL : en-tête, écran, retour et restauration Android
   // lisent la même valeur. Sans paramètre, on ancre la semaine courante au
   // montage (minuit ne doit pas déplacer la semaine affichée).
-  const initialWeek = useMemo(() => startOfWeek(new Date()), []);
+  const initialWeek = useMemo(() => parisStartOfWeek(), []);
   const weekStart = useMemo(
     () => weekStartFromParam(searchParams.get("week"), initialWeek),
     [searchParams, initialWeek],
   );
-  const weeks = useMemo(() => weeksBetween(weekStart, new Date(now)), [weekStart, now]);
+  const weeks = useMemo(() => weeksBetween(weekStart, parisStartOfWeek(new Date(now))), [weekStart, now]);
   const showWeek = useCallback(
-    (next: Date) => setSearchParams({ week: isoDay(startOfWeek(next)) }),
+    (next: Date) => setSearchParams({ week: isoDay(next) }),
     [setSearchParams],
   );
 
@@ -153,7 +148,7 @@ export default function TimetableScreen() {
       now={now}
       weeks={weeks}
       onShift={(delta) => showWeek(shiftWeeks(weekStart, delta))}
-      onToday={() => showWeek(startOfWeek(new Date(now)))}
+      onToday={() => showWeek(parisStartOfWeek(new Date(now)))}
     />
   );
 }
@@ -184,7 +179,7 @@ function WeekView({
   const focus = showingCurrentWeek ? current ?? next : null;
   const focusPalette = focus ? cancelledPalette(focus, dark) : null;
   const days = groups.filter((group) => group.lessons.length > 0);
-  const today = new Date(now);
+  const todayKey = parisDayKeyOf(now);
   const loaded = Boolean(resource.payload);
   const empty = !resource.loading && weekLessons.length === 0;
 
@@ -269,9 +264,9 @@ function WeekView({
       {weekLessons.length > 0 ? (
         <div className="tt-week-strip" role="group" aria-label="Aperçu de la semaine">
           {weekDays(weekStart).map((date) => {
-            const group = groups.find((item) => isSameDay(item.date, date));
+            const group = groups.find((item) => item.key === isoDay(date));
             const count = group?.lessons.length ?? 0;
-            const isToday = isSameDay(date, today);
+            const isToday = isoDay(date) === todayKey;
             return (
               <div
                 className={`tt-day-chip${isToday ? " tt-day-chip--today" : ""}${
@@ -296,7 +291,7 @@ function WeekView({
               {capitalize(frDay(group.date))}
             </h2>
             <span
-              className={`tt-day__pill${isSameDay(group.date, today) ? " tt-day__pill--today" : ""}`}
+              className={`tt-day__pill${group.key === todayKey ? " tt-day__pill--today" : ""}`}
             >
               {frDateShort(group.date.toISOString())}
             </span>
@@ -337,7 +332,11 @@ function cancelledPalette(lesson: Lesson, dark: boolean): SubjectPalette {
 }
 
 function daySubtitle(date: Date, now: number): string {
-  const label = dayLabel(date.getTime(), now);
-  if (label === "Aujourd’hui" || label === "Demain" || label === "Hier") return label;
+  const today = parisDayKeyOf(now);
+  if (!today) return "";
+  const offset = civilDayOffset(isoDay(date), today);
+  if (offset === 0) return "Aujourd’hui";
+  if (offset === 1) return "Demain";
+  if (offset === -1) return "Hier";
   return "";
 }

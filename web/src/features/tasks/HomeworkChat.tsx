@@ -21,6 +21,8 @@ import { relativeLongFr, subjectColor, tint } from "../../lib/format";
 import { subjectEmoji } from "../../lib/subjectVisual";
 import type { AiContextSourceMeta } from "../../bridge/types";
 import {
+  dueLabel,
+  isAllDayDue,
   subjectDisplayFr,
   type Assignment,
   type AssignmentAttachment,
@@ -324,7 +326,9 @@ export function HomeworkChat({
   ]);
   const { dark } = useApp();
   const tinted = tint(subjectColor(assignment.subject), dark ? 0.3 : -0.3);
-  const due = relativeLongFr(assignment.dueDate, now);
+  const due = isAllDayDue(assignment.dueDate)
+    ? dueLabel(assignment.dueDate)
+    : relativeLongFr(assignment.dueDate, now);
   const last = state.current;
   const canSend = !state.loading && draft.trim().length > 0;
 

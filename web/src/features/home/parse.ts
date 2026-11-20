@@ -8,7 +8,6 @@ import {
   formatNote,
   frDateShort,
   frDay,
-  frRange,
   parseInstant,
 } from "../../lib/format";
 import { subjectKey } from "../../lib/subject";
@@ -73,6 +72,125 @@ export function millisOf(value: unknown): number | null {
     return null;
   }
   return parseInstant(text);
+}
+
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+const PARIS_DAY = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Paris",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+const PARIS_CLOCK = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/Paris",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
+function intlPart(
+  format: Intl.DateTimeFormat,
+  date: Date,
+  type: "year" | "month" | "day" | "hour" | "minute" | "second",
+): string {
+  return format.formatToParts(date).find((part) => part.type === type)?.value ?? "";
+}
+
+/** Jour civil de l'établissement (Europe/Paris) d'un instant. */
+export function parisDayKeyOf(millis: number): string | null {
+  const date = new Date(millis);
+  if (Number.isNaN(date.getTime())) return null;
+  const year = intlPart(PARIS_DAY, date, "year");
+  const month = intlPart(PARIS_DAY, date, "month");
+  const day = intlPart(PARIS_DAY, date, "day");
+  return year && month && day ? `${year}-${month}-${day}` : null;
+}
+
+function parisClockOf(millis: number): string {
+  const date = new Date(millis);
+  if (Number.isNaN(date.getTime())) return "";
+  const hour = intlPart(PARIS_CLOCK, date, "hour");
+  const minute = intlPart(PARIS_CLOCK, date, "minute");
+  const second = intlPart(PARIS_CLOCK, date, "second");
+  return hour && minute && second ? `${hour}:${minute}:${second}` : "";
+}
+
+/** Écart en jours civils entre deux clés `AAAA-MM-JJ` (étiquettes, pas instants). */
+export function civilDayOffset(target: string, now: string): number {
+  const a = Date.parse(`${target}T00:00:00Z`);
+  const b = Date.parse(`${now}T00:00:00Z`);
+  return Number.isFinite(a) && Number.isFinite(b) ? Math.round((a - b) / 86_400_000) : Number.NaN;
+}
+
+/** Date locale à MIDI du jour civil : le libellé ne glisse pas d'un jour. */
+function localNoonOfDayKey(key: string): Date | null {
+  const match = DATE_ONLY.exec(key);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const date = new Date(year, month, day, 12);
+  if (date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) return null;
+  return date;
+}
+
+function frDayOfKey(key: string): string {
+  const date = localNoonOfDayKey(key);
+  return date ? frDay(date) : "";
+}
+
+/** Minuit de l'établissement pour un jour civil : une date seule du contrat est
+ *  un jour de Paris, pas minuit dans le fuseau de l'appareil. */
+function parisMidnightOfDayKey(key: string): number | null {
+  const date = localNoonOfDayKey(key);
+  if (!date) return null;
+  const midnightUtc = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 0);
+  const offset = parisOffsetMinutesAt(midnightUtc);
+  if (!Number.isFinite(offset)) return null;
+  let candidate = midnightUtc - offset * 60_000;
+  // Une bascule DST peut changer l'offset entre minuit UTC et minuit local.
+  const corrected = parisOffsetMinutesAt(candidate);
+  if (Number.isFinite(corrected) && corrected !== offset) {
+    candidate = midnightUtc - corrected * 60_000;
+  }
+  return candidate;
+}
+
+function parisOffsetMinutesAt(millis: number): number {
+  const date = new Date(millis);
+  if (Number.isNaN(date.getTime())) return Number.NaN;
+  const year = Number(intlPart(PARIS_DAY, date, "year"));
+  const month = Number(intlPart(PARIS_DAY, date, "month"));
+  const day = Number(intlPart(PARIS_DAY, date, "day"));
+  const hour = Number(intlPart(PARIS_CLOCK, date, "hour"));
+  const minute = Number(intlPart(PARIS_CLOCK, date, "minute"));
+  const second = Number(intlPart(PARIS_CLOCK, date, "second"));
+  const wall = Date.UTC(year, month - 1, day, hour, minute, second);
+  return (wall - date.getTime()) / 60_000;
+}
+
+function frDateShortOfKey(key: string): string {
+  const date = localNoonOfDayKey(key);
+  return date ? frDateShort(date.toISOString()) : "";
+}
+
+/** Date seule, ou minuit Paris (`PourLe` sans heure) : journée entière. */
+function allDayDayKey(raw: string): string | null {
+  const text = raw.trim();
+  if (!text) return null;
+  if (DATE_ONLY.test(text)) return millisOf(text) === null ? null : text;
+  const millis = millisOf(text);
+  if (millis === null || parisClockOf(millis) !== "00:00:00") return null;
+  return parisDayKeyOf(millis);
+}
+
+/** La forme brute fait foi ; sinon un minuit Paris reste une journée entière,
+ *  même quand l'appelant n'a que l'instant (même règle que `isAllDayDue`). */
+function allDayKeyOf(due: number, raw: string): string | null {
+  return allDayDayKey(raw) ?? (parisClockOf(due) === "00:00:00" ? parisDayKeyOf(due) : null);
 }
 
 function numberOrNull(value: unknown): number | null {
@@ -165,6 +283,7 @@ export interface Assignment {
   id: string;
   subject: string;
   title: string;
+  /** Une date seule est minuit de l'établissement (Paris), pas celui de l'appareil. */
   due: number;
   dueRaw: string;
   done: boolean;
@@ -182,7 +301,10 @@ export function parseAssignments(payload: string | null): Assignment[] {
     if (!row) continue;
     const subject = boundedText(row["subject"], 100);
     const title = boundedText(row["title"], 200);
-    const due = millisOf(row["dueDate"]);
+    const dueRaw = boundedText(row["dueDate"], 64);
+    const due = DATE_ONLY.test(dueRaw)
+      ? parisMidnightOfDayKey(dueRaw)
+      : millisOf(row["dueDate"]);
     if (!subject || !title || due === null) continue;
     const id = boundedText(row["id"], 64) || `assignment-${index}`;
     if (seen.has(id)) continue;
@@ -192,7 +314,7 @@ export function parseAssignments(payload: string | null): Assignment[] {
       subject,
       title,
       due,
-      dueRaw: boundedText(row["dueDate"], 64),
+      dueRaw,
       done: row["done"] === true,
     });
   }
@@ -205,7 +327,13 @@ export function isPendingTask(task: Assignment): boolean {
 }
 
 export function isUpcomingTask(task: Assignment, now: number): boolean {
-  return isPendingTask(task) && task.due > now;
+  if (!isPendingTask(task)) return false;
+  const allDay = allDayKeyOf(task.due, task.dueRaw);
+  if (allDay) {
+    const today = parisDayKeyOf(now);
+    return today !== null && civilDayOffset(allDay, today) >= 0;
+  }
+  return task.due > now;
 }
 
 export function pendingAssignments(
@@ -496,47 +624,47 @@ export function shouldAnimateOnMount(openedAt: number, mountedAt: number): boole
   return mountedAt - openedAt <= ENTRANCE_WINDOW_MS;
 }
 
-/** Écart en JOURS locaux (pas en heures : le changement d'heure ne compte pas). */
+/** Écart en JOURS civils de l'établissement (pas en heures : le changement
+ *  d'heure ne compte pas, et le jour est celui de Paris). */
 export function dayOffset(target: number, now: number): number {
-  const a = new Date(target);
-  const b = new Date(now);
-  const utcA = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
-  const utcB = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
-  return Math.round((utcA - utcB) / 86_400_000);
+  const targetKey = parisDayKeyOf(target);
+  const nowKey = parisDayKeyOf(now);
+  if (!targetKey || !nowKey) return Number.NaN;
+  return civilDayOffset(targetKey, nowKey);
 }
 
-/** Heure dans la zone du téléphone, jamais l'heure brute du serveur. */
+/** Heure de l'établissement, jamais l'heure brute du serveur. */
 export function clockLabel(millis: number): string {
-  const date = new Date(millis);
-  if (Number.isNaN(date.getTime())) return "";
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  return parisClockOf(millis).slice(0, 5);
 }
 
 export function timeRange(lesson: Lesson): string {
-  const range = frRange(lesson.startRaw, lesson.endRaw).replace(/\s*[–-]\s*/g, "–");
-  if (range) return range;
   const start = clockLabel(lesson.start);
   const end = clockLabel(lesson.end);
   return start && end && end !== start ? `${start}–${end}` : start;
 }
 
 export function dayLabel(target: number, now: number): string {
-  const offset = dayOffset(target, now);
+  const targetKey = parisDayKeyOf(target);
+  const nowKey = parisDayKeyOf(now);
+  if (!targetKey || !nowKey) return "";
+  const offset = civilDayOffset(targetKey, nowKey);
   if (offset === 0) return "Aujourd’hui";
   if (offset === 1) return "Demain";
   if (offset === -1) return "Hier";
-  const date = new Date(target);
-  const dd = String(date.getDate()).padStart(2, "0");
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  return `${frDay(date)} ${dd}/${mm}`;
+  const dd = targetKey.slice(8, 10);
+  const mm = targetKey.slice(5, 7);
+  return `${frDayOfKey(targetKey)} ${dd}/${mm}`;
 }
 
 export function courseWidgetTitle(first: Lesson | undefined, now: number): string {
   if (!first) return "";
-  const offset = dayOffset(first.start, now);
+  // Un cours commencé hier et encore en cours appartient à AUJOURD'HUI.
+  const reference = first.start <= now && now < first.end ? now : first.start;
+  const offset = dayOffset(reference, now);
   if (offset === 0) return "Aujourd’hui";
   if (offset === 1) return "Demain";
-  return dayLabel(first.start, now);
+  return dayLabel(reference, now);
 }
 
 export function countdownFr(target: number, now: number): string {
@@ -544,11 +672,13 @@ export function countdownFr(target: number, now: number): string {
   const minutes = Math.round((target - now) / 60_000);
   if (minutes <= 1) return "maintenant";
   if (minutes < 60) return `dans ${minutes} min`;
-  const offset = dayOffset(target, now);
+  const targetKey = parisDayKeyOf(target);
+  const nowKey = parisDayKeyOf(now);
+  const offset = targetKey && nowKey ? civilDayOffset(targetKey, nowKey) : Number.NaN;
   if (offset === 0) return `dans ${Math.round(minutes / 60)} h`;
   if (offset === 1) return `demain ${clockLabel(target)}`;
-  if (offset > 1 && offset < 7) return `${frDay(new Date(target))} ${clockLabel(target)}`;
-  return frDateShort(new Date(target).toISOString());
+  if (offset > 1 && offset < 7 && targetKey) return `${frDayOfKey(targetKey)} ${clockLabel(target)}`;
+  return targetKey ? frDateShortOfKey(targetKey) : "";
 }
 
 export function courseCountdown(lesson: Lesson, now: number): string {
@@ -556,13 +686,27 @@ export function courseCountdown(lesson: Lesson, now: number): string {
   return countdownFr(lesson.start, now);
 }
 
-export function dueLabel(due: number, now: number): string {
-  const offset = dayOffset(due, now);
+/** Échéance d'une journée entière (date seule ou minuit Paris) : jamais
+ *  « en retard » avant la fin du jour, et jamais « · 00:00 ». */
+export function dueLabel(due: number, now: number, dueRaw = ""): string {
+  const allDay = allDayKeyOf(due, dueRaw);
+  if (allDay) {
+    const nowKey = parisDayKeyOf(now);
+    const offset = nowKey ? civilDayOffset(allDay, nowKey) : Number.NaN;
+    if (offset < 0) return "en retard";
+    if (offset === 0) return "aujourd’hui";
+    if (offset === 1) return "demain";
+    if (offset < 7) return frDayOfKey(allDay);
+    return frDateShortOfKey(allDay);
+  }
+  const targetKey = parisDayKeyOf(due);
+  const nowKey = parisDayKeyOf(now);
+  const offset = targetKey && nowKey ? civilDayOffset(targetKey, nowKey) : Number.NaN;
   if (offset < 0) return "en retard";
   if (offset === 0) return `aujourd’hui ${clockLabel(due)}`;
   if (offset === 1) return `demain ${clockLabel(due)}`;
-  if (offset < 7) return `${frDay(new Date(due))} ${clockLabel(due)}`;
-  return frDateShort(new Date(due).toISOString());
+  if (offset < 7) return targetKey ? `${frDayOfKey(targetKey)} ${clockLabel(due)}` : "";
+  return targetKey ? frDateShortOfKey(targetKey) : "";
 }
 
 export function durationLabel(millis: number): string {
