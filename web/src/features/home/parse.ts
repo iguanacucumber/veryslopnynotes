@@ -222,6 +222,16 @@ function optionalText(value: unknown): string | null {
   return text || null;
 }
 
+export const TIMETABLE_UNAVAILABLE = "Emploi du temps indisponible : aucune donnée n’a été lue.";
+export const TIMETABLE_UNREADABLE = "Emploi du temps illisible : la donnée n’a pas pu être lue.";
+
+/** Un JSON illisible ou sans liste de cours n'est PAS « aucun cours » (I14).
+ *  `null` = aucun payload, traité à part par l'appelant. */
+export function isTimetablePayloadReadable(payload: string | null): boolean {
+  const root = payloadRoot(payload);
+  return root !== null && (Array.isArray(root["entries"]) || Array.isArray(root["items"]));
+}
+
 /** Cours lisibles, triés par début. Les annulés restent ; un identifiant déjà
  *  vu n'est affiché qu'une fois. */
 export function parseTimetable(payload: string | null): Lesson[] {

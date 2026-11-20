@@ -20,6 +20,7 @@ import {
   historyNote,
   influenceLabel,
   isGradesPayloadReadable,
+  isPeriodsPayloadReadable,
   originLabel,
   parseGradesPayload,
   parsePeriods,
@@ -745,6 +746,15 @@ describe("notes : un cache illisible est une ERREUR, pas un état vide (#537)", 
     expect(isGradesPayloadReadable("{}")).toBe(true);
     expect(isGradesPayloadReadable('{"grades":[]}')).toBe(true);
     expect(isGradesPayloadReadable(null)).toBe(false);
+  });
+
+  test("une période illisible n'est pas « aucune période » (I14)", () => {
+    expect(isPeriodsPayloadReadable("pas du json")).toBe(false);
+    expect(isPeriodsPayloadReadable("[]")).toBe(false);
+    expect(isPeriodsPayloadReadable("{}")).toBe(true);
+    expect(isPeriodsPayloadReadable('{"periods":[]}')).toBe(true);
+    expect(isPeriodsPayloadReadable('{"periods":"nope"}')).toBe(false);
+    expect(isPeriodsPayloadReadable(null)).toBe(false);
   });
 });
 

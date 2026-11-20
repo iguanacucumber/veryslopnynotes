@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useApp, useResource } from "../ui/AppContext";
 import {
   gradesQuery,
+  isPeriodsPayloadReadable,
   parsePeriods,
   type Algorithm,
 } from "../features/grades/model";
@@ -20,6 +21,15 @@ export default function GradesRoute() {
   const gradesResource = useResource("grades", query);
   const periodsResource = useResource("periods");
   const periods = useMemo(() => parsePeriods(periodsResource.payload), [periodsResource.payload]);
+  const periodsError =
+    periodsResource.error ??
+    (!periodsResource.loading
+      ? periodsResource.payload === null
+        ? "Périodes indisponibles : aucune donnée n’a été lue."
+        : !isPeriodsPayloadReadable(periodsResource.payload)
+          ? "Périodes illisibles : la donnée n’a pas pu être lue."
+          : null
+      : null);
 
   return (
     <GradesScreen
@@ -29,7 +39,7 @@ export default function GradesRoute() {
       stale={gradesResource.stale}
       fetchedAt={gradesResource.fetchedAt}
       cause={gradesResource.cause}
-      periodsError={periodsResource.error}
+      periodsError={periodsError}
       algorithm={algorithm}
       periodId={periodId}
       periods={periods}

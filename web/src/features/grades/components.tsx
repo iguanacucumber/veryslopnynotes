@@ -519,8 +519,9 @@ export function GradesScreen({
           {stale && !loading ? (
             <StaleBadge fetchedAt={fetchedAt} cause={cause} onRetry={onRefresh} />
           ) : null}
-          {periodsError ? <span className="grades-caption">{periodsError}</span> : null}
         </div>
+
+        {periodsError ? <ErrorBox message={periodsError} /> : null}
 
         {toolbar ? (
           <>
@@ -545,8 +546,9 @@ export function GradesScreen({
         {stale && !loading ? (
           <StaleBadge fetchedAt={fetchedAt} cause={cause} onRetry={onRefresh} />
         ) : null}
-        {periodsError ? <span className="grades-caption">{periodsError}</span> : null}
       </div>
+
+      {periodsError ? <ErrorBox message={periodsError} /> : null}
 
       {error ? (
         <p className="grades-error-line" role="alert">
