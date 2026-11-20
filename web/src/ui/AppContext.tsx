@@ -18,6 +18,7 @@ import { failureCause, isFreshnessCause, isOnline, type FreshnessCause } from ".
 import { forceReload, type LoadSignature } from "../lib/refresh";
 import { beginLoad, canUseCached, invalidateOnRequestChange, requestId, visibleResource, type ResourceStatus } from "../lib/resource";
 import { cssVarsOf, paletteOf, parseScheme } from "../lib/schemes";
+import { readLocal, writeLocal } from "../lib/storage";
 import { isLargeText, parseTextSize } from "../lib/textScale";
 
 type Theme = "SYSTEM" | "LIGHT" | "DARK";
@@ -87,28 +88,10 @@ function parseTheme(raw: string | null): Theme {
   return raw === "LIGHT" || raw === "DARK" || raw === "SYSTEM" ? raw : "SYSTEM";
 }
 
-/** Le stockage de la WebView peut être absent, plein ou refusé (SecurityError) :
- *  l'état mémoire reste la source, jamais une exception pendant le rendu. */
-function readStored(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function writeStored(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // Quota ou stockage indisponible : le choix reste appliqué en mémoire.
-  }
-}
-
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => parseTheme(readStored("vsn:theme")));
+  const [theme, setThemeState] = useState<Theme>(() => parseTheme(readLocal("vsn:theme")));
   const [systemDark, setSystemDark] = useState(() => matchMedia("(prefers-color-scheme: dark)").matches);
-  const [scheme, setSchemeState] = useState<string>(() => parseScheme(readStored("vsn:scheme")));
+  const [scheme, setSchemeState] = useState<string>(() => parseScheme(readLocal("vsn:scheme")));
   const [textSize, setTextSizeState] = useState<TextSizeChoice>("SYSTEM");
   const [textZoom, setTextZoom] = useState(100);
   const [refreshTick, setRefreshTick] = useState(0);
@@ -176,7 +159,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Le natif est déjà l'écrivain de `app.setTheme` ; ici on ne fait que réparer
   // un cache local effacé par une purge de compte (I16).
   useEffect(() => {
-    if (readStored("vsn:theme") !== null) return;
+    if (readLocal("vsn:theme") !== null) return;
     let alive = true;
     void bridge
       .theme()
@@ -184,7 +167,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (!alive) return;
         const restored = parseTheme(state.theme);
         setThemeState(restored);
-        writeStored("vsn:theme", restored);
+        writeLocal("vsn:theme", restored);
       })
       .catch(() => undefined);
     return () => {
@@ -262,7 +245,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next);
-    writeStored("vsn:theme", next);
+    writeLocal("vsn:theme", next);
     void bridge.setTheme(next).catch(() => undefined);
   }, []);
 
@@ -271,7 +254,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setScheme = useCallback((next: string) => {
     const id = parseScheme(next);
     setSchemeState(id);
-    writeStored("vsn:scheme", id);
+    writeLocal("vsn:scheme", id);
   }, []);
 
   // Le natif reste l'écrivain : il persiste le choix et applique `textZoom`.
