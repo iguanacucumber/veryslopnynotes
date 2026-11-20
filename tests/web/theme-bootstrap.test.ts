@@ -66,13 +66,12 @@ describe("bootstrap du thème", () => {
 
 describe("thème à chaud après le bootstrap", () => {
   test("le stockage absent, plein ou refusé ne casse pas le rendu", () => {
-    // Lectures et écritures passent par un seul point gardé, comme le bootstrap.
-    expect(APP_CONTEXT.match(/localStorage\.getItem/g)).toHaveLength(1);
-    expect(APP_CONTEXT.match(/localStorage\.setItem/g)).toHaveLength(1);
-    expect(APP_CONTEXT).toContain('parseTheme(readStored("vsn:theme"))');
-    expect(APP_CONTEXT).toContain('parseScheme(readStored("vsn:scheme"))');
-    expect(APP_CONTEXT).toContain('writeStored("vsn:theme"');
-    expect(APP_CONTEXT).toContain('writeStored("vsn:scheme"');
+    // Lectures et écritures passent par le module partagé, jamais localStorage.
+    expect(APP_CONTEXT.match(/localStorage\.(get|set)Item/g)).toBeNull();
+    expect(APP_CONTEXT).toContain('parseTheme(readLocal("vsn:theme"))');
+    expect(APP_CONTEXT).toContain('parseScheme(readLocal("vsn:scheme"))');
+    expect(APP_CONTEXT).toContain('writeLocal("vsn:theme"');
+    expect(APP_CONTEXT).toContain('writeLocal("vsn:scheme"');
   });
 
   test("la barre système suit la palette, pas seulement le mode sombre", () => {

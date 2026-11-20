@@ -2,10 +2,23 @@
 export const NEWS_READ_STORAGE_KEY = "vsn:news:read";
 export const NEWS_READ_MAX = 500;
 const NEWS_READ_MAX_ID = 200;
-
 export interface ReadStore {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
+}
+
+// Repli mémoire quand le stockage est absent ou refuse une écriture : sans
+// lui, chaque marquage repartirait de zéro et seul le dernier ID resterait lu.
+const memory = new Set<string>();
+let memoryOwner: ReadStore | null = null;
+// Effacement demandé mais écriture refusée : le stockage ne doit pas
+// ressusciter les IDs de l'ancien compte pendant la session.
+let clearedStore: ReadStore | null = null;
+
+function replaceMemory(ids: Iterable<string>, owner: ReadStore | null): void {
+  memory.clear();
+  for (const id of ids) memory.add(id);
+  memoryOwner = owner;
 }
 
 function defaultStore(): ReadStore | null {
@@ -28,14 +41,20 @@ function normalize(value: unknown): string[] {
   return out;
 }
 
-/** Stockage absent ou corrompu : ensemble vide, jamais une exception. */
+/** Stockage absent ou corrompu : jamais une exception ; le repli mémoire
+ *  conserve les IDs marqués pendant la session. */
 export function loadNewsReadIds(store: ReadStore | null = defaultStore()): Set<string> {
-  if (!store) return new Set();
+  if (!store) return new Set(memoryOwner === null ? memory : []);
+  if (store === clearedStore) {
+    return new Set(memoryOwner === store || memoryOwner === null ? memory : []);
+  }
   try {
     const raw = store.getItem(NEWS_READ_STORAGE_KEY);
-    return new Set(normalize(raw ? (JSON.parse(raw) as unknown) : []));
+    const stored = normalize(raw ? (JSON.parse(raw) as unknown) : []);
+    // Les IDs marqués pendant une écriture refusée restent lisibles.
+    return new Set((memoryOwner === store ? [...stored, ...memory] : stored).slice(-NEWS_READ_MAX));
   } catch {
-    return new Set();
+    return new Set(memoryOwner === store ? memory : []);
   }
 }
 
@@ -43,13 +62,20 @@ export function markNewsRead(id: string, store: ReadStore | null = defaultStore(
   const clean = id.trim().slice(0, NEWS_READ_MAX_ID);
   const previous = loadNewsReadIds(store);
   if (!clean) return previous;
-  const next = [...previous, clean].slice(-NEWS_READ_MAX);
+  // Un identifiant déjà lu ne consomme pas une seconde place dans la borne.
+  const next = [...new Set([...previous, clean])].slice(-NEWS_READ_MAX);
   if (store) {
     try {
       store.setItem(NEWS_READ_STORAGE_KEY, JSON.stringify(next));
+      memory.clear();
+      memoryOwner = store;
+      clearedStore = null;
     } catch {
-      // Quota ou stockage indisponible : l'état mémoire reste cohérent.
+      // Quota ou stockage indisponible : le repli mémoire garde l'état.
+      replaceMemory(next, store);
     }
+  } else {
+    replaceMemory(next, null);
   }
   return new Set(next);
 }
@@ -57,10 +83,13 @@ export function markNewsRead(id: string, store: ReadStore | null = defaultStore(
 /** Déconnexion ou changement de compte (I16) : les IDs lus du compte
  *  précédent ne s'appliquent pas au suivant. */
 export function clearNewsReadIds(store: ReadStore | null = defaultStore()): void {
+  memory.clear();
+  memoryOwner = null;
+  clearedStore = store;
   if (!store) return;
   try {
     store.setItem(NEWS_READ_STORAGE_KEY, "[]");
   } catch {
-    // Stockage indisponible : rien à effacer de persistant.
+    // Stockage indisponible : le tombstone mémoire masque les anciens IDs.
   }
 }
