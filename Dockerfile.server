@@ -3,7 +3,7 @@
 # Base épinglée (ADR-001) : tag ET digest (index multi-arch, résolu le
 # 2026-11-01 via le registre Docker Hub). Ne pas redescendre sous 1.4.4
 # (CVE-2026-111497, Brotli/node2shell/HTTP2Shell).
-FROM oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d AS base
+FROM oven/bun:1.4.5@sha256:3aa040e5445efa09d75bb428a64ba50db13e2b3ac9b6b0c7f145615f62b2ee18 AS base
 # CVE-2026-109518 : la base épinglée embarque apt 3.0.3 ; le correctif 3.0.4
 # vient du dépôt Debian, pas de l'image amont (tag non reconstruit).
 RUN apt-get update \
