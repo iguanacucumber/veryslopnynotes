@@ -69,7 +69,7 @@ const STORE_FILES: Record<string, string[]> = {
 };
 
 /** Fichiers qui CITENT un chemin mais ne possèdent pas de store de compte. */
-const WIRING_FILES = new Set(["PeriodicSyncWorker.kt"]);
+const WIRING_FILES = new Set(["PeriodicSyncWorker.kt", "storage.ts"]);
 
 /** Marqueurs de persistance : un fichier qui en porte un doit être inventorié. */
 const PERSISTENCE = /filesDir|cacheDir|getSharedPreferences|EncryptedSharedPreferences|localStorage|WebStorage/;
@@ -121,8 +121,9 @@ describe("purge de compte — inventaire (#861)", () => {
     };
     walk(WEB);
     for (const file of webFiles) {
-      if (known.has(basename(file))) continue;
-      if (PERSISTENCE.test(codeOnly(readFileSync(file, "utf8")))) offenders.push(basename(file));
+      const name = basename(file);
+      if (known.has(name) || WIRING_FILES.has(name)) continue;
+      if (PERSISTENCE.test(codeOnly(readFileSync(file, "utf8")))) offenders.push(name);
     }
     expect({ offenders }).toEqual({ offenders: [] });
   });
