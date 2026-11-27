@@ -74,7 +74,7 @@ jobs:
         if: matrix.language == 'java-kotlin'
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: "1.4.4"
+          bun-version: "1.4.5"
 
       # Mêmes archives et mêmes empreintes que le gate : la version analysée est
       # celle que compile la CI, pas celle de l'image du runner.
