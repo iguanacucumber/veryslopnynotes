@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 430" role="img" aria-labelledby="titre desc">
+  <title id="titre">Flux réseau de veryslopnynotes</title>
+  <desc id="desc">Le téléphone parle directement à l'établissement. Aucun serveur du projet ne voit la session. OpenRouter n'est contacté qu'avec ton accord, pour l'assistant facultatif.</desc>
+  <defs>
+    <linearGradient id="fond" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#10352c"/>
+      <stop offset="1" stop-color="#081d19"/>
+    </linearGradient>
+    <radialGradient id="lueur" cx="0.18" cy="0.1" r="0.8">
+      <stop offset="0" stop-color="#2c8d73" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#2c8d73" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <style>
+    text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .titre { fill: #f4fbf8; font-size: 24px; font-weight: 650; }
+    .sous { fill: #a9c9c0; font-size: 17px; }
+    .etiq { fill: #8fd3c2; font-size: 16px; font-weight: 600; letter-spacing: 0.06em; }
+    .carte { fill: rgba(255, 255, 255, 0.055); stroke: rgba(255, 255, 255, 0.15); stroke-width: 1.5; }
+    .trait { fill: none; stroke: #5ab09b; stroke-width: 4; }
+    .pointille { fill: none; stroke: #8fd3c2; stroke-width: 3; stroke-dasharray: 9 11; opacity: 0.85; animation: flux 1.3s linear infinite; }
+    .paquet { fill: #d3f5ea; }
+    @keyframes flux { to { stroke-dashoffset: -20; } }
+    @media (prefers-reduced-motion: reduce) {
+      .pointille, .paquet { animation: none; }
+      .paquet { display: none; }
+    }
+  </style>
+
+  <rect width="1200" height="430" rx="32" fill="url(#fond)"/>
+  <rect width="1200" height="430" rx="32" fill="url(#lueur)"/>
+
+  <text x="44" y="46" class="etiq">FLUX RÉSEAU</text>
+
+  <rect x="44" y="86" width="252" height="258" rx="26" class="carte"/>
+  <rect x="86" y="120" width="64" height="104" rx="14" fill="none" stroke="#5ab09b" stroke-width="3"/>
+  <line x1="106" y1="137" x2="130" y2="137" stroke="#5ab09b" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="118" cy="208" r="4" fill="#5ab09b"/>
+  <text x="86" y="266" class="titre">Ton téléphone</text>
+  <text x="86" y="298" class="sous">session et clé</text>
+  <text x="86" y="322" class="sous">chiffrées sur l'appareil</text>
+
+  <rect x="846" y="62" width="310" height="148" rx="26" class="carte"/>
+  <path d="M878 118 L910 94 L942 118 V144 H878 Z" fill="none" stroke="#5ab09b" stroke-width="3" stroke-linejoin="round"/>
+  <rect x="902" y="122" width="16" height="22" rx="2" fill="none" stroke="#5ab09b" stroke-width="3"/>
+  <text x="948" y="112" class="titre">Ton établissement</text>
+  <text x="948" y="142" class="sous">Pronote, via QR/PIN</text>
+
+  <rect x="846" y="252" width="310" height="120" rx="26" class="carte"/>
+  <path d="M886 318 a16 16 0 0 1 4-31 22 22 0 0 1 42-4 18 18 0 0 1 2 35 Z" fill="none" stroke="#5ab09b" stroke-width="3" stroke-linejoin="round"/>
+  <text x="960" y="298" class="titre">OpenRouter</text>
+  <text x="960" y="326" class="sous">seulement avec ton accord</text>
+
+  <path d="M296 185 C 470 170, 650 130, 846 138" class="trait"/>
+  <circle cx="0" cy="0" r="5" class="paquet" opacity="0">
+    <set attributeName="opacity" to="1" begin="0s" fill="freeze"/>
+    <animateMotion dur="4s" repeatCount="indefinite" path="M296 185 C 470 170, 650 130, 846 138"/>
+  </circle>
+  <text x="571" y="116" text-anchor="middle" class="etiq">CONNEXION DIRECTE</text>
+
+  <path d="M296 280 C 480 320, 650 320, 846 312" class="pointille"/>
+  <text x="571" y="352" text-anchor="middle" class="etiq">TA CLÉ, TES CRÉDITS</text>
+
+  <rect x="462" y="190" width="276" height="46" rx="23" fill="#0b2621" stroke="rgba(255, 255, 255, 0.16)" stroke-width="1.5"/>
+  <circle cx="488" cy="213" r="10" fill="none" stroke="#a9c9c0" stroke-width="2"/>
+  <line x1="481" y1="220" x2="495" y2="206" stroke="#a9c9c0" stroke-width="2" stroke-linecap="round"/>
+  <text x="510" y="219" fill="#d6e9e2" font-size="16" font-weight="550">aucun serveur du projet</text>
+</svg>
