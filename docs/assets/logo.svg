@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="veryslopnynotes">
+  <title>veryslopnynotes</title>
+  <defs>
+    <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="page">
+      <rect x="140" y="92" width="232" height="328" rx="42"/>
+    </clipPath>
+  </defs>
+  <style>
+    .lueur { animation: lueur 3.6s ease-in-out infinite; }
+    .reflet { animation: reflet 4.8s ease-in-out infinite; }
+    @keyframes lueur {
+      0%, 100% { opacity: 0.22; }
+      50% { opacity: 0.5; }
+    }
+    @keyframes reflet {
+      0%, 38% { transform: translateX(-180px); opacity: 0; }
+      46% { opacity: 0.5; }
+      62%, 100% { transform: translateX(260px); opacity: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .lueur, .reflet { animation: none; }
+      .reflet { opacity: 0; }
+    }
+  </style>
+  <rect width="512" height="512" rx="112" fill="#1c6653"/>
+  <circle class="lueur" cx="256" cy="256" r="188" fill="#5ab09b" opacity="0.22"/>
+  <rect x="140" y="92" width="232" height="328" rx="42" fill="#f7fbf9"/>
+  <g clip-path="url(#page)">
+    <rect class="reflet" x="100" y="92" width="90" height="328" fill="url(#sheen)" opacity="0"/>
+  </g>
+  <rect x="184" y="162" width="132" height="22" rx="11" fill="#1c6653"/>
+  <rect x="184" y="206" width="86" height="22" rx="11" fill="#1c6653"/>
+  <path d="M184 318 L234 368 L330 258" fill="none" stroke="#1c6653" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
