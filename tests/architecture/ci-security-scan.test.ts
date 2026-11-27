@@ -70,7 +70,7 @@ describe("CI : dépendances et conteneur (#908)", () => {
     const bun = step("Bun (repli)");
     expect(bun).toContain("steps.graph.outputs.supported != 'true'");
     expect(bun).toContain("oven-sh/setup-bun@");
-    expect(bun).toContain('bun-version: "1.4.4"');
+    expect(bun).toContain('bun-version: "1.4.5"');
     expect(WORKFLOW.indexOf(bun)).toBeLessThan(WORKFLOW.indexOf(step("Repli bun audit")));
   });
 
