@@ -3,7 +3,10 @@ import { Communication, CookieJar, HttpSession, K0_HEX, ask, canonTs, checkRsaHe
 
 export function registerProtocolHttp(): void {
   test.skipIf(skip)("cookies : jar direct contre tough-cookie (portée, écrasement, expiration)", async () => {
-    const tsJar = new CookieJar();
+    // tough-cookie 6.1 refuse un cookie `Secure` posé depuis une origine HTTP ;
+    // le jar Kotlin l'accepte (il ne l'envoie jamais en clair). On pin le
+    // comportement historique pour que la parité teste le stockage, pas ce refus.
+    const tsJar = new CookieJar(undefined, { enforceSecureOriginOnStorage: false });
     const ktSid = (JSON.parse(await ask({ op: "cookieNew" })) as { sid: number }).sid;
     const script: Array<["set", string, string] | ["get", string]> = [
       ["set", "a=1; Path=/", "http://example.com/"],
