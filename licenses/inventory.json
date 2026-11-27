@@ -4,10 +4,23 @@
     "Apache-2.0",
     "BSD-2-Clause",
     "BSD-3-Clause",
+    "0BSD",
     "ISC",
     "OFL-1.1"
   ],
   "bun": {
+    "@emnapi/core": {
+      "license": "MIT"
+    },
+    "@emnapi/runtime": {
+      "license": "MIT"
+    },
+    "@emnapi/wasi-threads": {
+      "license": "MIT"
+    },
+    "@napi-rs/wasm-runtime": {
+      "license": "MIT"
+    },
     "@oxc-project/types": {
       "license": "MIT"
     },
@@ -15,6 +28,9 @@
       "license": "Apache-2.0"
     },
     "@rolldown/pluginutils": {
+      "license": "MIT"
+    },
+    "@tybys/wasm-util": {
       "license": "MIT"
     },
     "@types/bun": {
@@ -176,6 +192,9 @@
     },
     "tough-cookie": {
       "license": "BSD-3-Clause"
+    },
+    "tslib": {
+      "license": "0BSD"
     },
     "typescript": {
       "license": "Apache-2.0"
