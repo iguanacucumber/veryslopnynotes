@@ -113,7 +113,7 @@ jobs:
           path: |
             ~/.gradle/wrapper/dists
             ~/.gradle/caches/modules-2
-            ~/.gradle/caches/9.8.2
+            ~/.gradle/caches/9.9.2
           key: gradle-${{ runner.os }}-${{ hashFiles('android/gradle/libs.versions.toml', 'android/gradle/wrapper/gradle-wrapper.properties', 'android/gradle.properties', 'android/build.gradle.kts', 'android/settings.gradle.kts', 'android/*/build.gradle.kts') }}
 
       # SDK Android : même version que `compileSdk`/`buildToolsVersion` du
@@ -597,7 +597,7 @@ jobs:
           path: |
             ~/.gradle/wrapper/dists
             ~/.gradle/caches/modules-2
-            ~/.gradle/caches/9.8.2
+            ~/.gradle/caches/9.9.2
           key: gradle-emulator-${{ runner.os }}-${{ hashFiles('android/gradle/libs.versions.toml', 'android/gradle/wrapper/gradle-wrapper.properties', 'android/gradle.properties', 'android/build.gradle.kts', 'android/settings.gradle.kts', 'android/*/build.gradle.kts') }}
 
       - name: Dépendances
