@@ -75,12 +75,13 @@
 
 ## I31 — Un enregistrement publié = UNE ligne
 - Invariant : une absence, un retard, un devoir est publié et compté UNE fois. Identité = COUPLE (kind, id), jamais l'id seul ; pas de déduplication par contenu. Un repli synthétique n'est jamais partagé. Compteurs depuis la liste dédupliquée, jamais la brute. Côté web : le lecteur écarte l'événement déjà vu, kind par kind.
-- Test : `tests/unit/kotlin-payload-dedupe.test.ts`, `tests/web/social.test.ts`, `tests/web/home.test.ts`, `tests/web/tasks.test.ts`.
+- Test : `tests/unit/kotlin-payload-dedupe.test.ts`, `tests/web/social.test.ts`, `tests/web/home.test.ts`, `tests/web/tasks-*.test.ts`.
 - Commande : `make check`.
 - Emplacement : `android/core/EventDedupe.kt`,
   `android/data/PronotePayloads.kt`, `android/data/AssignmentsRepository.kt`,
   `android/app/VsnBridge.kt`, `web/src/features/attendance/model.ts`,
-  `web/src/features/home/parse.ts`, `web/src/features/tasks/assignments.ts`.
+  `web/src/features/home/assignments.ts`,
+  `web/src/features/tasks/assignment-parse.ts`.
 
 <a id="i33"></a>
 
