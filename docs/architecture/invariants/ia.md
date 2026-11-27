@@ -40,7 +40,7 @@
 - Emplacement : `android/core/Humanize.kt`, `android/core/CapabilityProbe.kt`,
   `android/core/Capabilities.kt`, `android/core/CapabilitiesJson.kt`,
   `android/data/PronotePayloads.kt`, `web/src/features/attendance/model.ts`,
-  `web/src/features/grades/model.ts`, `web/src/features/messages/model.ts`.
+  `web/src/features/grades/parse.ts`, `web/src/features/messages/message-parse.ts`.
 
 <a id="i15"></a>
 
